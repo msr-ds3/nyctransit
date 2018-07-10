@@ -1,0 +1,63 @@
+---
+title: "Commute Jul 09 2018"
+author: "Phoebe Nguyen"
+date: "July 9, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+
+library(tidyverse)
+library(lubridate)
+
+subway_070918 <- read.csv("todays_subway_data.csv")
+stop_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+commute <- read.csv("commute_20180709.csv")
+commute
+```
+
+```{r preparing_subway_7_data}
+
+subway_070918_clean <- subway_070918 %>% 
+  mutate(min_time = as.POSIXct(minimum_time, tz = "America/New_York", origin = "1970-01-01")) %>%
+  mutate(max_time = as.POSIXct(maximum_time, tz = "America/New_York", origin = "1970-01-01")) %>%
+  mutate(latest_time = as.POSIXct(latest_information_time, tz = "America/New_York", origin = "1970-01-01")) 
+
+```
+
+```{r preparing_station_data}
+
+stations <- stop_data %>%
+  select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`) %>%
+  mutate(stop_id_south = sprintf("%sS", stop_id)) 
+
+```
+
+```{r 7_trip_filter}
+
+filtered_data <- left_join(subway_070918_clean, stations, by=c("stop_id"="stop_id_south")) %>%
+  filter(trip_id == "056000_7..S") %>%
+  select(trip_id, stop_name, min_time, max_time, latest_time)
+
+filtered_data
+
+```
+
+```{r M trip}
+
+feed_21 <- read_csv("feed_21_20180709_to_20180710.csv")
+
+subway_070918_M <- feed_21 %>% 
+  mutate(min_time = as.POSIXct(minimum_time, tz = "America/New_York", origin = "1970-01-01")) %>%
+  mutate(max_time = as.POSIXct(maximum_time, tz = "America/New_York", origin = "1970-01-01")) %>%
+  mutate(latest_time = as.POSIXct(latest_information_time, tz = "America/New_York", origin = "1970-01-01")) 
+
+filtered_Mdata <- left_join(subway_070918_M, stations, by=c("stop_id"="stop_id_south")) %>%
+  filter(trip_id == "056650_M..S") %>%
+  select(trip_id, stop_name, min_time, max_time, latest_time)
+
+filtered_Mdata
+
+```
