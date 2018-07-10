@@ -36,8 +36,8 @@ stations <- stop_data %>%
   mutate(stop_id_south = sprintf("%sS", stop_id)) 
 
 # my documentation of my trip
-fieldwork <- read_csv("~/Microsoft DS3/project/MTA Data/fieldwork.csv") %>% select(time_arrived, time_departed)
-#fieldwork %>% mutate(time_arrived = as.Date(as.POSIXct(time_arrived, origin = "1970-01-01", tz = "America/New_York"))) %>% View
+fieldwork <- read_csv("~/Microsoft DS3/project/MTA Data/fieldwork.csv") 
+fieldwork <- fieldwork %>% select(time_arrived, time_departed) %>% mutate(time_arrived = as.POSIXct(sprintf("2018-07-09 %s", time_arrived), tz = "America/New_York"), time_departed = as.POSIXct(sprintf("2018-07-09 %s", time_departed), tz = "America/New_York"))
 
 # join and filter  to show data that only corresponds to my trip
 my_trip <- left_join(todays_subway_data, stations, by=c("stop_id"="stop_id_south")) %>%
