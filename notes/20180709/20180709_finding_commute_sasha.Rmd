@@ -1,0 +1,88 @@
+---
+title: "Week 5, Day 1"
+author: "Sasha Paulovich"
+date: "July 9, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Cross-checking our recorded morning commutes with MTA data
+```{r libs, message=FALSE}
+library(tidyverse)
+library(lubridate)
+```
+
+
+#### Get subway data and station names
+```{r load-data, warning=FALSE}
+# checking the 1 train
+subway <- read_csv('feed_1_20180709_to_20180710.csv')
+stations <- read_csv('http://web.mta.info/developers/data/nyct/subway/Stations.csv')
+```
+
+
+#### Combine dataframes and add human-readable timestamps
+```{r combine-dfs}
+station_names <- stations %>%
+  select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`) %>%
+  mutate(stop_id_south = sprintf("%sS", stop_id)) 
+
+
+subway <- subway %>% 
+  mutate(min_time = as.POSIXct(minimum_time, origin = "1970-01-01", tz="America/New_York"), 
+         max_time = as.POSIXct(maximum_time, origin = "1970-01-01", tz="America/New_York"),
+         latest_time = as.POSIXct(latest_information_time, origin = "1970-01-01", tz="America/New_York"))
+
+
+filtered_data <- left_join(subway, station_names, by=c("stop_id"="stop_id_south")) %>%
+  select(trip_id, route_id, action, stop_id, stop_id.y, stop_name, min_time, max_time, latest_time)
+head(as.data.frame(filtered_data))
+```
+
+
+#### My commute
+```{r commutes}
+commutes <- read_csv('commutes.csv')
+commutes <- commutes %>% 
+  mutate(train_arrived = as.POSIXct(sprintf("2018-07-09 %s", train_arrived), tz="America/New_York"),
+         train_departed = as.POSIXct(sprintf("2018-07-09 %s", train_departed), tz="America/New_York"))
+
+as.data.frame(commutes)
+```
+
+
+#### Trip details
+**start** `stop_id`= 127S (Times Sq - 42 St)  
+**end** `stop_id` = 131S (18 St)  
+`route_id` = 1 (1 train)   
+
+
+#### Matching my first stop
+```{r find-trip, warning=FALSE}
+my_first_stop <- filtered_data %>% 
+  filter(route_id == "1", stop_id == "127S", action == "STOPPED_AT",
+         hour(latest_time) == hour(commutes$train_arrived[1]),
+         minute(min_time) <= minute(commutes$train_arrived[1]),
+         minute(max_time) >= minute(commutes$train_arrived[1]))
+
+as.data.frame(my_first_stop)
+```
+
+
+#### Based on the results, my `trip_id`= 055800_1..S03R
+```{r filter}
+
+my_trip <- filtered_data %>% 
+  filter(route_id == "1", action == "STOPPED_AT", trip_id == "055800_1..S03R", 
+         stop_id.y >= 127, stop_id.y <= 131)
+
+as.data.frame(my_trip)
+```
+
+
+
+
