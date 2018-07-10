@@ -8,16 +8,17 @@ output: html_document
 ```{r}
 library(tidyverse)
 library(readr)
+# read all subway data and combine into one df with readable time
 stop_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
-feed_1_20180709_to_20180710 <- read_csv("MTA Data/feed_1_20180709_to_20180710.csv") 
-feed_2_20180709_to_20180710 <- read_csv("MTA Data/feed_2_20180709_to_20180710.csv")  
-feed_11_20180709_to_20180710 <- read_csv("MTA Data/feed_11_20180709_to_20180710.csv") 
-feed_16_20180709_to_20180710 <- read_csv("MTA Data/feed_16_20180709_to_20180710.csv") 
-feed_21_20180709_to_20180710 <- read_csv("MTA Data/feed_21_20180709_to_20180710.csv") 
-feed_26_20180709_to_20180710 <- read_csv("MTA Data/feed_26_20180709_to_20180710.csv") 
-feed_31_20180709_to_20180710 <- read_csv("MTA Data/feed_31_20180709_to_20180710.csv") 
-feed_36_20180709_to_20180710 <- read_csv("MTA Data/feed_36_20180709_to_20180710.csv") 
-feed_51_20180709_to_20180710 <- read_csv("MTA Data/feed_51_20180709_to_20180710.csv") 
+feed_1_20180709_to_20180710 <- read_csv("~/Microsoft DS3/project/MTA Data/feed_1_20180709_to_20180710.csv") 
+feed_2_20180709_to_20180710 <- read_csv("~/Microsoft DS3/project/MTA Data/feed_2_20180709_to_20180710.csv")  
+feed_11_20180709_to_20180710 <- read_csv("~/Microsoft DS3/project/MTA Data/feed_11_20180709_to_20180710.csv") 
+feed_16_20180709_to_20180710 <- read_csv("~/Microsoft DS3/project/MTA Data/feed_16_20180709_to_20180710.csv") 
+feed_21_20180709_to_20180710 <- read_csv("~/Microsoft DS3/project/MTA Data/feed_21_20180709_to_20180710.csv") 
+feed_26_20180709_to_20180710 <- read_csv("~/Microsoft DS3/project/MTA Data/feed_26_20180709_to_20180710.csv") 
+feed_31_20180709_to_20180710 <- read_csv("~/Microsoft DS3/project/MTA Data/feed_31_20180709_to_20180710.csv") 
+feed_36_20180709_to_20180710 <- read_csv("~/Microsoft DS3/project/MTA Data/feed_36_20180709_to_20180710.csv") 
+feed_51_20180709_to_20180710 <- read_csv("~/Microsoft DS3/project/MTA Data/feed_51_20180709_to_20180710.csv") 
 
 todays_subway_data <- rbind(feed_1_20180709_to_20180710, feed_11_20180709_to_20180710, feed_16_20180709_to_20180710, feed_2_20180709_to_20180710, feed_21_20180709_to_20180710, feed_26_20180709_to_20180710, feed_31_20180709_to_20180710, feed_36_20180709_to_20180710, feed_51_20180709_to_20180710)
 
@@ -26,19 +27,24 @@ todays_subway_data <- todays_subway_data %>% mutate(latest_information_time = as
 ```
 
 ```{r}
-#todays_subway_data %>% filter(route_id == 2, stop_id == "210S") 
+# filter for my line and starting station name
+# todays_subway_data %>% filter(route_id == 2, stop_id == "210S") 
 
+# add "S" to stop id's to specify southbound trains for joining with subway data
 stations <- stop_data %>%
   select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`) %>%
   mutate(stop_id_south = sprintf("%sS", stop_id)) 
 
-fieldwork <- read_csv("MTA Data/fieldwork.csv") %>% select(time_arrived, time_departed)
+# my documentation of my trip
+fieldwork <- read_csv("~/Microsoft DS3/project/MTA Data/fieldwork.csv") %>% select(time_arrived, time_departed)
 #fieldwork %>% mutate(time_arrived = as.Date(as.POSIXct(time_arrived, origin = "1970-01-01", tz = "America/New_York"))) %>% View
 
+# join and filter  to show data that only corresponds to my trip
 my_trip <- left_join(todays_subway_data, stations, by=c("stop_id"="stop_id_south")) %>%
   filter(trip_id == "055800_2..S01R", minimum_time >"2018-07-09 09:25:43" & minimum_time < "2018-07-09 10:20:43") %>%
-  select(trip_id, stop_name, minimum_time, maximum_time, latest_information_time) 
+  select(trip_id, stop_name, minimum_time, maximum_time, latest_information_time)
 
+# merge my_trip with my fieldwork documentation to compare accuracy
 my_trip <- cbind(my_trip, fieldwork)
 my_trip
 ```
