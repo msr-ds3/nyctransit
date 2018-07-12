@@ -1,2 +1,7 @@
 google_transit_subway_static
 todd_subway_realtime.csv
+*.csv
+*.tsv
+*.Rdata
+*.RData
+*.rdata
