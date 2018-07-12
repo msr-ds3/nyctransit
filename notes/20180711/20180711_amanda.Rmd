@@ -11,31 +11,31 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(readr)
 library(tidyverse)
-subway_data <- read_csv("MTA Data/subway_data.csv", col_types = cols(route_mta_id = col_factor(levels = NULL)))
+load("~/Microsoft DS3/project/MTA Data/todd_subway_data.RData")
 ```
 
 ```{r}
 # NYC Wait Time Distributions
 library(lubridate)
-filtered <- subway_data %>% filter(hour(departure_time) > 6 & hour(departure_time) < 20) %>% 
+filtered <- todd_subway_data %>% filter(hour(departure_time) > 6 & hour(departure_time) < 20) %>% 
   mutate(day = wday(departure_time)) %>% filter(day > 1 & day < 7) %>% mutate(wait_time = seconds_until_next_departure/60)
 
-perc10 <- quantile(wait_time, .1)
 
-filtered %>% ggplot(aes(x = reorder(route_mta_id, seconds_until_next_departure/60,
-                                    FUN=median))) + 
-  geom_boxplot(aes(ymin = quantile(wait_time, .1), 
-                   lower = quantile(wait_time, .25), 
-                   middle = quantile(wait_time, .5), 
-                   upper = quantile(wait_time, .75), 
-                   ymax = quantile(wait_time, .9), 
-                   color = route_mta_id), 
-               stat = "identity") + coord_flip() + ylim(c(0,15)) 
 
-subway_data %>% group_by(route_mta_id) %>% summarise(count = n())
+#filtered %>% ggplot(aes(x = reorder(route_mta_id, seconds_until_next_departure/60,
+#                                    FUN=median))) + 
+#  geom_boxplot(aes(ymin = quantile(wait_time, .1), 
+#                   lower = quantile(wait_time, .25), 
+#                   middle = quantile(wait_time, .5), 
+#                   upper = quantile(wait_time, .75), 
+#                   ymax = quantile(wait_time, .9), 
+#                   color = route_mta_id), 
+#               stat = "identity") + coord_flip() + ylim(c(0,15)) 
+
+todd_subway_data %>% group_by(route_mta_id) %>% summarise(count = n())
 ```
 ```{r}
-subway_data %>% filter(!is.na(route_mta_id)) %>% group_by(hour(departure_time)) %>% 
+todd_subway_data %>% filter(!is.na(route_mta_id)) %>% group_by(hour(departure_time)) %>% 
   ggplot(aes(x = hour(departure_time), y = (seconds_until_next_departure/60))) + 
   geom_smooth()
 ```
