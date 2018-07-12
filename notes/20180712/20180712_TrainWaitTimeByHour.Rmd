@@ -1,0 +1,75 @@
+---
+title: "Todd's plot on train wait time"
+output: html_document
+name:  "Peter Farquharson"
+---
+
+```{r }
+
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+library(stats)
+
+todd_data <- read_csv("subwaydata.csv")
+
+# * First, the plot of trains between stations over the course of a day (4th plot in post for May 16th) 
+# Then create the first two plots in the post, for subway wait time distributions and wait time by hour for a given line 
+
+
+```
+
+
+```{r }
+
+df <- todd_data %>% filter(!is.na(route_mta_id)) %>% mutate(hr = hour(departure_time), ymd = as.Date(departure_time), week_day = wday(departure_time)) %>% filter(week_day > 1 & week_day < 7) %>% group_by(route_mta_id,hr) %>% count(seconds_until_next_departure) %>% complete(seconds_until_next_departure = 1:max(seconds_until_next_departure), fill = list(n = 0)) %>% arrange(desc(seconds_until_next_departure)) %>% mutate(cum_n = cumsum(n), cdf = cumsum(seconds_until_next_departure)/sum(seconds_until_next_departure))  %>% group_by(route_mta_id, hr) %>%  summarize(median = approx(cdf, seconds_until_next_departure, xout = 0.5)$y, lower_quartile = approx(cdf, seconds_until_next_departure, xout = 0.10)$y, seventh_quantile = approx(cdf, seconds_until_next_departure, xout = 0.75)$y, quart_quantile = approx(cdf, seconds_until_next_departure, xout = 0.25)$y, upper_quantile = approx(cdf, seconds_until_next_departure, xout = .9)$y)
+
+
+                                                                                                                                                 
+
+
+```
+
+
+```{r }
+#PLot on How long will you have to wait for your train?
+
+
+
+  
+   df %>%  filter(route_mta_id == 1) %>% ggplot(aes(x = hr, y= median)) + geom_ribbon(aes(ymin = lower_quartile, ymax = upper_quantile), fill = "grey80") + geom_ribbon(aes(ymin =quart_quantile, ymax =seventh_quantile), fill = "grey70") + geom_line() + scale_y_continuous() + scale_x_continuous()
+
+
+
+
+
+
+```
+
+```{r }
+
+stop_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
+stations_S <- stop_data %>%
+  rename(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`) %>%
+  mutate(stop_mta_id = sprintf("%sS", stop_id))
+stations_N <- stop_data %>% rename(stop_id =`GTFS Stop ID`, stop_name = `Stop Name`) %>%
+  mutate(stop_mta_id = sprintf("%sN", stop_id))
+stations <- rbind(stations_S, stations_N)
+new_stations <- stations %>% select( stop_name,stop_id)
+
+
+
+
+
+
+
+
+
+```
+
+
+
+
