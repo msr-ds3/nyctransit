@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
 library(ggthemes)
+library(gridExtra)
 
 # load todd's subway_data
 load(file = "../../data/todd_subway_realtime.RData")
@@ -101,10 +102,10 @@ trips_per_day <- function(line_num, direction, day, start, end)
 ## Trying to Match Todd's Data with GTFS
 
 ```{r debugging-with-original}
-# plot1 <- trips_per_day("F", "S", "2018-05-16", "07:00:00", "13:00:00")
-# # plot2 <- trips_per_day(2, "S", "2018-05-16", "07:00:00", "13:00:00")
-# plot1
-# plot2
+plot1 <- trips_per_day(1, "S", "2018-05-16", "07:00:00", "13:00:00")
+plot2 <- trips_per_day(2, "S", "2018-05-16", "07:00:00", "13:00:00")
+# Show Both Side By Side
+grid.arrange(plot1, plot2, ncol = 2)
 
 original_data <- read.csv("../../data/feed_21_20180516.csv")
 
