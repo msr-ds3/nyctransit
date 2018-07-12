@@ -1,0 +1,83 @@
+---
+title: "Plots from Todd's Work"
+author: "Akbar Mirza, Pheobe Nguyen"
+date: "July 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(ggthemes)
+
+# load todd's subway_data
+load(file = "../../data/todd_subway_realtime.RData")
+
+# load stop_times from GTFS Static
+stop_times <- read_csv("../../data/google_transit_subway_static/stop_times.txt")
+
+# load station_data from mta
+station_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+# get stop_id and stop_name fields, and create a stop_id with N and S appended
+station_data <- station_data %>% group_by(`GTFS Stop ID`, `Stop Name`) %>%
+  select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`) %>%
+  mutate(stop_id_N = sprintf('%sN', stop_id), stop_id_S = sprintf('%sS', stop_id)) %>%
+  gather(`stop_id_N`, `stop_id_S`, key = "stop_ids", value = "stop_id") %>%
+  select(stop_name, stop_id)
+```
+
+## Getting Station Information
+
+```{r getting-station-info}
+# Generate edges between stations
+trips <- stop_times %>% extract(trip_id, "route", regex=".*_.*_(.*)\\.\\..*", remove = FALSE)
+trip_edges <- trips %>% mutate(prev_stop_id = ifelse(lag(trip_id) == trip_id, lag(stop_id), NA))
+edges <- trip_edges %>% select(route, stop_id, prev_stop_id) %>% distinct()
+# create stations dataframe with line, stop_id, stop_name
+stations <- edges %>% left_join(station_data, by = c("stop_id"="stop_id")) %>% select(line=route, stop_id, stop_name)
+```
+
+## Anatomy of a Subway Delay
+
+```{r subway-delay-plot}
+
+line_num <- 1
+direction <- 'S'
+start <- ymd_hms("2018-05-16 07:00:00")
+end <- ymd_hms("2018-05-16 13:00:00")
+interval <- start %--% end
+
+stops <- stations %>% filter(line == line_num,
+                             grepl(sprintf("%s$", direction), stop_id)) %>%
+  unique()
+# levels(stops$stop_name) <- unique(stops$stop_name)
+
+
+# use the route to get all the stations
+# use the station_stops to get station names
+# check if the routes are correct
+# check if it has the 5 routes
+
+# find full trips during that interval
+trips_on_day <- subway_data %>%
+  filter(route_mta_id == line_num,
+         departure_time %within% interval,
+         direction == 3) %>%
+  left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
+  group_by(realtime_trip_id) %>%
+  mutate(num_stops_on_trip = n()) %>%
+  arrange(realtime_trip_id) # %>%
+  # filter(num_stops_on_trip == max(trips_on_day$num_stops_on_trip))
+
+trips_on_day$stop_name <- factor(trips_on_day$stop_name, levels = unique(stops$stop_name))
+
+# show each trip as a line
+trips_on_day %>% ggplot(aes(x = departure_time, y = fct_rev(as.factor(stop_name)),
+                            group = realtime_trip_id)) +
+  geom_line(size = 0.75, color = "#fb511d") +
+  scale_color_fivethirtyeight("cyl") +
+  theme_fivethirtyeight()
+  
+```
+
