@@ -1,7 +1,7 @@
 ---
-title: "MTA First Map"
-author: "Sasha Paulovich"
-date: "July 11, 2018"
+title: "Map With Transfers and Igraph"
+author: "Graph Team"
+date: "July 12, 2018"
 output: html_document
 ---
 
@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-*with Ayliana, Brian, & Taxi*  
+*Sasha, Ayliana, Brian, & Taxi*  
 
 #### Load libraries
 ```{r libs, warning=FALSE, message=FALSE}
@@ -30,7 +30,7 @@ trips <- read_csv('../../data/google_transit_subway_static/trips.txt')
 stop_times <- read_csv('../../data/google_transit_subway_static/stop_times.txt')
 transfers <- read_csv('../../data/google_transit_subway_static/transfers.txt')
 
-realtime <- read_csv('../../data/todd_subway_realtime.csv', col_types = cols(route_mta_id = col_factor(levels = NULL)))
+load('../../data/realtime_data.RData')
 ```
 
 
@@ -99,8 +99,28 @@ transfer_sequences <- transfers %>% left_join(stops, by = c("to_stop_id" = "stop
 ```
 
 
+#### Get weights for the connections between stations
+```{r weights, warning=FALSE}
+
+station_weights <- realtime %>%
+  mutate(stop_mta_id = substr(stop_mta_id, 1, 3)) %>%
+  arrange(realtime_trip_id, departure_time) %>% 
+  mutate(travel_time = ifelse(realtime_trip_id == lag(realtime_trip_id), departure_time - lag(departure_time), NA)) %>%
+  mutate(prev_stop_mta_id = ifelse(realtime_trip_id == lag(realtime_trip_id), lag(stop_mta_id), NA)) %>%
+  filter(!is.na(travel_time)) %>% 
+  group_by(route_mta_id, stop_mta_id, prev_stop_mta_id) %>% 
+  summarize(weight = mean(travel_time))
+
+full_sequences <- sequences %>% left_join(station_weights, by = c("stop_id" = "stop_mta_id", "prev_stop_id" = "prev_stop_mta_id", "route_id" = "route_mta_id"))
+
+#Transfers already has weights from the min_transfer_time field (now renamed weight) so we rbind the two sequence objects
+
+full_sequences <- rbind(full_sequences, transfer_sequences)
+
+```
+
 #### Make a subway map!
-```{r ggmap}
+```{r ggmap, warning=FALSE}
 
 nyc_map <- get_map(location = c(lon = -73.9568247, lat = 40.7202688), maptype = "terrain", zoom = 12)
 ggmap(nyc_map) +
@@ -133,27 +153,6 @@ map
 
 ```
 
-
-#### Get weights for the connections between stations
-```{r weights}
-
-station_weights <- realtime %>%
-  mutate(stop_mta_id = substr(stop_mta_id, 1, 3)) %>%
-  arrange(realtime_trip_id, departure_time) %>% 
-  mutate(travel_time = ifelse(realtime_trip_id == lag(realtime_trip_id), departure_time - lag(departure_time), NA)) %>%
-  mutate(prev_stop_mta_id = ifelse(realtime_trip_id == lag(realtime_trip_id), lag(stop_mta_id), NA)) %>%
-  filter(!is.na(travel_time)) %>% 
-  group_by(route_mta_id, stop_mta_id, prev_stop_mta_id) %>% 
-  summarize(weight = mean(travel_time))
-
-full_sequences <- sequences %>% left_join(station_weights, by = c("stop_id" = "stop_mta_id", "prev_stop_id" = "prev_stop_mta_id", "route_id" = "route_mta_id"))
-
-#Transfers already has weights from the min_transfer_time field (now renamed weight) so we rbind the two sequence objects
-
-full_sequences <- rbind(full_sequences, transfer_sequences)
-
-```
-
 #### Make an igraph
 ```{r igraph}
 
@@ -176,3 +175,4 @@ shortest_route <- data.frame(stop_id = (sapply(shortest_path$vpath, as_ids)), st
 shortest_route
 
 ```
+
