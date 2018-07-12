@@ -11,4 +11,4 @@ subway_data <- read_csv("../../data/todd_subway_realtime.csv",
                         col_types = cols(route_mta_id = col_factor(levels = NULL)))
 ```
 
-See the [data/](../data/) directory for more info on how we'll handle large data files.
+See the [data/](../../data/) directory for more info on how we'll handle large data files.
