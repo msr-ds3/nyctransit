@@ -1,6 +1,6 @@
 ---
 title: "Plots from Todd's Work"
-author: "Akbar Mirza, Pheobe Nguyen"
+author: "Akbar Mirza, Phoebe Nguyen"
 date: "July 11, 2018"
 output: html_document
 ---
@@ -19,6 +19,7 @@ stop_times <- read_csv("../../data/google_transit_subway_static/stop_times.txt")
 
 # load station_data from mta
 station_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
 # get stop_id and stop_name fields, and create a stop_id with N and S appended
 station_data <- station_data %>% group_by(`GTFS Stop ID`, `Stop Name`) %>%
   select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`) %>%
@@ -40,27 +41,25 @@ stations <- edges %>% left_join(station_data, by = c("stop_id"="stop_id")) %>% s
 
 ## Anatomy of a Subway Delay
 
-```{r subway-delay-plot}
+```{r plot function}
+# line_num <- readline(prompt="Enter line name: ")
+# direction <- readline(prompt="Enter direction (S/N): ")
+# 
+# start <- readline(prompt="Enter start time in format yyyy-mm-dd hh:mm:ss: ")
+# end <- readline(prompt="Enter end time in format yyyy-mm-dd hh:mm:ss: ")
 
-line_num <- "F"
-direction <- "S"
+trips_per_day <- function(line_num, direction, start, end)
+{
 direction_num <- ifelse(direction == "N", 1, 3)
 direction_verbose <- ifelse(direction == "N", "Uptown", "Downtown")
-start <- ymd_hms("2018-05-16 07:00:00")
-end <- ymd_hms("2018-05-16 13:00:00")
+start <- ymd_hms(start)
+end <- ymd_hms(end)
 interval <- start %--% end
 
 stops <- stations %>% filter(line == line_num,
                              grepl(sprintf("%s$", direction), stop_id)) %>%
   unique()
-# levels(stops$stop_name) <- unique(stops$stop_name)
-
-
-# use the route to get all the stations
-# use the station_stops to get station names
-# check if the routes are correct
-# check if it has the 5 routes
-
+  
 # find full trips during that interval
 trips_on_day <- subway_data %>%
   filter(route_mta_id == line_num,
@@ -69,19 +68,27 @@ trips_on_day <- subway_data %>%
   left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
   group_by(realtime_trip_id) %>%
   mutate(num_stops_on_trip = n()) %>%
-  arrange(realtime_trip_id) # %>%
-  # filter(num_stops_on_trip == max(trips_on_day$num_stops_on_trip))
-
+  arrange(realtime_trip_id)
 trips_on_day$stop_name <- factor(trips_on_day$stop_name, levels = unique(stops$stop_name))
 
 # show each trip as a line
-trips_on_day %>% ggplot(aes(x = departure_time, y = fct_rev(as.factor(stop_name)),
+plot_trip <- trips_on_day %>% ggplot(aes(x = departure_time, y = fct_rev(as.factor(stop_name)),
                             group = realtime_trip_id)) +
   geom_line(size = 0.75, color = "#fb511d") +
   scale_color_fivethirtyeight("cyl") +
   theme_fivethirtyeight() +
   labs(title = sprintf("%s %s Trains on %s", direction_verbose, line_num, as.Date(start)) ,
        caption = "Data collected from MTA real-time feeds and Todd Schneider")
-  
+
+return(plot_trip)
+}
+
+# print(trips_per_day())
+
+plot1 <- trips_per_day(3, "S", "2018-05-16 07:00:00", "2018-05-16 13:00:00")
+plot2 <- trips_per_day(3, "N", "2018-05-16 07:00:00", "2018-05-16 13:00:00")
+plot1
+plot2
+
 ```
 
