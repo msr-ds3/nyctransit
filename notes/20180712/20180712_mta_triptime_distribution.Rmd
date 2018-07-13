@@ -148,15 +148,14 @@ transfer <- rbind(local_transfer,express_transfer)
 ## Compute Trip Time
 
 ```{r compute-trip-time}
-  
-start_station <- "120S"
-start_line <- "2"
-transfer_station <- "127S"
-transfer_line <- "1"
-end_station <- "131S"
-start_time <- "2018-01-20 09:30:00"
 
-
+# NOTE: DEBUG CODE  
+# start_station <- "120S"
+# start_line <- "2"
+# transfer_station <- "127S"
+# transfer_line <- "1"
+# end_station <- "131S"
+# start_time <- "2018-01-20 09:30:00"
 
 compute_trip_time <- function (start_station, start_line, transfer_station, transfer_line, end_station, start_time) {
     
@@ -168,6 +167,8 @@ compute_trip_time <- function (start_station, start_line, transfer_station, tran
     
     # get the trip_id of the first trip after the depart_time
     first_trip_id <- first(first_train$realtime_trip_id)
+    
+    # TODO: add arrival_time to first_train
     
     # find the arrival time for trip_id at transfer station
     transfer_arrival_time <- subway_data %>%
@@ -182,6 +183,8 @@ compute_trip_time <- function (start_station, start_line, transfer_station, tran
       filter(ymd_hms(departure_time) > ymd_hms(transfer_arrival_time))
     
     transfer_trip_id <- first(transfer_train$realtime_trip_id)
+    
+    # TODO: add arrival_time to transfer_train
     
     # compute the time difference of when our train arrives at end_station and start_time
     dest_arrival_time <- subway_data %>%
