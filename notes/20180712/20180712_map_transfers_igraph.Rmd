@@ -22,7 +22,7 @@ library(scales)
 
 
 #### Load MTA data & Google Transit static files
-```{r, warning=FALSE}
+```{r load_data, warning=FALSE, message=FALSE}
 stations <- read_csv('http://web.mta.info/developers/data/nyct/subway/Stations.csv')
 stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
 routes <- read_csv('../../data/google_transit_subway_static/routes.txt')
@@ -30,7 +30,7 @@ trips <- read_csv('../../data/google_transit_subway_static/trips.txt')
 stop_times <- read_csv('../../data/google_transit_subway_static/stop_times.txt')
 transfers <- read_csv('../../data/google_transit_subway_static/transfers.txt')
 
-load('../../data/realtime_data.RData')
+load('../../data/todd_subway_realtime.RData')
 ```
 
 
