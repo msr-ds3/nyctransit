@@ -51,18 +51,10 @@ isWeekend <- function(day_of_week) {
   ifelse(day_of_week == "Saturday" | day_of_week == "Sunday", T, F)
 }
 
-<<<<<<< HEAD
-stops <- stations %>% filter(line == "1",
-                                grepl(sprintf("%s$", "S"), stop_id)) %>%
-     unique()
-```
-=======
 stops <- stations %>%
   filter(line == "1", grepl(sprintf("%s$", "S"), stop_id)) %>%
   unique()
->>>>>>> 7bac118259cc9af58cc112898cd8f5ecd965f241
 
-```{r}
 # find trip time during 96th station and 14th station
 
 plot_local_express <- function(local_line, express_line, start_stop_id, end_stop_id)
