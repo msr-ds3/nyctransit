@@ -14,12 +14,6 @@ library(ggthemes)
 # load todd's subway_data
 #setwd("~/nyctransit/notes/20180711")
 load(file = "../../data/todd_subway_realtime.RData")
-subway_data.2 <- subway_data %>% 
-  group_by(realtime_trip_id) %>% 
-  arrange(desc(departure_time)) %>% 
-  mutate(arrival_time=lead(departure_time))
-
-save(subway_data.2, file = "todd_subway_realtime_2.RData")
 
 # load stop_times from GTFS Static
 stop_times <- read_csv("../../data/google_transit_subway_static/stop_times.txt")
@@ -66,7 +60,7 @@ stops <- stations %>%
 plot_local_express <- function(local_line, express_line, start_stop_id, end_stop_id)
 {
   # local train
-  local_train <- subway_data.2 %>%
+  local_train <- subway_data %>%
     filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
            route_mta_id == local_line) %>%
     mutate(day_of_week = weekdays((departure_time)),
@@ -82,7 +76,7 @@ plot_local_express <- function(local_line, express_line, start_stop_id, end_stop
     ggplot(aes(x=diff)) + geom_histogram()
 
   # express train
-  express_train <- subway_data.2 %>%
+  express_train <- subway_data %>%
     filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
            route_mta_id == express_line) %>%
     mutate(day_of_week = weekdays(departure_time),
@@ -115,7 +109,7 @@ plot_local_express ("1", "2", "120S", "132S")
 ```
 
 ## Introducing one stop transfer
-- Explore a slightly different route on this line that could use either the local or a combination of the local and express with a transfer in between(e.g., 18th to 96th st.)
+- Explore a slightly different route on this line that could use either the local or a combination of the local and express with a transfer in between�(e.g., 18th to 96th st.)
 - Compare the distribution of trip times using the local to those using the local + express
 
 ```{r}
@@ -124,16 +118,17 @@ plot_local_express ("1", "2", "120S", "132S")
 express2_stop <- c("120S", "127S")
 local1_stop <- c("127S", "131S")
 
-express_transfer <- subway_data.2 %>% 
+express_transfer <- subway_data %>% 
   filter(stop_mta_id =="120S" | stop_mta_id == "127S",
          route_mta_id == "2" ) %>%
   left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
   group_by(realtime_trip_id) %>% 
   arrange (desc(departure_time)) %>%
-  mutate(diff= (first(departure_time)-last(departure_time))/60)
+  mutate(diff= (first(departure_time)-last(departure_time))/60) %>%
+  View()
 
 #local stops
-local_transfer <- subway_data.2 %>% 
+local_transfer <- subway_data %>% 
   filter(stop_mta_id =="127S" | stop_mta_id == "131S",
          route_mta_id == "1" ) %>%
   left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
@@ -146,6 +141,7 @@ local_transfer <- subway_data.2 %>%
 transfer <- rbind(local_transfer,express_transfer)
 
 #find the first 1 train after the 2 train departure time
+
 
 ```
 
@@ -164,7 +160,7 @@ transfer <- rbind(local_transfer,express_transfer)
 compute_trip_time <- function (start_station, start_line, transfer_station, transfer_line, end_station, start_time) {
     
     # find first trips on the start_line at the start_station that depart after start_time
-    first_train <- subway_data.2 %>%
+    first_train <- subway_data %>%
       filter(stop_mta_id == start_station,
              route_mta_id == start_line) %>%
       filter(ymd_hms(departure_time) > ymd_hms(start_time))
@@ -175,13 +171,13 @@ compute_trip_time <- function (start_station, start_line, transfer_station, tran
     # TODO: add arrival_time to first_train
     
     # find the arrival time for trip_id at transfer station
-    transfer_arrival_time <- subway_data.2 %>%
+    transfer_arrival_time <- subway_data %>%
       filter(realtime_trip_id == first_trip_id,
              stop_mta_id == transfer_station) %>%
       .$arrival_time
     
     # find the first trip on the transfer_line at the transfer_station that departs after the arrival_time of our express train
-    transfer_train <- subway_data.2 %>%
+    transfer_train <- subway_data %>%
       filter(stop_mta_id == transfer_station,
              route_mta_id == transfer_line) %>%
       filter(ymd_hms(departure_time) > ymd_hms(transfer_arrival_time))
@@ -191,7 +187,7 @@ compute_trip_time <- function (start_station, start_line, transfer_station, tran
     # TODO: add arrival_time to transfer_train
     
     # compute the time difference of when our train arrives at end_station and start_time
-    dest_arrival_time <- subway_data.2 %>%
+    dest_arrival_time <- subway_data %>%
       filter(realtime_trip_id == transfer_trip_id,
              stop_mta_id == end_station) %>%
       .$arrival_time
