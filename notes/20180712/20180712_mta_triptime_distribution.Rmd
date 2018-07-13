@@ -78,7 +78,7 @@ plot_local_express <- function(local_line, express_line, direction, start_stop_i
 
 plot_local <- local_train %>% ggplot(aes(x=diff))+ geom_histogram()
 
-# express  train
+# express train
 express_train <- subway_data %>% 
   filter(stop_mta_id == sprintf("%s%s", start_stop_id, direction) | stop_mta_id == sprintf("%s%s", end_stop_id, direction),
          route_mta_id == express_line) %>%
@@ -110,7 +110,7 @@ plot_local_express ("1","2", "S", "120S", "132S")
 ```
 
 ## Introducing one stop transfer
-- Explore a slightly different route on this line that could use either the local or a combination of the local and express with a transfer in between (e.g., 18th to 96th st.)
+- Explore a slightly different route on this line that could use either the local or a combination of the local and express with a transfer in betweenï¿½(e.g., 18th to 96th st.)
 - Compare the distribution of trip times using the local to those using the local + express
 
 ```{r}
