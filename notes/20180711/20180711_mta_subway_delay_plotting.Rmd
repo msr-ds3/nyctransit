@@ -37,6 +37,7 @@ trip_edges <- trips %>% mutate(prev_stop_id = ifelse(lag(trip_id) == trip_id, la
 edges <- trip_edges %>% select(route, stop_id, prev_stop_id) %>% distinct()
 # create stations dataframe with line, stop_id, stop_name
 stations <- edges %>% left_join(station_data, by = c("stop_id"="stop_id")) %>% select(line=route, stop_id, stop_name)
+
 ```
 
 ## Anatomy of a Subway Delay
@@ -62,6 +63,8 @@ trips_per_day <- function(line_num, direction, day, start, end)
                                grepl(sprintf("%s$", direction), stop_id)) %>%
     unique()
   
+
+
   # find full trips during that interval
   trips_on_day <- subway_data %>%
     filter(route_mta_id == line_num,
@@ -75,7 +78,7 @@ trips_per_day <- function(line_num, direction, day, start, end)
   
   # show each trip as a line
   plot_trip <- trips_on_day %>% ggplot(aes(x = departure_time, y = fct_rev(as.factor(stop_name)),
-                                           group = realtime_trip_id)) +
+                                           group = realtime_trip_id, class= route_mta_id)) +
     geom_line(size = 0.75, color = "#fb511d") +
     scale_color_fivethirtyeight("cyl") +
     theme_fivethirtyeight() +
