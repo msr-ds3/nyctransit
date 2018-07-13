@@ -52,61 +52,62 @@ isWeekend <- function(day_of_week) {
   ifelse(day_of_week == "Saturday" | day_of_week == "Sunday", T, F)
 }
 
-stops <- stations %>% filter(line == "1",
-                                grepl(sprintf("%s$", "S"), stop_id)) %>%
-     unique()
+stops <- stations %>%
+  filter(line == "1", grepl(sprintf("%s$", "S"), stop_id)) %>%
+  unique()
 
 # find trip time during 96th station and 14th station
 # local 1 train
 
-plot_local_express <- function(local_line, express_line, direction, start_stop_id, end_stop_id)
+plot_local_express <- function(local_line, express_line, start_stop_id, end_stop_id)
 {
-  direction_num <- ifelse(direction == "N", 1, 3)
-  #local train
+  # local train
   local_train <- subway_data %>%
-  filter(stop_mta_id == sprintf("%s%s", start_stop_id, direction) | stop_mta_id == sprintf("%s%s", end_stop_id, direction),
-         route_mta_id == local_line) %>%
-  mutate(day_of_week = weekdays(as.Date(departure_time)),
-         hour= hour(departure_time)) %>%
-  filter(isWeekend(day_of_week) == F,
-         hour>6,
-         hour < 20) %>%
-  left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
-  group_by(realtime_trip_id) %>% 
-  arrange (desc(departure_time)) %>%
-  mutate(diff= (first(departure_time)-last(departure_time))/60)
+    filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
+           route_mta_id == local_line) %>%
+    mutate(day_of_week = weekdays((departure_time)),
+           hour = hour(departure_time)) %>%
+    filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
+    left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
+    group_by(realtime_trip_id) %>% 
+    arrange(desc(departure_time)) %>%
+    mutate(diff = (first(departure_time) - last(departure_time))/60)
+  
+  # plot for local line
+  plot_local <- local_train %>%
+    ggplot(aes(x=diff)) + geom_histogram()
 
-plot_local <- local_train %>% ggplot(aes(x=diff))+ geom_histogram()
+  # express train
+  express_train <- subway_data %>%
+    filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
+           route_mta_id == express_line) %>%
+    mutate(day_of_week = weekdays(departure_time),
+           hour = hour(departure_time)) %>%
+    filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
+    left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
+    group_by(realtime_trip_id) %>%
+    arrange(desc(departure_time)) %>%
+    mutate(diff = (first(departure_time) - last(departure_time))/60)
+  
+  # plot for express train
+  plot_express <- express_train %>%
+    ggplot(aes(x=diff)) + geom_histogram()
 
-# express train
-express_train <- subway_data %>% 
-  filter(stop_mta_id == sprintf("%s%s", start_stop_id, direction) | stop_mta_id == sprintf("%s%s", end_stop_id, direction),
-         route_mta_id == express_line) %>%
-  mutate(day_of_week = weekdays(as.Date(departure_time)),
-         hour= hour(departure_time)) %>%
-  filter(isWeekend(day_of_week) == F,
-         hour>6,
-         hour < 20) %>%
-  left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
-  group_by(realtime_trip_id) %>% 
-  arrange (desc(departure_time)) %>%
-  mutate(diff= (first(departure_time)-last(departure_time))/60)
-
-plot_express <- express_train  %>% ggplot(aes(x=diff))+ geom_histogram()
-
-# code for combining plots as per: https://stackoverflow.com/questions/21192002/how-to-combine-2-plots-ggplot-into-one-plot
-local_train$group <- "local"
-express_train$group <- "express"
-
-combined <- rbind(local_train, express_train)
-
-combined_plot <- ggplot(combined, aes(x = diff, group = group, col = group, fill = group)) +
-  geom_histogram(alpha = 0.8, position = "identity")
+  # code for combining plots as per: https://stackoverflow.com/questions/21192002/how-to-combine-2-plots-ggplot-into-one-plot
+  local_train$group <- "local"
+  express_train$group <- "express"
+  
+  combined <- rbind(local_train, express_train)
+  
+  combined_plot <- ggplot(combined, aes(x = diff, group = group, col = group, fill = group)) +
+    geom_histogram(alpha = 0.8, position = "identity")
   # NOTE: can get intersecting distributions by running the code below 
   # geom_density(alpha = 0.8, position = "identity")
-return(combined_plot)
+  
+  return(combined_plot)
 }
-plot_local_express ("1","2", "S", "120S", "132S")
+
+plot_local_express ("1", "2", "120S", "132S")
 ```
 
 ## Introducing one stop transfer
