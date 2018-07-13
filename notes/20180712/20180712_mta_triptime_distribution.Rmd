@@ -51,65 +51,73 @@ isWeekend <- function(day_of_week) {
   ifelse(day_of_week == "Saturday" | day_of_week == "Sunday", T, F)
 }
 
+<<<<<<< HEAD
 stops <- stations %>% filter(line == "1",
                                 grepl(sprintf("%s$", "S"), stop_id)) %>%
      unique()
 ```
+=======
+stops <- stations %>%
+  filter(line == "1", grepl(sprintf("%s$", "S"), stop_id)) %>%
+  unique()
+>>>>>>> 7bac118259cc9af58cc112898cd8f5ecd965f241
 
 ```{r}
 # find trip time during 96th station and 14th station
 
 plot_local_express <- function(local_line, express_line, start_stop_id, end_stop_id)
 {
-  #local train
+  # local train
   local_train <- subway_data %>%
-  filter(stop_mta_id == sprintf("%s", start_stop_id) | stop_mta_id == sprintf("%s", end_stop_id),
-         route_mta_id == local_line) %>%
-  mutate(day_of_week = weekdays(as.Date(departure_time)),
-         hour= hour(departure_time)) %>%
-  filter(isWeekend(day_of_week) == F,
-         hour>6,
-         hour < 20) %>%
-  left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
-  group_by(realtime_trip_id) %>% 
-  arrange (desc(departure_time)) %>%
-  mutate(diff= (first(departure_time)-last(departure_time))/60)
-
-  #plot_local <- local_train %>% ggplot(aes(x=diff))+ geom_histogram()
-
-# express  train
-  express_train <- subway_data %>% 
-    filter(stop_mta_id == sprintf("%s", start_stop_id) | stop_mta_id == sprintf("%s", end_stop_id),
-         route_mta_id == express_line) %>%
-    mutate(day_of_week = weekdays(as.Date(departure_time)),
-         hour= hour(departure_time)) %>%
-    filter(isWeekend(day_of_week) == F,
-         hour>6,
-         hour < 20) %>%
+    filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
+           route_mta_id == local_line) %>%
+    mutate(day_of_week = weekdays((departure_time)),
+           hour = hour(departure_time)) %>%
+    filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
     left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
     group_by(realtime_trip_id) %>% 
-    arrange (desc(departure_time)) %>%
-    mutate(diff= (first(departure_time)-last(departure_time))/60)
+    arrange(desc(departure_time)) %>%
+    mutate(diff = (first(departure_time) - last(departure_time))/60)
+  
+  # plot for local line
+  plot_local <- local_train %>%
+    ggplot(aes(x=diff)) + geom_histogram()
 
-  #plot_express <- express_train  %>% ggplot(aes(x=diff))+ geom_histogram()
+  # express train
+  express_train <- subway_data %>%
+    filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
+           route_mta_id == express_line) %>%
+    mutate(day_of_week = weekdays(departure_time),
+           hour = hour(departure_time)) %>%
+    filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
+    left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
+    group_by(realtime_trip_id) %>%
+    arrange(desc(departure_time)) %>%
+    mutate(diff = (first(departure_time) - last(departure_time))/60)
+  
+  # plot for express train
+  plot_express <- express_train %>%
+    ggplot(aes(x=diff)) + geom_histogram()
 
-# code for combining plots as per: https://stackoverflow.com/questions/21192002/how-to-combine-2-plots-ggplot-into-one-plot
+  # code for combining plots as per: https://stackoverflow.com/questions/21192002/how-to-combine-2-plots-ggplot-into-one-plot
   local_train$group <- "local"
   express_train$group <- "express"
-
+  
   combined <- rbind(local_train, express_train)
-
+  
   combined_plot <- ggplot(combined, aes(x = diff, group = group, col = group, fill = group)) +
-  geom_histogram(alpha = 0.8, position = "identity")
+    geom_histogram(alpha = 0.8, position = "identity")
   # NOTE: can get intersecting distributions by running the code below 
   # geom_density(alpha = 0.8, position = "identity")
+  
   return(combined_plot)
 }
-plot_local_express ("1","2", "120S", "132S")
+
+plot_local_express ("1", "2", "120S", "132S")
 ```
 
 ## Introducing one stop transfer
-- Explore a slightly different route on this line that could use either the local or a combination of the local and express with a transfer in between (e.g., 18th to 96th st.)
+- Explore a slightly different route on this line that could use either the local or a combination of the local and express with a transfer in betweenï¿½(e.g., 18th to 96th st.)
 - Compare the distribution of trip times using the local to those using the local + express
 
 ```{r}
@@ -142,5 +150,25 @@ transfer <- rbind(local_transfer,express_transfer)
 
 #find the first 1 train after the 2 train departure time
 
+
+```
+
+## Compute Trip Time
+
+```{r compute-trip-time}
+
+compute_trip_time <- function(start_station, start_line, transfer_station, transfer_line, end_station, start_time) {
+
+  # find trips on the start_line at the start_station that depart after start_time
+
+  # get the trip_id of the first trip after the depart_time
+
+  # find the arrival time for trip_id at transfer station
+
+  # find the first trip on the transfer_line at the transfer_station that departs after the arrival_time of our express train
+
+  # compute the time difference of when our train arrives at end_station and start_time
+
+}
 
 ```
