@@ -1,0 +1,95 @@
+---
+title: "Subway Data"
+author: "Amanda Rodriguez"
+date: "July 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(readr)
+library(tidyverse)
+# todd_subway_data <- read_csv("MTA Data/todd_subway_data.csv", col_types = cols(route_mta_id = col_factor(levels = NULL)))
+# save(todd_subway_data, file = "todd_subway_data.RData")
+load("~/Microsoft DS3/project/MTA Data/todd_subway_data.RData")
+```
+
+```{r}
+# NYC Wait Time Distributions
+
+# Attempt 1
+library(lubridate)
+
+filtered <- todd_subway_data %>% mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time)) %>% 
+  filter(day > 1 & day < 7, hour > 6 & hour < 20) %>%
+  group_by(ymd, route_mta_id) %>% 
+  summarise(exp_wait = sum(seconds_until_next_departure^2)/(2*sum(seconds_until_next_departure)), total_sec = sum(seconds_until_next_departure)) 
+
+filtered %>% ggplot(aes(x = reorder(route_mta_id, exp_wait/60, FUN = function(x){-median(x)}), y = exp_wait/60)) + 
+  geom_boxplot(outlier.shape = NA) + ylim(c(0,15)) + coord_flip()
+
+```
+```{r}
+# NYC Wait Time Distributions
+
+# Attempt 2
+filtered1 <- todd_subway_data %>% mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time)) %>% 
+  filter(day > 1 & day < 7, hour > 6 & hour < 20) %>% mutate(exp_wait = seconds_until_next_departure/2)
+
+filtered1 %>% ggplot(aes(x = reorder(route_mta_id, exp_wait/60, FUN = function(x){-median(x)}), y = exp_wait/60)) + 
+  geom_boxplot(outlier.shape = NA) + ylim(c(0,15)) + coord_flip() 
+  
+
+```
+```{r}
+# NYC Wait Time Distributions
+
+# Attempt 3
+# Hopefully correct version
+filtered3 <- todd_subway_data %>%
+  mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time)) %>% 
+  filter(day > 1 & day < 7, hour > 6 & hour < 20) %>%
+  group_by(seconds_until_next_departure, route_mta_id) %>% 
+  summarize(n = n()) %>%
+  group_by(route_mta_id) %>% 
+  complete(seconds_until_next_departure = 1:max(seconds_until_next_departure), fill = list(n = 0)) %>%
+  arrange(desc(seconds_until_next_departure)) %>% 
+  mutate(cum_n = cumsum(n))
+
+
+
+
+```
+
+```{r}
+# Modify yesterday's code that computed wait times distributions for each line to do the same at the station level (keep 7am - 8pm weekday restriction)
+
+# Plot these distributions for a set of contiguous stations on a given line
+
+# This is probably too many histograms to view at once, but you could visualize some summary statistics across all stations (e.g., with a box or ribbon plot)
+
+stop_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+stop_data_s <- stop_data %>%
+  rename(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, 
+         lon = `GTFS Longitude`) %>%
+  mutate(stop_id = sprintf("%sS", stop_id)) 
+stop_data_n <- stop_data %>%
+  rename(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, 
+         lon = `GTFS Longitude`) %>%
+  mutate(stop_id = sprintf("%sN", stop_id))
+
+stop_data1 <- rbind(stop_data_n, stop_data_s) %>% select(stop_id, stop_name, lat, lon)
+
+todd_and_stop_data <- left_join(todd_subway_data, stop_data1, by = c("stop_mta_id" = "stop_id"))
+```
+```{r}
+filtered2 <- todd_and_stop_data %>% mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time)) %>% 
+  filter(day > 1 & day < 7, hour > 6 & hour < 20) %>%
+  group_by(ymd, route_mta_id, stop_name) %>% 
+  summarise(exp_wait = sum(seconds_until_next_departure^2)/(2*sum(seconds_until_next_departure)), total_sec = sum(seconds_until_next_departure)) 
+
+filtered2 %>% filter(route_mta_id ==1) %>% ggplot(aes(x = stop_name, y = exp_wait/60)) + 
+  geom_boxplot(outlier.shape = NA) + ylim(c(2,5)) + coord_flip() 
+```
