@@ -44,7 +44,6 @@ stations <- edges %>% left_join(station_data, by = c("stop_id"="stop_id")) %>% s
 - Filter through all local and express train trips between two stations. 
 - Calculate the time between two stations (trip time) for all trip across the day
 - Compare the differences in histogram
-- 
 
 ```{r}
 
@@ -106,5 +105,44 @@ combined_plot <- ggplot(combined, aes(x = diff, group = group, col = group, fill
   geom_histogram(alpha = 0.8, position = "identity")
   # NOTE: can get intersecting distributions by running the code below 
   # geom_density(alpha = 0.8, position = "identity")
+return(combined_plot)
 }
+plot_local_express ("1","2", "S", "120S", "132S")
+```
+
+## Introducing one stop transfer
+- Explore a slightly different route on this line that could use either the local or a combination of the local and express with a transfer in between (e.g., 18th to 96th st.)
+- Compare the distribution of trip times using the local to those using the local + express
+
+```{r}
+
+#express stops
+express2_stop <- c("120S", "127S")
+local1_stop <- c("127S", "131S")
+
+express_transfer <- subway_data %>% 
+  filter(stop_mta_id =="120S" | stop_mta_id == "127S",
+         route_mta_id == "2" ) %>%
+  left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
+  group_by(realtime_trip_id) %>% 
+  arrange (desc(departure_time)) %>%
+  mutate(diff= (first(departure_time)-last(departure_time))/60) %>%
+  View()
+
+#local stops
+local_transfer <- subway_data %>% 
+  filter(stop_mta_id =="127S" | stop_mta_id == "131S",
+         route_mta_id == "1" ) %>%
+  left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
+  group_by(realtime_trip_id) %>% 
+  arrange (desc(departure_time)) %>%
+  mutate(diff= (first(departure_time)-last(departure_time))/60) %>%
+  View()
+
+#wait time calculation
+transfer <- rbind(local_transfer,express_transfer)
+
+#find the first 1 train after the 2 train departure time
+
+
 ```
