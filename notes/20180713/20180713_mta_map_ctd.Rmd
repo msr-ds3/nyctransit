@@ -1,0 +1,247 @@
+---
+title: "MTA Map Ctd"
+author: "Sasha Paulovich"
+date: "July 13, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Load libraries
+```{r libs, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(ggmap)
+library(leaflet)
+library(lubridate)
+library(ggplot2)
+library(leaflet)
+```
+
+
+#### Load MTA data & Google Transit static files
+```{r, warning=FALSE, message=FALSE}
+stations <- read_csv('http://web.mta.info/developers/data/nyct/subway/Stations.csv')
+stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
+routes <- read_csv('../../data/google_transit_subway_static/routes.txt')
+trips <- read_csv('../../data/google_transit_subway_static/trips.txt')
+stop_times <- read_csv('../../data/google_transit_subway_static/stop_times.txt')
+```
+
+
+#### Make things easier later on
+```{r}
+# for compatibility when joining
+trips$route_id <- as.character(trips$route_id)
+
+
+# take care of NA color values
+routes$route_color <- replace_na(routes$route_color, "000000") 
+```
+
+
+#### Maybe there's some useful information in these dfs?
+```{r}
+connections <- stop_times %>%
+  filter(!is.na(arrival_time)) %>%
+  left_join(stops) %>%
+  extract(trip_id, c("route_id"), regex=".*_.*_(.*)\\.\\..*", remove=FALSE) %>%
+  extract(trip_id, c("day_of_week"), regex=".*-.*-(.*)-.*", remove=FALSE) %>%
+  extract(trip_id, c("time"), regex=".*-.*-.*-.*_(.*)_.*\\.\\..*", remove=FALSE) %>%
+  mutate(stop_id = substr(stop_id, 1, 3),
+    prev_stop_id = ifelse(trip_id == lag(trip_id), lag(stop_id), NA),
+    prev_stop_lat = ifelse(trip_id == lag(trip_id), lag(stop_lat), NA),
+    prev_stop_lon = ifelse(trip_id == lag(trip_id), lag(stop_lon), NA),
+    prev_stop_name = ifelse(trip_id == lag(trip_id), lag(stop_name), NA))
+
+
+### if we need don't care about previous stop info
+# connections <- stop_times %>%
+#   filter(!is.na(arrival_time)) %>%
+#   left_join(stops) %>%
+#   extract(trip_id, c("route_id"), regex=".*_.*_(.*)\\.\\..*", remove=FALSE) %>%
+#   extract(trip_id, c("day_of_week"), regex=".*-.*-(.*)-.*", remove=FALSE) %>%
+#   extract(trip_id, c("time"), regex=".*-.*-.*-.*_(.*)_.*\\.\\..*", remove=FALSE) %>%
+#   mutate(stop_id = substr(stop_id, 1, 3)) %>%
+#   select(trip_id, time, day_of_week, route_id, arrival_time, departure_time, stop_id, stop_sequence, stop_name)
+
+
+# add in the converted trip start time and route colors
+with_times <- connections %>% 
+  mutate(trip_start_time = seconds_to_period(as.numeric(time)*.6),
+         trip_start_time = as.POSIXct(sprintf("%s:%s:%s", 
+                                      hour(trip_start_time), minute(trip_start_time), second(trip_start_time)),
+                                      "%H:%M:%S", tz="America/New_York")) %>% 
+  left_join(routes %>% select(route_id, route_color)) %>%
+  mutate(route_color = sprintf("#%s", route_color))
+         
+
+# late night service is generally midnight-6am, but let's widen the window to 10pm-6am
+# indicate whether or not the trip takes place on a weekend or weekday
+# get direction: 1 = S, 0 = N
+sequences <- with_times %>% 
+  mutate(late_night = ifelse(hour(trip_start_time) >= 22 | hour(trip_start_time) <= 6, 1, 0),
+         is_weekend = ifelse(day_of_week == "Saturday" | day_of_week == "Sunday", 1, 0)) %>%
+  left_join(trips) %>%
+  select(route_id, trip_id, direction_id, day_of_week, trip_start_time, arrival_time, departure_time, 
+         stop_id, stop_name, late_night, is_weekend, stop_lat, stop_lon, prev_stop_id, prev_stop_name, 
+         prev_stop_lat, prev_stop_lon, route_color)
+
+
+### if we don't care about previous stop info
+# sequences <- with_times %>% 
+#   mutate(late_night = ifelse(hour(trip_start_time) >= 22 | hour(trip_start_time) <= 6, 1, 0),
+#          is_weekend = ifelse(day_of_week == "Saturday" | day_of_week == "Sunday", 1, 0)) %>%
+#   left_join(trips) %>%
+#   select(route_id, trip_id, direction_id, day_of_week, trip_start_time, arrival_time, departure_time, 
+#          stop_id, stop_name, late_night, is_weekend, route_color)
+
+
+# just the distinct trip ids and a list of the corresponding stops
+paths <- sequences %>% select(trip_id, stop_id) %>%
+  group_by(trip_id) %>%
+  mutate(path = paste0(stop_id, sep= ",", collapse = " ")) %>% 
+  select(trip_id, path) %>%
+  distinct
+
+
+# for distinct each trip, the route, id, day, time
+trips_times <- sequences %>%
+  select(route_id, trip_id, direction_id, day_of_week, trip_start_time, late_night, is_weekend) %>%
+  distinct
+
+# number of stops visited for each distinct trip id
+counts <- sequences %>% 
+  group_by(route_id, trip_id, trip_start_time) %>% 
+  summarize(num_stops = n())
+
+
+# number of stops visited, in descending order, by trip id, and hour of trip start time
+ordered_counts <- counts[order(counts$route_id, counts$num_stops),] %>%
+  mutate(hour = as.integer(substr(trip_start_time, 1, 2)))
+
+
+# put it all together
+paths_info <- paths %>%
+  left_join(trips_times) %>%
+  left_join(counts)
+
+
+# only the unique routes
+distinct_routes <- paths_info %>% 
+  ungroup() %>%
+  group_by(route_id, path, direction_id, day_of_week, is_weekend, late_night, num_stops) %>%
+  summarize(count=n())
+
+```
+
+
+#### Visualize different trips
+```{r visualize}
+
+# a more concise version of the with_times df
+map_data <- with_times %>% select(route_id, trip_id, day_of_week, trip_start_time, arrival_time, departure_time,
+         stop_id, stop_name, stop_lat, stop_lon, prev_stop_id, prev_stop_name, prev_stop_lat, prev_stop_lon, route_color)
+
+
+# change the route, day = {Saturday, Sunday, Weekday}, and a specific time
+# hour and minute must directly coincide with a scheduled trip start time
+get_scheduled_map <- function(df, route, day, time){
+  time <- as.POSIXct(time, format="%H:%M:%S")
+  new_interval <- (time - minutes(30)) %--% (time + minutes(30))
+  selected_route <- df %>%
+    filter(route_id == route, day_of_week == day, 
+           trip_start_time %within% new_interval)
+  
+  # View(selected_route)
+  nyc_map <- get_map(location = c(lon = -73.9568247, lat = 40.7202688), maptype = "terrain", zoom = 11)
+
+  ggmap(nyc_map) +
+    geom_point(data = selected_route, aes(x = stop_lon, y = stop_lat), color = selected_route$route_color) +
+    geom_segment(data = selected_route, aes(x=prev_stop_lon, y=prev_stop_lat, xend=stop_lon, yend=stop_lat), color = selected_route$route_color)
+}  
+```
+
+#### The 2 train around 9am on a weekday (express)
+```{r}
+get_scheduled_map(map_data, "B", "Weekday", "12:10:00")
+
+```
+
+
+#### The 2 train around 4am on a weekday (local)
+```{r}
+get_scheduled_map(map_data, "2", "Weekday", "04:24:00")
+
+```
+
+
+#### Map all routes
+```{r}
+# show all routes at a given day/time
+get_scheduled_map_all <- function(df, day, time){
+  time <- as.POSIXct(time, format="%H:%M:%S")
+  new_interval <- (time - minutes(30)) %--% (time + minutes(30))
+  selected_route <- df %>%
+    filter(day_of_week == day, trip_start_time %within% new_interval)
+  
+  # View(selected_route)
+  nyc_map <- get_map(location = c(lon = -73.9568247, lat = 40.7202688), maptype = "terrain", zoom = 11)
+
+  ggmap(nyc_map) +
+    geom_point(data = selected_route, aes(x = stop_lon, y = stop_lat), color = selected_route$route_color) +
+    geom_segment(data = selected_route, aes(x=prev_stop_lon, y=prev_stop_lat, xend=stop_lon, yend=stop_lat), color = selected_route$route_color)
+}  
+
+```
+
+
+#### All trains from 12am to 1am on a Weekday
+```{r}
+get_scheduled_map_all(map_data, "Weekday", "12:30:00")
+```
+
+
+#### Do it in leaflet
+```{r}
+get_scheduled_map_leaflet <- function(df, day, time){
+  time <- as.POSIXct(time, format="%H:%M:%S")
+  new_interval <- (time - minutes(30)) %--% (time + minutes(30))
+  selected_route <- df %>%
+    filter(day_of_week == day, trip_start_time %within% new_interval)
+  
+  # View(selected_route)
+  
+  selected_route$stop_lat <- jitter(selected_route$stop_lat, factor = 3)
+  selected_route$stop_lon <- jitter(selected_route$stop_lon , factor= 3)
+  
+  map <- leaflet() %>%
+  addTiles() %>%
+  setView(-74.00, 40.71, zoom = 12) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addCircleMarkers(selected_route$stop_lon, selected_route$stop_lat, color = selected_route$route_color,
+                   popup = paste(selected_route$stop_name, "<br/>", selected_route$route_id),
+                   radius = 4) 
+ 
+
+  for (i in 1:nrow(selected_route)) {
+    map <- map %>%
+      addPolylines(lat = c(selected_route[i,]$stop_lat, selected_route[i,]$prev_stop_lat),
+                   lng = c(selected_route[i,]$stop_lon, selected_route[i,]$prev_stop_lon),
+                   color = selected_route[i,]$route_color,
+                   weight = 1)
+  }
+  
+ map
+}
+```
+
+
+#### All trains 12am-1am on a Weekday
+```{r}
+get_scheduled_map_leaflet(map_data, "Weekday", "12:30:00")
+
+```
+
+
