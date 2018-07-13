@@ -76,4 +76,15 @@ express_train <- subway_data %>%
 plot_express <- express_train  %>% ggplot(aes(x=diff))+ geom_histogram()
 plot_express
 
+# code for combining plots as per: https://stackoverflow.com/questions/21192002/how-to-combine-2-plots-ggplot-into-one-plot
+local_train$group <- "local"
+express_train$group <- "express"
+
+combined <- rbind(local_train, express_train)
+
+combined_plot <- ggplot(combined, aes(x = diff, group = group, col = group, fill = group)) +
+  geom_histogram(aes(alpha = 0.8))
+  # TODO: figure out why geom_density is discontinuous
+  # geom_density(aes(alpha = 0.8))
+
 ```
