@@ -60,7 +60,7 @@ local_train <- subway_data %>%
   left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
   group_by(realtime_trip_id) %>% 
   arrange (desc(departure_time)) %>%
-  mutate(diff= round(first(departure_time)-last(departure_time))/60)
+  mutate(diff= (first(departure_time)-last(departure_time))/60)
 
 plot_local <- local_train %>% ggplot(aes(x=diff))+ geom_histogram()
 plot_local
@@ -71,7 +71,7 @@ express_train <- subway_data %>%
   left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
   group_by(realtime_trip_id) %>% 
   arrange (desc(departure_time)) %>%
-  mutate(diff= round(first(departure_time)-last(departure_time))/60)
+  mutate(diff= (first(departure_time)-last(departure_time))/60)
 
 plot_express <- express_train  %>% ggplot(aes(x=diff))+ geom_histogram()
 plot_express
@@ -84,7 +84,7 @@ combined <- rbind(local_train, express_train)
 
 combined_plot <- ggplot(combined, aes(x = diff, group = group, col = group, fill = group)) +
   geom_histogram(alpha = 0.8, position = "identity")
-  # TODO: figure out why geom_density is discontinuous
-  # geom_density(aes(alpha = 0.8))
+  # NOTE: can get intersecting distributions by running the code below 
+  # geom_density(alpha = 0.8, position = "identity")
 
 ```
