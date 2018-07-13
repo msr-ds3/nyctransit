@@ -158,7 +158,7 @@ map
 
 theme_set(theme_bw())
 
-igraph_edges <- full_sequences %>% filter(!is.na(prev_stop_id)) %>% select(prev_stop_id, stop_id, weight)
+igraph_edges <- full_sequences %>% filter(!is.na(prev_stop_id), !is.na(weight)) %>% select(prev_stop_id, stop_id, weight)
 mta_igraph <- graph.data.frame(igraph_edges, directed=TRUE)
 
 plot(mta_igraph) 
@@ -168,7 +168,7 @@ plot(mta_igraph)
 #### Find shortest route
 ```{r shortest_function}
 
-shortest_path <- shortest_paths(mta_igraph, from = c("701"), to = c("R19"), mode="in")
+shortest_path <- shortest_paths(mta_igraph, from = c("R19"), to = c("104"), mode="in")
 
 shortest_route <- data.frame(stop_id = (sapply(shortest_path$vpath, as_ids)), stringsAsFactors = FALSE) %>% left_join(stops, by = "stop_id") %>% select(stop_id, stop_name)
 
