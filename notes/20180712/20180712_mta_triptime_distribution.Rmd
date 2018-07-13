@@ -47,6 +47,11 @@ stations <- edges %>% left_join(station_data, by = c("stop_id"="stop_id")) %>% s
 
 ```{r}
 
+# Helper Function to Determine if Day is Weekend
+isWeekend() <- function(day_of_week) {
+  ifelse(day_of_week == "Saturday" | day_of_week == "Sunday", T, F)
+}
+
 stops <- stations %>% filter(line == "1",
                                 grepl(sprintf("%s$", "S"), stop_id)) %>%
      unique()
