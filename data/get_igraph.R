@@ -70,8 +70,8 @@ station_weights <- realtime %>%
   mutate(prev_stop_mta_id = ifelse(realtime_trip_id == lag(realtime_trip_id), lag(stop_mta_id), NA)) %>%
   filter(!is.na(travel_time)) %>% 
   group_by(route_mta_id, stop_mta_id, prev_stop_mta_id) %>% 
-  summarize(weight = mean(travel_time), sd = sd(travel_time), lower_quartile = quantile(travel_time, 0.25, na.rm=TRUE),
-            median = median(travel_time, na.rm=TRUE), upper_quartile = quantile(travel_time, 0.75, na.rm=TRUE))
+  summarize(weight = mean(travel_time), sd = sd(travel_time, na.rm=TRUE), lower_quartile = quantile(travel_time, 0.25),
+            median = median(travel_time), upper_quartile = quantile(travel_time, 0.75))
 
 
 
