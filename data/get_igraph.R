@@ -5,13 +5,13 @@ library(lubridate)
 
 
 
-stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
-routes <- read_csv('../../data/google_transit_subway_static/routes.txt')
-trips <- read_csv('../../data/google_transit_subway_static/trips.txt')
-stop_times <- read_csv('../../data/google_transit_subway_static/stop_times.txt')
-transfers <- read_csv('../../data/google_transit_subway_static/transfers.txt')
+stops <- read_csv('google_transit_subway_static/stops.txt')
+routes <- read_csv('google_transit_subway_static/routes.txt')
+trips <- read_csv('google_transit_subway_static/trips.txt')
+stop_times <- read_csv('google_transit_subway_static/stop_times.txt')
+transfers <- read_csv('google_transit_subway_static/transfers.txt')
 
-load('../../data/todd_subway_realtime.RData')
+load('todd_subway_realtime.RData')
 
 
 
@@ -50,9 +50,9 @@ unique_sequences <- all_trips %>%
 # prepping the transfer data
 transfer_sequences <- transfers %>% left_join(stops, by = c("to_stop_id" = "stop_id")) %>% 
   left_join(stops, by = c("from_stop_id" = "stop_id")) %>%
-  mutate(route_id = "T") %>%
+  mutate(route_id = "T", weight = min_transfer_time, sd = NA, lower_quartile = NA, median = NA, upper_quartile = NA) %>%
   select(route_id, stop_id = to_stop_id, stop_name = stop_name.x, prev_stop_id = from_stop_id, 
-         prev_stop_name = stop_name.y, weight = min_transfer_time)
+         prev_stop_name = stop_name.y, weight, sd, lower_quartile, median, upper_quartile)
 
 
 
@@ -62,7 +62,7 @@ realtime <- realtime %>%
   mutate(day_of_week = weekdays(departure_time),
          day_of_week = ifelse(day_of_week != "Saturday" & day_of_week != "Sunday", "Weekday", day_of_week))
 
-# gt weights for the connections between stations
+# get weights for the connections between stations
 station_weights <- realtime %>%
   mutate(stop_mta_id = substr(stop_mta_id, 1, 3)) %>%
   arrange(realtime_trip_id, departure_time) %>% 
