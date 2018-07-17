@@ -1,0 +1,51 @@
+---
+title: "Cleaning the stop times data frame"
+author : "Peter Farquharson"
+output: html_document
+---
+
+```{r,   }
+
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+library(stats)
+library(base)
+library(readr)
+library(timeDate)
+
+
+load( file="~/todd_data.RData")
+stop_times <- read.csv("stop_times.txt")
+
+temp<- todd_data %>% select(route_mta_id, stop_mta_id) %>% distinct()
+
+
+stop_calc <- left_join(stop_times, temp,  by = c("stop_id" = "stop_mta_id"))
+
+sep_stop_calc <- stop_calc %>% separate(col = trip_id, into = c("id", "trip_id", "day"),sep ="-" ) 
+
+
+
+```
+
+```{r, "leaning the stop_times dataframe to include seconds until next departure and line"  }
+
+
+
+clean_stop <- sep_stop_calc %>% filter(!is.na(route_mta_id) & day == "Weekday") %>%
+  mutate(time = period_to_seconds(hms(arrival_time))) %>%
+  arrange(time) %>%  group_by(route_mta_id, stop_id) %>%
+  mutate(seconds_to_next_departure = lead(time)-time) %>%
+  select(day, arrival_time, departure_time,seconds_to_next_departure,time,trip_id,      route_mta_id, stop_id) 
+
+
+
+
+
+```
+
+
+
