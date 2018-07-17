@@ -67,10 +67,8 @@ mta_igraph <- graph.data.frame(igraph_edges, directed=TRUE)
 plot(mta_igraph)
 
 # get the name one of the first stops of the given train
-first_stop <- "247"
- 
-# create the ordered list of stops based on the given train line
-data.frame(stop_id = names(unlist(dfs(mta_igraph, first_stop)$order))) %>% left_join(stops) %>% select(stop_id, stop_name) %>% View()
+first_stop <- all_trips %>% filter(route_id == route_filter) %>% group_by(trip_id) %>% summarize(stop_id = first(stop_id)) %>% group_by(stop_id) %>% summarize(count = n()) %>% arrange(desc(count)) %>% select(stop_id) %>% head(1)
+first_stop <- first_stop$stop_id
 
-################# SAVE IGRAPH #################
-#save(mta_igraph, file='.RData')
+# create the ordered list of stops based on the given train line
+data.frame(stop_id = names(unlist(bfs(mta_igraph, first_stop)$order))) %>% left_join(stops) %>% select(stop_id, stop_name)

@@ -13,6 +13,10 @@ transfers <- read_csv('google_transit_subway_static/transfers.txt')
 
 load('todd_subway_realtime.RData')
 
+#All Service
+#time_filter <- seq(0, 23)
+#day_filter <- c("Weekday", "Saturday", "Sunday")
+
 #Ordinary Service
 time_filter <- seq(6, 23)
 day_filter <- c("Weekday")
@@ -78,7 +82,9 @@ station_weights <- realtime %>%
   arrange(realtime_trip_id, departure_time) %>% 
   mutate(travel_time = ifelse(realtime_trip_id == lag(realtime_trip_id), departure_time - lag(departure_time), NA)) %>%
   mutate(prev_stop_mta_id = ifelse(realtime_trip_id == lag(realtime_trip_id), lag(stop_mta_id), NA)) %>%
-  filter(!is.na(travel_time)) %>% 
+  filter(!is.na(travel_time),
+         hour(departure_time) %in% time_filter,
+         day_of_week %in% day_filter) %>% 
   group_by(route_mta_id, stop_mta_id, prev_stop_mta_id) %>% 
   summarize(weight = mean(travel_time), sd = sd(travel_time, na.rm=TRUE), lower_quartile = quantile(travel_time, 0.25),
             median = median(travel_time), upper_quartile = quantile(travel_time, 0.75))
@@ -108,7 +114,6 @@ igraph_edges <- full_sequences %>%
 mta_igraph <- graph.data.frame(igraph_edges, directed=TRUE)
 plot(mta_igraph)
   
-
 
 ################# SAVE IGRAPH #################
 save(mta_igraph, file='ordinary_igraph.RData')
