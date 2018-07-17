@@ -120,7 +120,7 @@ plot_local_express <- function(local_line, express_line, start_stop_id, end_stop
 plot_local_express ("1", "2", "120S", "132S")
 ```
 
-## Introducing one stop transfer
+## Introducing One Stop Transfer
 
 - Explore a slightly different route on this line that could use either the local or a combination of the local and express with a transfer in between(e.g., 18th to 96th st.)
 - Compare the distribution of trip times using the local to those using the local + express
@@ -128,12 +128,12 @@ plot_local_express ("1", "2", "120S", "132S")
 ```{r compute-trip-time}
 
 # NOTE: DEBUG CODE  
-# start_station <- "120S"
-# start_line <- "2"
-# transfer_station <- "127S"
-# transfer_line <- "1"
-# end_station <- "131S"
-# start_time <- "2018-01-20 09:30:00"
+start_station <- "120S"
+start_line <- "2"
+transfer_station <- "127S"
+transfer_line <- "1"
+end_station <- "131S"
+start_time <- "2018-01-20 09:30:00"
 
 compute_trip_time <- function (start_station, start_line, transfer_station, transfer_line, end_station, start_time) {
     
@@ -145,7 +145,9 @@ compute_trip_time <- function (start_station, start_line, transfer_station, tran
       group_by(realtime_trip_id) %>%
       mutate(count = n()) %>%
       filter(count >= 2) %>%
+      ungroup() %>%
       arrange(departure_time)
+    # ungroup and arrange by departure_time
     
     # get the trip_id of the first trip after the depart_time
     first_trip_id <- first(first_trains$realtime_trip_id)
@@ -166,8 +168,9 @@ compute_trip_time <- function (start_station, start_line, transfer_station, tran
       group_by(realtime_trip_id) %>%
       mutate(count = n()) %>%
       filter(count >= 2) %>%
+      ungroup() %>%
       arrange(departure_time)
-      
+      # note above
     
     transfer_trip_id <- first(transfer_trains$realtime_trip_id)
     
@@ -181,10 +184,66 @@ compute_trip_time <- function (start_station, start_line, transfer_station, tran
     
     time_diff <- as.numeric(difftime(ymd_hms(dest_arrival_time), ymd_hms(start_time)), units = "mins")
     
-    return(time_diff)
-    
+     return(time_diff)
+#     
+}
+# 
+compute_trip_time("120S", "2", "127S", "1", "131S", "2018-01-22 09:30:00")
+
+```
+
+## Comparing Distributions of Local vs Local + Express
+
+```{r example}
+
+local_line <- "1"
+express_line <- "2"
+start_stop_id <- "120S"
+transfer_stop_id <- "127S"
+end_stop_id <- "131S"
+start_time <- "2018-01-20 09:30:00"
+
+# Getting 2 Trains
+data_2_train <- subway_data.2 %>%
+  filter(stop_mta_id == "120S" | stop_mta_id == "127S",
+         route_mta_id == "2") %>%
+  filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
+  group_by(realtime_trip_id) %>%
+  mutate(start_time = min(departure_time)) %>%
+  filter(n() >= 2, stop_mta_id == "127S") %>%
+  arrange(arrival_time)
+
+# Getting 1 Trains
+data_1_train <- subway_data.2 %>%
+  filter(stop_mta_id == "127S" | stop_mta_id == end_stop_id,
+         route_mta_id == local_line) %>%
+  filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
+  group_by(realtime_trip_id) %>%
+  mutate(end_time = max(departure_time)) %>%
+  filter(n() >= 2, stop_mta_id == "127S") %>%
+  arrange(departure_time)
+
+
+# TODO: add train 1 start time and train 2 end time for debugging and evaluating purposes
+i = 1
+j = 1
+times <- vector('numeric')
+start_times <- vector('double')
+end_times <- vector('double')
+while (i < nrow(data_2_train)) {
+  if (data_1_train$departure_time[j] > data_2_train$arrival_time[i]) {
+    # df <- data.frame(trip_time = 0, start_trip = 0, end_trip = 0)
+    start_times <- c(start_times, data_2_train$start_time[i])
+    end_times <- c(end_times, data_1_train$end_time[j])
+    times <- c(times, as.numeric(difftime(data_1_train$end_time[j], data_2_train$start_time[i]), units = "mins"))
+    i = i + 1
+  } else {
+    j = j + 1
+  }
 }
 
-compute_trip_time("120S", "2", "127S", "1", "131S", "2018-01-20 09:30:00")
+# verify with real data
+new_df <- data.frame(starts = as.POSIXct(start_times, origin = "1970-01-01"), ends = as.POSIXct(end_times, origin = "1970-01-01"), diffs = times)
 
+# figure out about creating multiple lists for multiple transfers
 ```
