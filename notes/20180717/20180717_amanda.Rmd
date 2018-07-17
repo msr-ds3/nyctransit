@@ -1,0 +1,181 @@
+---
+title: "Subway Data"
+author: "Amanda Rodriguez"
+date: "July 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(igraph)
+# todd_subway_data <- read_csv("MTA Data/todd_subway_data.csv", col_types = cols(route_mta_id = col_factor(levels = NULL)))
+# save(todd_subway_data, file = "todd_subway_data.RData")
+load("~/Microsoft DS3/project/MTA Data/todd_subway_data.RData")
+```
+
+```{r}
+# Modify yesterday's code that computed wait times distributions for each line to do the same at the station level (keep 7am - 8pm weekday restriction)
+
+# Plot these distributions for a set of contiguous stations on a given line
+
+# This is probably too many histograms to view at once, but you could visualize some summary statistics across all stations (e.g., with a box or ribbon plot)
+
+# load stop_times from GTFS Static
+stop_times <- read_csv("~/Microsoft DS3/project/google_transit_subway_static/stop_times.txt")
+
+#stop_times <- stop_times %>%
+#  select(stop_id, stop_sequence) %>% arrange(stop_id) %>% group_by(stop_id, stop_sequence) %>% distinct(stop_id) 
+
+# load station_data from mta
+station_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
+# get stop_id and stop_name fields, and create a stop_id with N and S appended
+station_data <- station_data %>% 
+  rename(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`) %>%
+  mutate(stop_id_N = sprintf('%sN', stop_id), stop_id_S = sprintf('%sS', stop_id)) %>%
+  gather(`stop_id_N`, `stop_id_S`, key = "stop_ids", value = "stop_id") %>%
+  select(stop_name, stop_id)
+
+#station_and_stop_data <- left_join(stop_times, station_data, by = c("stop_id" = "stop_id"))
+ 
+#todd_and_stop_data <- left_join(todd_subway_data, station_and_stop_data, by = c("stop_mta_id" = "stop_id"))
+
+todd_and_stop_data <- left_join(todd_subway_data, station_data, by = c("stop_mta_id" = "stop_id"))
+```
+
+```{r}
+# Brian's code for stop sequence with minor changes
+
+stops <- read_csv('~/Microsoft DS3/project/google_transit_subway_static/stops.txt')
+routes <- read_csv('~/Microsoft DS3/project/google_transit_subway_static/routes.txt')
+trips <- read_csv('~/Microsoft DS3/project/google_transit_subway_static/trips.txt')
+#stop_times <- read_csv("~/Microsoft DS3/project/google_transit_subway_static/stop_times.txt")
+transfers <- read_csv('~/Microsoft DS3/project/google_transit_subway_static/transfers.txt')
+
+#load("~/Microsoft DS3/project/MTA Data/todd_subway_data.RData")
+
+#Ordinary Service
+time_filter <- seq(12, 13) # have to constantly change to find a time of day that has a full route for a line
+day_filter <- c("Weekday")
+
+#Weekend Service
+#time_filter <- seq(6, 23)
+#day_filter <- c("Saturday", "Sunday")
+
+#Late Night Service
+#time_filter <- seq(0, 5)
+#day_filter <- c("Weekday", "Saturday", "Sunday")
+
+################# STATIC -- formatting #################
+
+trips$route_id <- as.character(trips$route_id)
+
+# all scheduled trips
+all_trips <- stop_times %>%
+  filter(!is.na(arrival_time)) %>%
+  left_join(stops) %>%
+  extract(trip_id, c("route_id"), regex=".*_.*_(.*)\\.\\..*", remove=FALSE) %>%
+  extract(trip_id, c("day_of_week"), regex=".*-.*-(.*)-.*", remove=FALSE) %>%
+  extract(trip_id, c("time"), regex=".*-.*-.*-.*_(.*)_.*\\.\\..*", remove=FALSE) %>%
+  mutate(stop_id = substr(stop_id, 1, 3),
+         prev_stop_id = ifelse(trip_id == lag(trip_id), lag(stop_id), NA),
+         prev_stop_name = ifelse(trip_id == lag(trip_id), lag(stop_name), NA),
+         trip_start_time = seconds_to_period(as.numeric(time)*.6),
+         trip_start_time = as.POSIXct(sprintf("%s:%s:%s", 
+                                              hour(trip_start_time), minute(trip_start_time), 
+                                              second(trip_start_time)), 
+                                      "%H:%M:%S", tz="America/New_York")) %>%
+  left_join(trips) %>%
+  select(route_id, trip_id, direction_id, day_of_week, 
+         trip_start_time, arrival_time, departure_time, 
+         stop_id, stop_name, prev_stop_id, prev_stop_name)
+
+# unique trip sequences by line
+unique_sequences <- all_trips %>%
+  filter(hour(trip_start_time) %in% time_filter) %>%
+  filter(day_of_week %in% day_filter) %>%
+  select(route_id, stop_id, stop_name, prev_stop_id, prev_stop_name) %>%
+  distinct 
+
+# choose what train to filter over
+route_filter <- "2"
+
+# create the edges for the graph based on the given train
+igraph_edges <- unique_sequences %>%
+  filter(!is.na(prev_stop_id), route_id == route_filter) %>%
+  select(prev_stop_id, stop_id)
+
+# create the graph and plot it
+mta_igraph <- graph.data.frame(igraph_edges, directed=TRUE)
+
+# get the name one of the first stops of the given train
+first_stop <- all_trips %>% 
+  filter(route_id == route_filter) %>% 
+  group_by(trip_id) %>% 
+  summarize(stop_id = first(stop_id)) %>% 
+  group_by(stop_id) %>% 
+  summarize(count = n()) %>% 
+  arrange(desc(count)) %>% select(stop_id) %>% 
+  head(1)
+
+first_stop <- first_stop$stop_id
+ 
+# create the ordered list of stops based on the given train line
+two_train <- data.frame(stop_id = names(unlist(dfs(mta_igraph, first_stop)$order))) %>% 
+  left_join(stops) %>% 
+  select(stop_id, stop_name) 
+
+two_train <- two_train %>% 
+  mutate(stop_sequence = 1:nrow(two_train)) 
+
+```
+
+```{r}
+# graph that shows weekday from 7am-8pm distribution of wait times by station for each line
+filtered <- todd_and_stop_data[!(todd_and_stop_data$route_mta_id %in% c("GS","SS","FS","H","SI")), ] %>%
+  mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time)) %>% 
+  filter(day > 1 & day < 7, hour > 6 & hour < 20) %>% # filter for 7am-8pm during weekdays
+  group_by(seconds_until_next_departure, stop_name, route_mta_id) %>% 
+  summarize(n = n()) %>% # count for time intervals by line
+  group_by(route_mta_id, stop_name) %>% 
+  arrange(route_mta_id, desc(seconds_until_next_departure)) %>% 
+  mutate(cum_n = cumsum(n)) %>%
+  group_by(route_mta_id, stop_name) %>%
+  arrange(route_mta_id, seconds_until_next_departure) %>%
+  mutate(pdf = cum_n / sum(cum_n), 
+         cdf = cumsum(pdf))
+
+filtered2 <- filtered %>% 
+  group_by(route_mta_id, stop_name) %>%
+  summarize(median = approx(cdf, seconds_until_next_departure, xout = 0.5)$y, 
+            lower = approx(cdf, seconds_until_next_departure, xout = 0.25)$y, 
+            upper = approx(cdf, seconds_until_next_departure, xout = 0.75)$y,
+        perc10  = approx(cdf, seconds_until_next_departure, xout = 0.1)$y,
+        perc90 = approx(cdf, seconds_until_next_departure, xout = 0.9)$y) 
+
+
+filtered2 %>% 
+  filter(route_mta_id == 2) %>%  
+  left_join(two_train, by = c("stop_name" = "stop_name")) %>% 
+  na.omit() %>% # to get rid of weird stops (these are not accounted for in the stop sequence, so it appears as NA after the left_join)
+  ggplot(aes(x = reorder(stop_name, -stop_sequence))) + 
+  geom_boxplot(aes(ymin = perc10 / 60, 
+               lower = lower / 60, 
+               middle = median / 60, 
+               upper = upper / 60, 
+               ymax = perc90 / 60), 
+               stat = "identity") +
+  scale_y_continuous("Minutes until next train arrives", minor_breaks = NULL) +
+  scale_x_discrete("Train Stop") +
+  ggtitle("NYC Subway Wait Time Distributions by Station for a Line", "Weekdays 7 AM-8 PM, Jan-May 2018") +
+  scale_fill_identity() +
+  coord_flip() 
+```
+
+

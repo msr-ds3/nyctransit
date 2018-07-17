@@ -194,7 +194,9 @@ compute_trip_time("120S", "2", "127S", "1", "131S", "2018-01-22 09:30:00")
 
 ## Comparing Distributions of Local vs Local + Express
 
-```{r example}
+### Computing Local + Express Wait Times On Large Scale Efficiently
+
+```{r example-for-trips}
 
 local_line <- "1"
 express_line <- "2"
@@ -207,7 +209,7 @@ start_time <- "2018-01-20 09:30:00"
 data_2_train <- subway_data.2 %>%
   filter(stop_mta_id == "120S" | stop_mta_id == "127S",
          route_mta_id == "2") %>%
-  filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
+  # filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
   group_by(realtime_trip_id) %>%
   mutate(start_time = min(departure_time)) %>%
   filter(n() >= 2, stop_mta_id == "127S") %>%
@@ -217,7 +219,7 @@ data_2_train <- subway_data.2 %>%
 data_1_train <- subway_data.2 %>%
   filter(stop_mta_id == "127S" | stop_mta_id == end_stop_id,
          route_mta_id == local_line) %>%
-  filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
+  # filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
   group_by(realtime_trip_id) %>%
   mutate(end_time = max(departure_time)) %>%
   filter(n() >= 2, stop_mta_id == "127S") %>%
@@ -229,7 +231,9 @@ i = 1
 j = 1
 times <- vector('numeric')
 start_times <- vector('double')
+transfer_arrival_times <- vector('double')
 end_times <- vector('double')
+transfer_departure_times <- vector('double')
 realtime_start_ids <- vector('numeric')
 realtime_end_ids <- vector('numeric')
 
@@ -238,7 +242,9 @@ while (i < nrow(data_2_train)) {
     # df <- data.frame(trip_time = 0, start_trip = 0, end_trip = 0)
     realtime_start_ids <- c(realtime_start_ids, data_2_train$realtime_trip_id[i])
     start_times <- c(start_times, data_2_train$start_time[i])
+    transfer_arrival_times <- c(transfer_arrival_times, data_2_train$arrival_time[i])
     realtime_end_ids <- c(realtime_end_ids, data_1_train$realtime_trip_id[j])
+    transfer_departure_times <- c(transfer_departure_times, data_1_train$departure_time[j])
     end_times <- c(end_times, data_1_train$end_time[j])
     times <- c(times, as.numeric(difftime(data_1_train$end_time[j], data_2_train$start_time[i]), units = "mins"))
     i = i + 1
@@ -250,7 +256,9 @@ while (i < nrow(data_2_train)) {
 # verify with real data
 new_df <- data.frame(start_trip_id = realtime_start_ids,
                      starts = as.POSIXct(start_times, origin = "1970-01-01", tz = "UTC"),
+                     transfer_starts = as.POSIXct(transfer_arrival_times, origin = "1970-01-01", tz = "UTC"),
                      end_trip_id = realtime_end_ids,
+                     transfer_ends = as.POSIXct(transfer_departure_times, origin = "1970-01-01", tz = "UTC"),
                      ends = as.POSIXct(end_times, origin = "1970-01-01", tz = "UTC"),
                      diffs = times)
 
@@ -262,4 +270,54 @@ new_df %>% filter(start_trip_id == 3300) %>% View("new_df 3300")
 
 
 # TODO: figure out multiple transfers with multiple lists
+```
+
+### Plotting Distributions of Local vs Local + Express
+
+```{r plotting-dist-local-v-local+express}
+
+# Local Train Data & Distribution
+local_line <- "1"
+express_line <- "2"
+start_stop_id <- "120S"
+end_stop_id <- "131S"
+
+# local train
+local_diffs <- subway_data %>%
+  filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
+         route_mta_id == local_line) %>%
+  left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
+  group_by(realtime_trip_id) %>% 
+  arrange(desc(departure_time)) %>%
+  mutate(diff = as.numeric(difftime(first(departure_time),last(departure_time)), units = "mins")) %>%
+  select(realtime_trip_id, diff) %>%
+  unique() %>% ungroup() %>%
+  select(diffs=diff)
+
+# plot for local line
+plot_local <- local_diffs %>%
+  ggplot(aes(x=diffs)) + geom_histogram()
+
+# express train
+local_with_express_diffs <- new_df %>%
+  select(diffs)
+
+# plot for express train
+plot_express <- local_with_express_diffs %>%
+  ggplot(aes(x=diffs)) + geom_histogram()
+
+# code for combining plots as per: https://stackoverflow.com/questions/21192002/how-to-combine-2-plots-ggplot-into-one-plot
+local_diffs$group <- "local"
+local_with_express_diffs$group <- "local w/ express"
+
+combined <- rbind(local_diffs, local_with_express_diffs)
+
+combined_plot <- ggplot(combined, aes(x=diffs, group=group, col=group, fill=group)) +
+  geom_histogram(alpha = 0.8, position = "identity") +
+  xlim(c(0, 50))
+# NOTE: can get intersecting distributions by running the code below 
+# geom_density(alpha = 0.8, position = "identity")
+
+combined_plot
+
 ```
