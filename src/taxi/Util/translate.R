@@ -64,12 +64,16 @@ parse.Vector <- function(v)
 }
 
 
-spread_key <- function(x, column, dummyName='dummy')
+spread_key <- function(x, column, dummyName='dummy',na = 0)
 {
+  names.og <- names(x)
   args <- list('.data' = x)
   args[dummyName] <- 1
   x <- do.call(mutate, args)
-  do.call(spread, list(data = x, key = column, value = dummyName))
+  x <- do.call(spread, list(data = x, key = column, value = dummyName))
+  names.new <- names(x)
+  names.new <- names.new[!names.new %in% names.og]
+  x %>% mutate_at(.vars = names.new, function(x) ifelse(is.na(x), 0,1))
 }
 
 spread_key_mult <- function(x, ..., dummyName = 'dummy')

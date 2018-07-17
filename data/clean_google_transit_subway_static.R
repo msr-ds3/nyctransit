@@ -49,5 +49,6 @@ trips <- read('google_transit_subway_static/trips.txt',c = 'route_id') %>%
   left_join(trip_path, by='trip_id') %>%   mutate(period = categorize.timePeriod(first_arrival_time)) %>%
   select(trip_id, route_id, shape_id, path_id, day_type, direction = direction_id,trip_headsign, period, first_arrival_time, last_arrival_time, duration)
 
+paths <- translate(paths, trips, path_id, c(route_id, direction), path_id = c(route_id, direction))
 #load.mult('taxi_cleaned') while your in the data folder directory to load it.
 save.mult('taxi_cleaned', paths, routes, shapes, shapes_edges, shapes_info, stop_times, stops, trips, trips_edges)
