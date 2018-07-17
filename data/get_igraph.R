@@ -13,9 +13,17 @@ transfers <- read_csv('google_transit_subway_static/transfers.txt')
 
 load('todd_subway_realtime.RData')
 
+#Ordinary Service
+time_filter <- seq(6, 23)
+day_filter <- c("Weekday")
 
+#Weekend Service
+#time_filter <- seq(6, 23)
+#day_filter <- c("Saturday", "Sunday")
 
-
+#Late Night Service
+#time_filter <- seq(0, 5)
+#day_filter <- c("Weekday", "Saturday", "Sunday")
 
 ################# STATIC -- formatting #################
 
@@ -43,6 +51,8 @@ all_trips <- stop_times %>%
 
 # unique trip sequences by line
 unique_sequences <- all_trips %>%
+  filter(hour(trip_start_time) %in% time_filter) %>%
+  filter(day_of_week %in% day_filter) %>%
   select(route_id, stop_id, stop_name, prev_stop_id, prev_stop_name) %>%
   distinct 
 
@@ -88,8 +98,6 @@ full_sequences <- unique_sequences %>%
 full_sequences <- rbind(full_sequences, transfer_sequences)
 
 
-
-
 ################# GET IGRAPH #################
 
 
@@ -103,4 +111,4 @@ plot(mta_igraph)
 
 
 ################# SAVE IGRAPH #################
-save(mta_igraph, file='basic_igraph.RData')
+save(mta_igraph, file='ordinary_igraph.RData')

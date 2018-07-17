@@ -1,0 +1,53 @@
+---
+title: '20180716'
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+loading data and functions
+make sure to set wd to source
+```{r}
+source('../../src/taxi/Util/paths.R')
+source('../../src/taxi/Util/read.R')
+source('../../src/taxi/Util/translate.R')
+load.mult('../../data/taxi_cleaned/')
+```
+
+global order for a train
+```{r}
+
+A <- paths %>% filter(route_id == 'A', direction ==0) %>% .$path
+data.frame(stop_id = path.order(A)) %>% translate(stops, stop_id,stop_name, stop_id=stop_name)
+
+```
+
+
+not done yet
+```{r latenight}
+interval.adjusted <- interval.timePeriod
+interval.adjusted [1,1] <- '6:00:00'
+interval.adjusted [6,2] <- '6:00:00'
+
+path.latenight_info <- trips %>% mutate(start_period = categorize.timeInterval(first_arrival_time, interval.adjusted),
+                 end_period = categorize.timeInterval(last_arrival_time, interval.adjusted)) %>%
+  mutate(start_latenight = ifelse(start_period == 'latenight',1,0), 
+         end_latenight = ifelse(end_period == 'latenight',1,0)) %>%
+  group_by(route_id, path_id) %>%
+  summarize(start_latenight = mean(start_latenight), end_latenight = mean(end_latenight))
+
+path.latenight_info %>% #filter(start_latenight != 0 & end_latenight != 0) %>%
+  mutate( avg = (start_latenight+end_latenight)/2) %>% 
+  select(route_id, above90) %>% distinct %>% group_by(route_id) %>% summarize(x = mean(above90)) %>%
+  View
+trips  %>% filter(day_type == 'Weekday') %>% spread_key('period') %>% group_by(route_id, path_id, direction) %>% summarize(rush.am = mean(rush.am), rush.pm = mean(rush.pm)) %>% mutate(rush = rush.am + rush.pm) %>% filter(rush > .1) %>% mutate(is_peak = ifelse(rush.am == 0 | rush.pm == 0, 1, 0)) %>% View
+
+
+stops
+paths %>% filter(route_id == 'A', direction == 1) %>% separate_unknown(column = 'path',sep = '>') %>% View
+```
