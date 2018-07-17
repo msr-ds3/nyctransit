@@ -1,0 +1,122 @@
+---
+title: "Todd's plot on train wait time"
+output: html_document
+name:  "Peter Farquharson"
+---
+
+```{r }
+
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+library(stats)
+
+load( file="../../data/todd_subway_realtime.RData")
+todd_data <- realtime
+
+# * First, the plot of trains between stations over the course of a day (4th plot in post for May 16th) 
+# Then create the first two plots in the post, for subway wait time distributions and wait time by hour for a given line 
+
+
+```
+
+
+```{r, "Manipulating data by line" }
+
+plot_data <- todd_data %>% 
+  filter(!is.na(route_mta_id)) %>% 
+  mutate(hour = hour(departure_time), ymd = as.Date(departure_time), week_day = wday(departure_time)) %>% filter(week_day > 1 & week_day < 7) %>%
+  mutate(stop_id = substr(stop_mta_id, 1, 3)) %>%
+  group_by(stop_id, route_mta_id, hour) %>% 
+  count(seconds_until_next_departure) %>%
+  complete(seconds_until_next_departure = 1:max(seconds_until_next_departure), fill = list(n = 0)) %>% 
+  arrange(stop_id, route_mta_id, hour, desc(seconds_until_next_departure)) %>% 
+  mutate(cum_n = cumsum(n)) %>% 
+  arrange(stop_id, route_mta_id, hour, seconds_until_next_departure) %>%
+  mutate(cdf = cumsum(cum_n) / 
+               sum(cum_n)) %>%
+  summarize(median = approx(cdf, seconds_until_next_departure, xout = 0.5)$y, lower_quartile = approx(cdf, seconds_until_next_departure, xout = 0.10)$y, seventh_quantile = approx(cdf, seconds_until_next_departure, xout = 0.75)$y, quart_quantile = approx(cdf, seconds_until_next_departure, xout = 0.25)$y, upper_quantile = approx(cdf, seconds_until_next_departure, xout = .9)$y)                                                           
+
+```
+
+
+```{r, "Plotting by line"}
+#PLot on How long will you have to wait for your train?
+
+   plot_data %>%  filter(route_mta_id == 2) %>% ggplot(aes(x = hour, y= median/60)) +  geom_line() + scale_y_continuous() + scale_x_continuous() +
+ geom_ribbon(aes(ymin = lower_quartile/60, ymax = upper_quantile/60), fill = "grey80") + geom_ribbon(aes(ymin =quart_quantile/60, ymax =seventh_quantile/60), fill = "grey70") + geom_line() + scale_y_continuous(name = "Wait Time") + scale_x_continuous(breaks = c(0, 5,10,15,20,25),label = c("12am", "6am", "12pm", "6pm", "12am", "6am")) + ggtitle(paste("Train Wait Time by line per Hour")) 
+
+```
+
+```{r, "Joining station dataset with todd's data" }
+
+stop_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
+stations_S <- stop_data %>%
+  rename(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`) %>%
+  mutate(stop_mta_id = sprintf("%sS", stop_id))
+
+stations_N <- stop_data %>% rename(stop_id =`GTFS Stop ID`, stop_name = `Stop Name`) %>%
+  mutate(stop_mta_id = sprintf("%sN", stop_id))
+
+stations <- rbind(stations_S, stations_N)
+
+new_stations <- inner_join(stations,todd_data,  by = "stop_mta_id") 
+
+
+
+```
+
+```{r, "Manipulating data(Stations)" }
+
+
+plot_station_data <- new_stations %>%
+   filter(!is.na(route_mta_id)) %>% 
+  mutate(hour = hour(departure_time), ymd = as.Date(departure_time), week_day = wday(departure_time)) %>% filter(week_day > 1 & week_day < 7) %>%
+  group_by(stop_name,hour, route_mta_id) %>% 
+  count(seconds_until_next_departure) %>% complete(seconds_until_next_departure = 1:max(seconds_until_next_departure), fill = list(n = 0)) %>% group_by(stop_id, route_mta_id, hour, stop_name) %>% 
+  arrange(route_mta_id, hour, desc(seconds_until_next_departure)) %>% 
+  mutate(cum_n = cumsum(n)) %>% 
+  arrange(route_mta_id,  hour, seconds_until_next_departure) %>%
+  mutate(pdf = cum_n / 
+               sum(cum_n),cdf = cumsum(pdf)) %>%
+  summarize(median = approx(cdf, seconds_until_next_departure, xout = 0.5)$y, lower_quartile = approx(cdf, seconds_until_next_departure, xout = 0.10)$y, seventh_quantile = approx(cdf, seconds_until_next_departure, xout = 0.75)$y, quart_quantile = approx(cdf, seconds_until_next_departure, xout = 0.25)$y, upper_quantile = approx(cdf, seconds_until_next_departure, xout = .9)$y)
+
+
+
+```
+
+```{r, "Plotting by stations" }
+
+
+plot_station_data  %>% filter(route_mta_id == 2) %>%
+  ggplot(aes(x= stop_name,y = median/60)) +  geom_line() + 
+ geom_ribbon(aes(ymin = lower_quartile/60, ymax = upper_quantile/60), fill = "grey80") +  geom_line() + ggtitle(paste("Train Wait Time by Station per Hour")) + coord_flip()
+
+```
+
+```{r, "Plotting by line by station"}
+#PLot on How long will you have to wait for your train?
+
+   plot_data %>%  filter(route_mta_id == 2) %>% ggplot(aes(x = hour, y= median/60)) +  geom_line() + scale_y_continuous() + scale_x_continuous() +
+ geom_ribbon(aes(ymin = lower_quartile/60, ymax = upper_quantile/60), fill = "grey80") + geom_ribbon(aes(ymin =quart_quantile/60, ymax =seventh_quantile/60), fill = "grey70") + geom_line() + scale_y_continuous(name = "Wait Time") + scale_x_continuous(breaks = c(0, 5,10,15,20,25),label = c("12am", "6am", "12pm", "6pm", "12am", "6am")) + ggtitle(paste("Train Wait Time by line per Hour")) + facet_wrap(~stop_id)
+
+```
+
+```{r, "Plotting count by line by station"}
+
+count_data <- todd_data %>% 
+  filter(!is.na(route_mta_id)) %>% 
+  mutate(hour = hour(departure_time), ymd = as.Date(departure_time), week_day = wday(departure_time)) %>% filter(week_day > 1 & week_day < 7) %>%
+  mutate(stop_id = substr(stop_mta_id, 1, 3)) %>%
+  group_by(stop_id, route_mta_id, hour) %>% 
+  summarize(num = n()) %>%
+  filter(route_mta_id == 2)
+  
+plot_data %>% filter(route_mta_id == 2) %>% ggplot(aes(x = hour, y= median/60)) + geom_line() + scale_y_continuous() + scale_x_continuous() + geom_ribbon(aes(ymin = lower_quartile/60, ymax = upper_quantile/60), fill = "grey80") + geom_ribbon(aes(ymin =quart_quantile/60, ymax =seventh_quantile/60), fill = "grey70") + geom_line() + scale_y_continuous(name = "Wait Time") + scale_x_continuous(breaks = c(0, 5,10,15,20,25),label = c("12am", "6am", "12pm", "6pm", "12am", "6am")) + ggtitle(paste("Train Wait Time by line per Hour")) + facet_wrap(~stop_id)
+
+count_data %>% ggplot() + geom_line(aes(x = hour, y = num)) + facet_wrap(~stop_id)
+
+```
