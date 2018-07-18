@@ -91,13 +91,11 @@ training_data <- training_data %>% select(long_delay, stop_mta_id, route_mta_id,
 x <- model.matrix(long_delay ~ as.factor(stop_mta_id) + as.factor(route_mta_id) + as.factor(day) + as.factor(hour) + PRCP, data = training_data)[, -1]
 y <- training_data$long_delay
 
-logistic_model <- glmnet(x=x, y=as.factor(y), family="binomial")
-training_data$prob <- as.numeric(predict(logistic_model, newx = x, type="response")[1])
+logistic_model <- cv.glmnet(x=x, y=as.factor(y), family="binomial")
+training_data$prob <- as.numeric(predict(logistic_model, newx = x, type="response", s = "lambda.min"))
 
-
-training_data$predictions <- predict(logistic_model, training_data, type="response")
-training_data %>% gather(key = type, value = val, long_delay, predictions) %>%
+training_data %>% gather(key = type, value = val, long_delay, prob) %>% group_by(hour, type) %>% summarize(avg = mean(val)) %>%
   ggplot() +
-  geom_point(aes(hour, val, color = type))
+  geom_point(aes(hour, avg, color = type))
 
 ```
