@@ -31,142 +31,73 @@ weather_2018 <- weather_2018 %>% mutate(ymd = as.POSIXct(DATE, format = "%Y-%m-%
 todd_subway_data <- todd_subway_data %>% mutate(date = yday(departure_time))
 
 filtered <- todd_subway_data %>% mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time)) %>% 
-  filter(day > 1 & day < 7, hour > 6 & hour < 20) %>%
   group_by(date, day, hour, stop_mta_id, route_mta_id) %>% 
   summarise(exp_wait = sum(seconds_until_next_departure^2)/(2*sum(seconds_until_next_departure)), total_sec = sum(seconds_until_next_departure)) %>%
   ungroup()
+```
 
+```{r model_generation}
 set.seed(16)
 model_data <- filtered %>% left_join(weather_2018)
-training_data <- sample_frac(model_data, 0.1)
+training_data <- sample_frac(model_data, 0.05)
 test_data <- anti_join(model_data, training_data)
 
-exp_wait_model <- lm(data = training_data, formula = exp_wait ~ stop_mta_id + route_mta_id + day + hour + PRCP + SNOW + SNWD + TMAX + TMIN)
+exp_wait_model <- lm(data = training_data, formula = exp_wait ~ stop_mta_id*PRCP + route_mta_id)
+training_data$predictions <- predict(exp_wait_model, training_data)
+training_data %>% gather(key = type, value = val, exp_wait, predictions) %>% select(type, val, PRCP) %>% filter(PRCP > 0.1) %>% group_by(type, PRCP) %>% summarize(avg_val = mean(val), num = n()) %>%
+  ggplot() +
+  geom_point(aes(PRCP, avg_val, color = type, size = num))
+
+prcp_interaction_model <- exp_wait_model
+summary(prcp_interaction_model)
+save(prcp_interaction_model, file = "prcp_model.RData")
 
 ```
 
-```{r}
-# NYC Wait Time Distributions
+```{r logistic_model}
+set.seed(16)
+model_data <- filtered %>% group_by(stop_mta_id, day, hour) %>% mutate(long_delay = ifelse(exp_wait > median(exp_wait), 1, 0)) %>% left_join(weather_2018) 
+training_data <- sample_frac(model_data, 0.05)
+test_data <- anti_join(model_data, training_data)
 
-# Attempt 2
-filtered1 <- todd_subway_data %>% mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time)) %>% 
-  filter(day > 1 & day < 7, hour > 6 & hour < 20) %>% mutate(exp_wait = seconds_until_next_departure/2)
-
-filtered1 %>% ggplot(aes(x = reorder(route_mta_id, exp_wait/60, FUN = function(x){-median(x)}), y = exp_wait/60)) + 
-  geom_boxplot(outlier.shape = NA) + ylim(c(0,15)) + coord_flip() 
-  
-
-```
-
-```{r}
-# NYC Wait Time Distributions
-
-# Attempt 3
-# Hopefully correct version
-library(stats)
-todd_subway_data_nyc <- todd_subway_data[!(todd_subway_data$route_mta_id %in%
-                                             c("GS","SS","FS","H","SI")), ] # remove Staten Island and shuttles
-
-filtered3 <- todd_subway_data_nyc %>%
-  mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time)) %>% 
-  filter(day > 1 & day < 7, hour > 6 & hour < 20) %>% # filter for 7am-8pm during weekdays
-  group_by(seconds_until_next_departure, route_mta_id) %>% 
-  summarize(n = n()) %>% # count for time intervals by line
-  group_by(route_mta_id) %>% 
-  complete(seconds_until_next_departure = 1:max(seconds_until_next_departure), 
-           fill = list(n = 0)) %>%
-  arrange(route_mta_id, desc(seconds_until_next_departure)) %>% 
-  mutate(cum_n = cumsum(n)) %>%
-  group_by(route_mta_id) %>%
-  arrange(route_mta_id, seconds_until_next_departure) %>%
-  mutate(pdf = cum_n / sum(cum_n), 
-         cdf = cumsum(pdf))
-
-filtered3 <- filtered3 %>% 
-  group_by(route_mta_id) %>%
-  summarize(median = approx(cdf, seconds_until_next_departure, xout = 0.5)$y, 
-            lower = approx(cdf, seconds_until_next_departure, xout = 0.25)$y, 
-            upper = approx(cdf, seconds_until_next_departure, xout = 0.75)$y,
-        perc10  = approx(cdf, seconds_until_next_departure, xout = 0.1)$y,
-        perc90 = approx(cdf, seconds_until_next_departure, xout = 0.9)$y) 
-
-
-filtered3 %>% mutate(route_mta_id = reorder(route_mta_id, -median)) %>%
-  ggplot(aes(x = route_mta_id)) + 
-  geom_boxplot(aes(ymin = perc10 / 60, 
-               lower = lower / 60, 
-               middle = median / 60, 
-               upper = upper / 60, 
-               ymax = perc90 / 60, 
-               color = route_mta_id), 
-               stat = "identity") + 
-  scale_y_continuous("Minutes until next train arrives", minor_breaks = NULL) +
-  scale_x_discrete("Line") +
-  scale_fill_identity() +
-  coord_flip() 
+logistic_model <- glm(data = training_data, formula = long_delay ~ stop_mta_id + route_mta_id + day + hour + PRCP, family="binomial")
+training_data$predictions <- predict(logistic_model, training_data, type="response")
+training_data %>% gather(key = type, value = val, long_delay, predictions) %>%
+  ggplot() +
+  geom_point(aes(hour, val, color = type))
 
 ```
 
-```{r}
-# Modify yesterday's code that computed wait times distributions for each line to do the same at the station level (keep 7am - 8pm weekday restriction)
+```{r empirical_analysis}
 
-# Plot these distributions for a set of contiguous stations on a given line
+filtered %>% group_by(date) %>% summarize(avg_wait = mean(exp_wait)) %>% left_join(weather_2018) %>%
+  ggplot() +
+  geom_point(aes(PRCP, avg_wait)) + 
+  geom_smooth(aes(PRCP, avg_wait))
 
-# This is probably too many histograms to view at once, but you could visualize some summary statistics across all stations (e.g., with a box or ribbon plot)
-
-stop_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
-stop_data_s <- stop_data %>%
-  rename(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, 
-         lon = `GTFS Longitude`) %>%
-  mutate(stop_id = sprintf("%sS", stop_id)) 
-stop_data_n <- stop_data %>%
-  rename(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, 
-         lon = `GTFS Longitude`) %>%
-  mutate(stop_id = sprintf("%sN", stop_id))
-
-stop_data1 <- rbind(stop_data_n, stop_data_s) %>% select(stop_id, stop_name, lat, lon)
-
-todd_and_stop_data <- left_join(todd_subway_data, stop_data1, by = c("stop_mta_id" = "stop_id"))
 ```
 
-```{r}
-filtered2 <- todd_and_stop_data[!(todd_and_stop_data$route_mta_id %in% c("GS","SS","FS","H","SI")), ] %>%
-  mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time)) %>% 
-  filter(day > 1 & day < 7, hour > 6 & hour < 20) %>% # filter for 7am-8pm during weekdays
-  group_by(seconds_until_next_departure, stop_name, route_mta_id) %>% 
-  summarize(n = n()) %>% # count for time intervals by line
-  group_by(route_mta_id, stop_name) %>% 
-  arrange(route_mta_id, desc(seconds_until_next_departure)) %>% 
-  mutate(cum_n = cumsum(n)) %>%
-  group_by(route_mta_id, stop_name) %>%
-  arrange(route_mta_id, seconds_until_next_departure) %>%
-  mutate(pdf = cum_n / sum(cum_n), 
-         cdf = cumsum(pdf))
+```{r glmnet_model}
 
-filtered2 <- filtered2 %>% 
-  group_by(route_mta_id, stop_name) %>%
-  summarize(median = approx(cdf, seconds_until_next_departure, xout = 0.5)$y, 
-            lower = approx(cdf, seconds_until_next_departure, xout = 0.25)$y, 
-            upper = approx(cdf, seconds_until_next_departure, xout = 0.75)$y,
-        perc10  = approx(cdf, seconds_until_next_departure, xout = 0.1)$y,
-        perc90 = approx(cdf, seconds_until_next_departure, xout = 0.9)$y) 
+set.seed(16)
+model_data <- filtered %>% group_by(stop_mta_id, day, hour) %>% mutate(long_delay = ifelse(exp_wait > median(exp_wait), 1, 0)) %>% left_join(weather_2018) %>% ungroup()
+training_data <- sample_frac(model_data, .01)
+test_data <- anti_join(model_data, training_data)
 
-lat <- data.frame(lat = todd_and_stop_data$lat, stop_name = todd_and_stop_data$stop_name, stringsAsFactors = FALSE) %>% arrange(desc(lat))
+library(glmnet)
 
-left_join(filtered2, lat, by = c("stop_name" = "stop_name")) # now trying to organize station names from first to last station
+training_data <- training_data %>% select(long_delay, stop_mta_id, route_mta_id, day, hour, PRCP) %>% na.omit()
 
-filtered2 %>% 
-  filter(route_mta_id == 2) %>%  
-  #mutate(stop_name = reorder(stop_name, -lat)) %>%
-  ggplot(aes(x = stop_name)) + 
-  geom_boxplot(aes(ymin = perc10 / 60, 
-               lower = lower / 60, 
-               middle = median / 60, 
-               upper = upper / 60, 
-               ymax = perc90 / 60), 
-               stat = "identity") +
-  scale_y_continuous("Minutes until next train arrives", minor_breaks = NULL) +
-  scale_x_discrete("Line") +
-  scale_fill_identity() +
-  coord_flip()  
+x <- model.matrix(long_delay ~ as.factor(stop_mta_id) + as.factor(route_mta_id) + as.factor(day) + as.factor(hour) + PRCP, data = training_data)[, -1]
+y <- training_data$long_delay
+
+logistic_model <- glmnet(x=x, y=as.factor(y), family="binomial")
+training_data$prob <- as.numeric(predict(logistic_model, newx = x, type="response")[1])
+
+
+training_data$predictions <- predict(logistic_model, training_data, type="response")
+training_data %>% gather(key = type, value = val, long_delay, predictions) %>%
+  ggplot() +
+  geom_point(aes(hour, val, color = type))
+
 ```
