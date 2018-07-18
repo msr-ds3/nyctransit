@@ -19,7 +19,7 @@ load(file = "../../data/todd_subway_realtime.RData")
 #   arrange(desc(departure_time)) %>%
 #   mutate(arrival_time=lead(departure_time)) %>%
 #   ungroup()
-# 
+#
 # save(subway_data.2, file = "../../data/todd_subway_realtime_2.RData")
 load(file = "../../data/todd_subway_realtime_2.RData")
 
@@ -51,7 +51,7 @@ stations <- edges %>% left_join(station_data, by = c("stop_id"="stop_id")) %>% s
 
 ## Express vs Local Train Distribution
 
-- Filter through all local and express train trips between two stations. 
+- Filter through all local and express train trips between two stations.
 - Calculate the time between two stations (trip time) for all trip across the day
 - Compare the differences in histogram
 
@@ -69,8 +69,8 @@ stops <- stations %>%
 
 plot_local_express <- function(local_line, express_line, start_stop_id, end_stop_id)
 {
-  
-  
+
+
   # local train
   local_train <- subway_data %>%
     filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
@@ -79,10 +79,10 @@ plot_local_express <- function(local_line, express_line, start_stop_id, end_stop
            hour = hour(departure_time)) %>%
     filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
     left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
-    group_by(realtime_trip_id) %>% 
+    group_by(realtime_trip_id) %>%
     arrange(desc(departure_time)) %>%
     mutate(diff = (first(departure_time) - last(departure_time))/60)
-  
+
   # plot for local line
   plot_local <- local_train %>%
     ggplot(aes(x=diff)) + geom_histogram()
@@ -98,7 +98,7 @@ plot_local_express <- function(local_line, express_line, start_stop_id, end_stop
     group_by(realtime_trip_id) %>%
     arrange(desc(departure_time)) %>%
     mutate(diff = (first(departure_time) - last(departure_time))/60)
-  
+
   # plot for express train
   plot_express <- express_train %>%
     ggplot(aes(x=diff)) + geom_histogram()
@@ -106,14 +106,14 @@ plot_local_express <- function(local_line, express_line, start_stop_id, end_stop
   # code for combining plots as per: https://stackoverflow.com/questions/21192002/how-to-combine-2-plots-ggplot-into-one-plot
   local_train$group <- "local"
   express_train$group <- "express"
-  
+
   combined <- rbind(local_train, express_train)
-  
+
   combined_plot <- ggplot(combined, aes(x=diff, group=group, col=group, fill=group)) +
     geom_histogram(alpha = 0.8, position = "identity")
-  # NOTE: can get intersecting distributions by running the code below 
+  # NOTE: can get intersecting distributions by running the code below
   # geom_density(alpha = 0.8, position = "identity")
-  
+
   return(combined_plot)
 }
 
@@ -127,7 +127,7 @@ plot_local_express ("1", "2", "120S", "132S")
 
 ```{r compute-trip-time}
 
-# NOTE: DEBUG CODE  
+# NOTE: DEBUG CODE
 start_station <- "120S"
 start_line <- "2"
 transfer_station <- "127S"
@@ -136,7 +136,7 @@ end_station <- "131S"
 start_time <- "2018-01-20 09:30:00"
 
 compute_trip_time <- function (start_station, start_line, transfer_station, transfer_line, end_station, start_time) {
-    
+
     # find first trips on the start_line at the start_station that depart after start_time
     first_trains <- subway_data.2 %>%
       filter(stop_mta_id == start_station | stop_mta_id == transfer_station,
@@ -148,18 +148,18 @@ compute_trip_time <- function (start_station, start_line, transfer_station, tran
       ungroup() %>%
       arrange(departure_time)
     # ungroup and arrange by departure_time
-    
+
     # get the trip_id of the first trip after the depart_time
     first_trip_id <- first(first_trains$realtime_trip_id)
-    
+
     # NOTE: arrival_time to first_train # 971896
-    
+
     # find the arrival time for trip_id at transfer station
     transfer_arrival_time <- subway_data.2 %>%
       filter(realtime_trip_id == first_trip_id,
              stop_mta_id == transfer_station) %>%
       .$arrival_time
-    
+
     # find the first trip on the transfer_line at the transfer_station that departs after the arrival_time of our express train
     transfer_trains <- subway_data.2 %>%
       filter(stop_mta_id == transfer_station | stop_mta_id == end_station,
@@ -171,23 +171,23 @@ compute_trip_time <- function (start_station, start_line, transfer_station, tran
       ungroup() %>%
       arrange(departure_time)
       # note above
-    
+
     transfer_trip_id <- first(transfer_trains$realtime_trip_id)
-    
+
     # NOTE: arrival_time to transfer_train
-    
+
     # compute the time difference of when our train arrives at end_station and start_time
     dest_arrival_time <- subway_data.2 %>%
       filter(realtime_trip_id == transfer_trip_id,
              stop_mta_id == end_station) %>%
       .$arrival_time
-    
+
     time_diff <- as.numeric(difftime(ymd_hms(dest_arrival_time), ymd_hms(start_time)), units = "mins")
-    
+
      return(time_diff)
-#     
+#
 }
-# 
+#
 compute_trip_time("120S", "2", "127S", "1", "131S", "2018-01-22 09:30:00")
 
 ```
@@ -197,6 +197,76 @@ compute_trip_time("120S", "2", "127S", "1", "131S", "2018-01-22 09:30:00")
 ### Computing Local + Express Wait Times On Large Scale Efficiently
 
 ```{r example-for-trips}
+
+compute_itenerary_pair <- function(start_lines, end_lines, start_id, transfer_start_id, transfer_end_id, end_id, start_time) {
+
+  # TODO: filter subway_data to only trips within a certain time_interval
+
+  # get train information for start_lines at start_id
+  leg1_data <- subway_data.2 %>%
+    filter(stop_mta_id == start_id | stop_mta_id == transfer_start_id,
+           # TODO: modify filter to take multiple lines
+           route_mta_id == start_lines) %>%
+    group_by(realtime_trip_id) %>%
+    mutate(trip_start_time = min(departure_time)) %>%
+    # get rid of records for extra record at start stops
+    filter(n() >= 2, stop_mta_id == transfer_start_id) %>%
+    arrange(arrival_time)
+
+  leg2_data <- subway_data.2 %>%
+    filter(stop_mta_id == transfer_end_id | stop_mta_id == end_id,
+            # TODO: modify filter to take multiple lines
+            route_mta_id == end_lines) %>%
+    group_by(realtime_trip_id) %>%
+    mutate(trip_end_time = max(departure_time)) %>%
+    # get rid of records for extra record at start stops
+    filter(n() >= 2, stop_mta_id == transfer_end_id) %>%
+    arrange(departure_time)
+
+
+  leg1_ptr <- 1
+  leg2_ptr <- 1
+  # create vectors to store new info
+  diffs <- vector('numeric')
+  start_times <- vector('double')
+  transfer_arrival_times <- vector('double')
+  end_times <- vector('double')
+  transfer_departure_times <- vector('double')
+  realtime_start_ids <- vector('numeric')
+  realtime_end_ids <- vector('numeric')
+
+  while (leg1_ptr < nrow(leg1_data)) {
+
+    if (leg2_data$departure_time[leg2_ptr] > leg1_data$arrival_time[leg1_ptr]) {
+      # populate fields that will be used for our returned data_frame
+      realtime_start_ids <- c(realtime_start_ids, leg1_data$realtime_trip_id[leg1_ptr])
+      start_times <- c(start_times, leg1_data$trip_start_time[leg1_ptr])
+      transfer_arrival_times <- c(transfer_arrival_times, leg1_data$arrival_time[leg1_ptr])
+      realtime_end_ids <- c(realtime_end_ids, leg2_data$realtime_trip_id[leg2_ptr])
+      transfer_departure_times <- c(transfer_departure_times, leg2_data$departure_time[leg2_ptr])
+      end_times <- c(end_times, leg2_data$trip_end_time[leg2_ptr])
+      diffs <- c(diffs,
+                 as.numeric(difftime(leg2_data$trip_end_time[leg2_ptr],
+                                     leg1_data$trip_start_time[leg1_ptr]),
+                            units = "mins"))
+      
+      leg1_ptr = leg1_ptr + 1
+    } else {
+      leg2_ptr = leg2_ptr + 1
+    }
+  
+  }
+
+  new_df <- data.frame(start_trip_id = realtime_start_ids,
+                       starts = as.POSIXct(start_times, origin = "1970-01-01", tz = "UTC"),
+                       transfer_starts = as.POSIXct(transfer_arrival_times, origin = "1970-01-01", tz = "UTC"),
+                       end_trip_id = realtime_end_ids,
+                       transfer_ends = as.POSIXct(transfer_departure_times, origin = "1970-01-01", tz = "UTC"),
+                       ends = as.POSIXct(end_times, origin = "1970-01-01", tz = "UTC"),
+                       diffs = diffs)
+
+  return(new_df)
+}
 
 local_line <- "1"
 express_line <- "2"
@@ -268,7 +338,7 @@ subway_data %>% filter(realtime_trip_id == 3300 & stop_mta_id == "120S" | realti
 # NEW DATA FRAME DATA
 new_df %>% filter(start_trip_id == 3300) %>% View("new_df 3300")
 
-
+test_df <- compute_itenerary_pair("2", "1", "120S", "127S", "127S", "131S", start_time)
 # TODO: figure out multiple transfers with multiple lists
 ```
 
@@ -287,7 +357,7 @@ local_diffs <- subway_data %>%
   filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
          route_mta_id == local_line) %>%
   left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
-  group_by(realtime_trip_id) %>% 
+  group_by(realtime_trip_id) %>%
   arrange(desc(departure_time)) %>%
   mutate(diff = as.numeric(difftime(first(departure_time),last(departure_time)), units = "mins")) %>%
   select(realtime_trip_id, diff) %>%
@@ -315,7 +385,7 @@ combined <- rbind(local_diffs, local_with_express_diffs)
 combined_plot <- ggplot(combined, aes(x=diffs, group=group, col=group, fill=group)) +
   geom_histogram(alpha = 0.8, position = "identity") +
   xlim(c(0, 50))
-# NOTE: can get intersecting distributions by running the code below 
+# NOTE: can get intersecting distributions by running the code below
 # geom_density(alpha = 0.8, position = "identity")
 
 combined_plot
