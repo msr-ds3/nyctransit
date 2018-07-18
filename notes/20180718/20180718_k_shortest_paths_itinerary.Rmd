@@ -1,0 +1,334 @@
+---
+title: "Map With K Shortest Paths"
+author: "Graph Team"
+date: "July 13, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+*Sasha, Ayliana, Brian, & Taxi*  
+
+#### Load libraries
+```{r}
+library(tidyverse)
+library(igraph)
+library(lubridate)
+```
+
+#### Load data
+```{r}
+stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
+routes <- read_csv('../../data/google_transit_subway_static/routes.txt')
+trips <- read_csv('../../data/google_transit_subway_static/trips.txt')
+stop_times <- read_csv('../../data/google_transit_subway_static/stop_times.txt')
+transfers <- read_csv('../../data/google_transit_subway_static/transfers.txt')
+
+load('../../data/todd_subway_realtime.RData')
+
+```
+
+#### Filtering
+```{r}
+
+#All Service
+time_filter <- seq(0, 23)
+day_filter <- c("Weekday", "Saturday", "Sunday")
+
+#Ordinary Service
+# time_filter <- seq(6, 23)
+# day_filter <- c("Weekday")
+
+#Weekend Service
+#time_filter <- seq(6, 23)
+#day_filter <- c("Saturday", "Sunday")
+
+#Late Night Service
+#time_filter <- seq(0, 5)
+#day_filter <- c("Weekday", "Saturday", "Sunday")
+```
+
+#### Formatting static
+```{r}
+trips$route_id <- as.character(trips$route_id)
+
+
+# all scheduled trips
+all_trips <- stop_times %>%
+  filter(!is.na(arrival_time)) %>%
+  left_join(stops) %>%
+  extract(trip_id, c("route_id"), regex="_.*_([^.]*)\\.\\.?.*", remove=FALSE) %>%
+  extract(trip_id, c("day_of_week"), regex=".*-.*-(.*)-.*", remove=FALSE) %>%
+  extract(trip_id, c("time"), regex=".*-.*-.*-.*_(.*)_.*\\.\\..*", remove=FALSE) %>%
+  mutate(dir_id = substr(stop_id, 4,4),
+         stop_id = substr(stop_id, 1, 3),
+         prev_stop_id = ifelse(trip_id == lag(trip_id), lag(stop_id), NA),
+         prev_stop_name = ifelse(trip_id == lag(trip_id), lag(stop_name), NA),
+         trip_start_time = seconds_to_period(as.numeric(time)*.6),
+         trip_start_time = as.POSIXct(sprintf("%s:%s:%s", 
+                                              hour(trip_start_time), minute(trip_start_time), second(trip_start_time)),
+                                      "%H:%M:%S", tz="America/New_York")) %>%
+  left_join(trips) %>%
+  select(route_id, trip_id, direction_id = dir_id, day_of_week, trip_start_time, arrival_time, departure_time, 
+         stop_id, stop_name, prev_stop_id, prev_stop_name)
+```
+
+#### Transfer
+```{r}
+# unique trip sequences by line
+unique_sequences <- all_trips %>%
+  filter(hour(trip_start_time) %in% time_filter) %>%
+  filter(day_of_week %in% day_filter) %>%
+  select(route_id, stop_id, stop_name, prev_stop_id, prev_stop_name, direction_id) %>% distinct 
+
+
+# prepping the transfer data
+transfer_sequences <- transfers %>% left_join(stops, by = c("to_stop_id" = "stop_id")) %>% 
+  left_join(stops, by = c("from_stop_id" = "stop_id")) %>%
+  mutate(route_ids = "T", weight = min_transfer_time, sd = NA, lower_quartile = NA, median = NA, upper_quartile = NA, direction_id = NA) %>%
+  select(route_ids, stop_id = to_stop_id, stop_name = stop_name.x, prev_stop_id = from_stop_id, 
+         prev_stop_name = stop_name.y, weight, sd, lower_quartile, median, upper_quartile, direction_id)
+```
+
+#### Realtime Formatting
+```{r}
+realtime <- realtime %>%
+  mutate(day_of_week = weekdays(departure_time),
+         day_of_week = ifelse(day_of_week != "Saturday" & day_of_week != "Sunday",
+                              "Weekday", day_of_week))
+```
+
+#### Get weights for the connections between stations
+```{r weights, warning=FALSE}
+
+station_weights <- realtime %>%
+  mutate(stop_mta_id = substr(stop_mta_id, 1, 3)) %>%
+  arrange(realtime_trip_id, departure_time) %>% 
+  mutate(travel_time = ifelse(realtime_trip_id == lag(realtime_trip_id),
+                              departure_time - lag(departure_time), NA)) %>%
+  mutate(prev_stop_mta_id = ifelse(realtime_trip_id == lag(realtime_trip_id),
+                                   lag(stop_mta_id), NA)) %>%
+  filter(!is.na(travel_time)) %>% 
+  group_by(route_mta_id, stop_mta_id, prev_stop_mta_id) %>% 
+  summarize(weight = mean(travel_time), sd = sd(travel_time, na.rm=TRUE),
+            lower_quartile = quantile(travel_time, 0.25),
+            median = median(travel_time), upper_quartile = quantile(travel_time,
+                                                                    0.75))
+```
+
+#### Combine station ids
+```{r}
+station_route_ids <- unique_sequences %>% select(route_id, stop_id, prev_stop_id) %>% distinct() %>% filter(! is.na(prev_stop_id)) %>%
+  spread(key = route_id, value = 1) %>% 
+  unite("route_ids",-stop_id, -prev_stop_id, sep = ",") %>%
+  mutate(route_ids = gsub("(,NA)|(NA,)", "", route_ids))
+```
+
+#### Combine realtime with static edges
+```{r}
+## Static with realtime weights and route_ids
+full_sequences <- unique_sequences %>%
+  left_join(station_weights, by = c("stop_id" = "stop_mta_id", "prev_stop_id" =
+                              "prev_stop_mta_id", "route_id" = "route_mta_id"))%>%
+  left_join(station_route_ids, by = c("stop_id", "prev_stop_id")) %>%
+  select(-route_id)
+  
+#Transfers already has weights from the min_transfer_time field (now renamed weight) so we rbind the two sequence objects
+full_sequences <- rbind(full_sequences, transfer_sequences)
+
+```
+
+#### Make an igraph
+```{r igraph}
+
+theme_set(theme_bw())
+
+# Input a dataframe of the edges that exist between stops, with weight as an attribute
+igraph_edges <- full_sequences %>%
+  filter(!is.na(prev_stop_id), !is.na(weight)) %>%
+  select(prev_stop_id, stop_id, weight, route_ids, direction_id)
+
+mta_igraph <- graph.data.frame(igraph_edges, directed=TRUE)
+
+```
+
+#### Function to find shortest k paths
+```{r k_shortest_function}
+
+##################
+# Helper Functions
+##################
+
+# Determine if a given path variant has already been seen
+contains.path <- function(variants, variant){
+  return( any( unlist( lapply( variants, function(x){ identical(unlist(x$variant$vert),unlist(variant)) } ) ) ) )
+}
+
+# Choose shortest path variant
+select.shortest.path <- function(variants){
+  return( which.min( unlist( lapply( variants, function(x){x$variants$dist} ) ) ) )
+}
+
+# Return all variants of a given path
+calculate.variants <- function(variants, variant, from, to, gmode){
+  # Take graph from current path
+  g <- variant$g
+  
+  # Iterate through edges, removing one each iterations
+  for (j in unlist(variant$path)){
+    newgraph <- delete.edges(g, j) # Remove edge
+    sp <- get.shortest.paths(newgraph,from,to, output='both', mode=gmode) # Calculate shortest path
+    spd <- shortest.paths(newgraph,from,to,mode=gmode) # Calculate length
+    if (spd != Inf){ # The the path is found
+      if (!contains.path(variants, sp$vpath)) # Add to list, unless it already contains the same path
+      {
+        variants[[length(variants)+1]] <- list(g=newgraph, variants=list(path=sp$epath, vert=sp$vpath, dist=spd))
+      }
+    }
+  }
+  return(variants)
+}
+
+######################
+# Main K Path Function
+######################
+
+k.shortest.paths <- function(graph, from, to, k, gmode){
+  # First shortest path
+  k0 <- get.shortest.paths(graph,from,to, output='both', mode=gmode)
+  
+  # Number of currently found shortest paths
+  kk <- 1
+  
+  # List of alternatives
+  variants <- list()
+  
+  # Shortest variants
+  shortest.variants <- list(list(g=graph, path=k0$epath, vert=k0$vpath, dist=shortest.paths(graph,from,to,mode=gmode)))
+  
+  # Until k shortest paths are found
+  while(kk<k){
+    # Take last found shortest path
+    last.variant <- shortest.variants[[length(shortest.variants)]]              
+        
+    # Calculate all alternatives
+    variants <- calculate.variants(variants, last.variant, from, to, gmode)
+        
+    # Find shortest alternative
+    sp <- select.shortest.path(variants)
+    
+    # Add to list, increase kk, remove shortest path from list of alternatives
+    shortest.variants[[length(shortest.variants)+1]] <- list(g=variants[[sp]]$g, path=variants[[sp]]$variants$path, vert=variants[[sp]]$variants$vert, dist=variants[[sp]]$variants$dist)
+    kk <- kk+1
+    variants <- variants[-sp]
+  }
+  return(clean_output(shortest.variants))
+}
+
+```
+
+
+#### Clean output from k shortest paths
+```{r k_shortest, warning=FALSE}
+
+clean_output <- function(k_shortest){
+  
+  shortest_routes <- setNames(data.frame(matrix(ncol = 3, nrow = 0)),
+                              c("itinerary_id", "station","direction"))
+  #Initialize empty vectors
+  route <- vector(mode = "character")
+  event_id <- vector()
+  event <- vector()
+  leg <- vector()
+  leg_num = 1
+  
+  #loop through itineraries
+  for(i in 1:k_num){
+    station_list <- names(unlist(k_shortest[[i]]$`vert`))
+    line_ids <- edge.attributes(mta_igraph, index =
+                                unlist(k_shortest[[i]]$`path`))$route_ids
+    direction_ids <- edge.attributes(mta_igraph, index =
+                                unlist(k_shortest[[i]]$`path`))$direction_id
+    prev_line_ids <- str_split(line_ids[1], ",")[[1]]
+    r = 1
+    event<- append(event, "start_trip")
+    num_stations = length(station_list)
+    
+    #loop through stations
+    for (j in 1:(num_stations-1)){
+      event<- append(event, "transit")
+      leg <- append(leg, leg_num)
+      shortest_routes <- shortest_routes %>% 
+      add_row(itinerary_id = i, station = station_list[j], 
+              direction = direction_ids[j])
+      
+      #Split line ids into a list
+      cur_line_ids <- str_split(line_ids[j], ",")[[1]]
+      intersect_lines <- intersect(cur_line_ids, prev_line_ids)
+
+      #Check if you need to transfer
+      if (length(intersect_lines) == 0){
+          event[length(event)-1] = "start_transfer"
+          event[length(event)] = "end_transfer"
+          leg_num = leg_num +1
+        
+        #Explicit Transfer  
+        if("T" %in% cur_line_ids){
+          #Set intersect_lines to next line_ids
+          intersect_lines <-  str_split(line_ids[j+1], ",")[[1]]
+          start_r = 0
+        }
+        
+        #Implicit Transfer
+        else{
+          #Set to current line_ids
+          intersect_lines <- cur_line_ids
+          
+          #Add extra row to show transfer
+          shortest_routes <- shortest_routes %>% 
+            add_row(itinerary_id = i, station = station_list[j], 
+                    direction = direction_ids[j], .before = nrow(shortest_routes))
+          event<- append(event, "transit")
+          leg <- append(leg, leg_num)
+          start_r = 1
+        }
+        route <- append(route, rep(paste(prev_line_ids, collapse = ""), r))
+        r = start_r
+      }
+      
+      r = r+1
+      prev_line_ids <- intersect_lines
+    }
+    
+    #Take care of last station in list
+    route <- append(route, rep(paste(prev_line_ids, collapse = ","), r))
+    shortest_routes <- shortest_routes %>% 
+      add_row(itinerary_id = i, station = station_list[num_stations], 
+      direction = direction_ids[num_stations-1])
+    event_id <- append(event_id, seq(1, length(route)- length(event_id)))
+    event[length(event)] = "end_trip"
+    leg <- append(leg, leg_num)
+    leg_num = 1
+  }
+  
+  #Add columns to dataframe
+  shortest_routes$line <- route
+  shortest_routes$event_id <- event_id
+  shortest_routes$event <- event
+  shortest_routes$leg <- leg
+  shortest_routes <- shortest_routes %>% 
+    mutate(direction= ifelse(is.na(direction), lag(direction), direction))
+  return(shortest_routes)
+}
+```
+
+#### Test
+```{r}
+k_num <- 2
+
+#Find k_num shortest paths leading going from stop 415 to stop D11 
+k_shortest <- k.shortest.paths(mta_igraph, from = "415", to = "D13", k=k_num, gmode="out")
+
+```
