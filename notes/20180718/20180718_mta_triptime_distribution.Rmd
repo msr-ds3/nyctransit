@@ -354,11 +354,16 @@ test_df <- compute_itenerary_pair("2", "1", "120S", "127S", "127S", "131S", star
 # k = 1
 # counter_list <- c(i,j,k)
 
-trains <- c("A", "B", "C", "D")
+trains <- c("1", "2", "L")
+
+stop_station <- list(c("120S", "127S"),
+                      c("127S", "132S"),
+                      c("L02S", "L06S"))
+
 counters <- rep(1, length(trains))
 
 # create data frame that we're going to use
-test_df <- data.frame(d = 1)
+# <- data.frame("itin_id" = c("1","1","1"), "station"= stop_station[1], stop_ )
 
 # add column_names that are needed
 for (train in trains) {
@@ -373,11 +378,22 @@ test_df <- subset(test_df, select = -c(d)) %>% na.omit
 # list of data frames
 train_data <- list()
 
-for (train in trains) {
+for (i in length(trains)) {
+  
+  start <- stop_station[[i]][1]
+  end <- stop_station[[i]][2]
+  
   # TODO: filter subway_data to get appropriate information for each train
-   
+   leg_data <- subway_data.2 %>%
+    filter(stop_mta_id == start | stop_mta_id == end,
+           # TODO: modify filter to take multiple lines
+           route_mta_id == trains[i]) %>%
+    group_by(realtime_trip_id) %>%
+     # get rid of records for extra record at start stops
+    filter(n() >= 2, stop_mta_id == end) %>%
+    arrange(arrival_time)
   # append to list
-  # train_data <- list(train_data, list(obj))
+  train_data <- list(train_data, list(leg_data))
 }
 
 # #list of start_times 
