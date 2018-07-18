@@ -198,6 +198,11 @@ compute_trip_time("120S", "2", "127S", "1", "131S", "2018-01-22 09:30:00")
 
 ```{r example-for-trips}
 
+lines <- "2,3"
+station_start <- "96th St"
+station_end <- "42nd St"
+
+
 compute_itenerary_pair <- function(start_lines, end_lines, start_id, transfer_start_id, transfer_end_id, end_id, start_time) {
 
   # TODO: filter subway_data to only trips within a certain time_interval
@@ -340,6 +345,72 @@ new_df %>% filter(start_trip_id == 3300) %>% View("new_df 3300")
 
 test_df <- compute_itenerary_pair("2", "1", "120S", "127S", "127S", "131S", start_time)
 # TODO: figure out multiple transfers with multiple lists
+
+# PSEUDOCODE
+# # NOTE: adding third train to the loop
+# # parsing two rows for each train 
+# i = 1
+# j = 1
+# k = 1
+# counter_list <- c(i,j,k)
+
+trains <- c("A", "B", "C", "D")
+counters <- rep(1, length(trains))
+
+# create data frame that we're going to use
+test_df <- data.frame(d = 1)
+
+# add column_names that are needed
+for (train in trains) {
+  test_df[[paste(train, 'train_id', sep='_')]] <- NA
+  test_df[[paste(train, 'start_time', sep='_')]] <- NA
+  test_df[[paste(train, 'end_time', sep='_')]] <- NA
+}
+
+test_df <- subset(test_df, select = -c(d)) %>% na.omit
+# generate the values needed for each as a vector and rbind to add "rows" to our df
+
+# list of data frames
+train_data <- list()
+
+for (train in trains) {
+  # TODO: filter subway_data to get appropriate information for each train
+   
+  # append to list
+  # train_data <- list(train_data, list(obj))
+}
+
+# #list of start_times 
+# for (x in counter_list) {
+#  add start_time_column to list of start times
+#  add end_time_column to list of end times
+#  add train_id column to list of train ids
+# }
+# 
+# times <- vector('numeric')
+# start_times <- vector('double')
+# # transfer_arrival_times.1 <- vector('double')
+# # transfer_arrival_times.2 <- vector('double')
+# end_times <- vector('double')
+# final_df <- c(start_time_train1, start_time_train2, start_time_train3)
+# # transfer_departure_times <- vector('double')
+# realtime_start_ids <- vector('numeric')
+# realtime_end_ids <- vector('numeric')
+# 
+# data is a list of dataframes, where data[i] corresponds to the ith train in the itinerary
+# 
+# while (i < nrow(data_1_train)) {
+#  record when train i leaves
+#  arrival_time = data_1[i]$end_time #record when train i arrives
+#  #put this in arrival_time_list for the 1 train
+#  for ii in range(2, len(counter_list)+1):
+#    while data[ii][counter_list[ii]] < arrival_time:
+#      counter_list[ii] += 1
+#    #record when train ii leaves
+#    arrival_time = data[ii][counter_list[ii]]$end_time
+#    #record when train ii departs
+# }
+
 ```
 
 ### Plotting Distributions of Local vs Local + Express
