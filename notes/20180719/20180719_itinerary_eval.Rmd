@@ -187,7 +187,7 @@ new_df <- data.frame(start_trip_id = realtime_start_ids,
 
 # Views to Verify Trips
 # ORIGINAL SUBWAY DATA
-subway_data %>% filter(realtime_trip_id == 3300 & stop_mta_id == "120S" | realtime_trip_id == 3327 & stop_mta_id == "131S") %>% View("subway_data 3300")
+subway_data.2 %>% filter(realtime_trip_id == 3300 & stop_mta_id == "120S" | realtime_trip_id == 3327 & stop_mta_id == "131S") %>% View("subway_data 3300")
 # NEW DATA FRAME DATA
 new_df %>% filter(start_trip_id == 3300) %>% View("new_df 3300")
 
@@ -238,8 +238,7 @@ for (i in 1:length(trains)) {
     # get rid of records for extra record at start stops
     filter(n() >= 2, stop_mta_id == end) %>%
     ungroup() %>%
-    arrange(arrival_time) %>%
-    slice(1:10)
+    arrange(arrival_time)
   # append to list
   # print(nrow(leg_data))
   train_data[[i]] <- leg_data
@@ -293,12 +292,18 @@ while (i <= N) {
     
     curr_idx <- counters[ii]
     
+    # break out if this train_data doesn't exist
+    if(is.na(train_data[[ii]]$departure_time[curr_idx])) {
+      break
+    }
     
     end_time <- train_data[[ii]]$departure_time[curr_idx]
     row_info <- c(row_info,
                   train_data[[ii]]$realtime_trip_id[curr_idx],
                   train_data[[ii]]$start_time[curr_idx],
                   end_time)
+    
+    
     
     # NOTE: DEBUG CODE
     # print(sprintf("Leg #%s\n", ii))
@@ -327,7 +332,20 @@ plot_data %>% arrange(start_time) %>%
   mutate(itin = row_number()) %>%
   ggplot(aes(color = route_mta_id)) +
   geom_segment(aes(x = start_time, xend = departure_time, y = itin, yend = itin)) +
-  geom_text(aes(label = realtime_trip_id, x = start_time, y = itin))
+  geom_text(aes(label = realtime_trip_id, x = start_time, y = itin)) +
+  ylim(c(0, 100))
+
+# ITINERARY PLOT
+test_df %>% mutate(itin = row_number()) %>%
+  filter(itin <= 5) %>%
+  ggplot() +
+    geom_segment(aes(x = start_time_1_1, xend = end_time_1_1, y = itin, yend = itin), color = 'red') +
+    geom_segment(aes(x = start_time_3_L, xend = end_time_3_L, y = itin, yend = itin), color = 'green') +
+    geom_segment(aes(x = start_time_2_2, xend = end_time_2_2, y = itin, yend = itin), color = 'blue') +
+    geom_text(aes(label = train_id_1_1, x = start_time_1_1, y = itin), color = "red") +
+    geom_text(aes(label = train_id_2_2, x = start_time_2_2, y = itin), color = "blue") +
+    geom_text(aes(label = train_id_3_L, x = start_time_3_L, y = itin), color = "green") + 
+  ylim(c(0, 10))
 
 # PSUEDOCODE
 # list of start_times 
