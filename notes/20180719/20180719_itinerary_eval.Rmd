@@ -260,14 +260,6 @@ for (i in 1:length(trains)) {
 test_df <- subset(test_df, select = -c(d)) # %>% na.omit
 # generate the values needed for each as a vector and rbind to add "rows" to our df
 
-# diffs <- vector('numeric')
-# start_times <- vector('double')
-# transfer_arrival_times <- vector('double')
-# end_times <- vector('double')
-# transfer_departure_times <- vector('double')
-# realtime_start_ids <- vector('numeric')
-# realtime_end_ids <- vector('numeric')
-
 i <- 1
 
 row_info <- numeric()
@@ -280,29 +272,37 @@ counters <- rep(1, length(trains))
 
 while (i <= N) {
 
-  end_time <- train_data[[1]]$arrival_time[i]
+  end_time <- train_data[[1]]$departure_time[i]
   row_info <- c(row_info, train_data[[1]]$realtime_trip_id[i],
                 train_data[[1]]$start_time[i],
                 end_time)
   
   for (ii in 2:length(trains)) {
+    # NOTE: DEBUG CODE
+    # print(sprintf("ii = %d", ii))
+    # print(train_data[[ii]]$realtime_trip_id[counters[ii]])
+    # print(train_data[[ii]]$departure_time[counters[ii]])
+    # print(end_time)
     while ((counters[ii] <= nrow(train_data[[ii]])) &
-           (train_data[[ii]]$departure_time[counters[ii]] < end_time)) {
+           (train_data[[ii]]$start_time[counters[ii]] < end_time)) {
+      # NOTE: DEBUG CODE
+      # print(sprintf("counters[ii] = ", counters[ii]))
+      # print(sprintf("skipping train %s on leg %d", train_data[[ii]]$realtime_trip_id[counters[ii]], ii))
       counters[ii] = counters[ii] + 1
     }
     
     curr_idx <- counters[ii]
     
     
-    end_time <- train_data[[ii]]$arrival_time[curr_idx]
+    end_time <- train_data[[ii]]$departure_time[curr_idx]
     row_info <- c(row_info,
                   train_data[[ii]]$realtime_trip_id[curr_idx],
                   train_data[[ii]]$start_time[curr_idx],
                   end_time)
     
     # NOTE: DEBUG CODE
-    print(sprintf("Leg #%s", ii))
-    print(row_info)
+    # print(sprintf("Leg #%s\n", ii))
+    # print(row_info)
   }
   test_df[i, ] <- row_info
   row_info <- numeric()
@@ -320,48 +320,40 @@ end.time <- Sys.time()
 time.taken <- end.time - start.time
 time.taken
 
+# NOTE: DEBUG PLOT
+
 plot_data <- bind_rows(train_data[[1]], train_data[[2]], train_data[[3]])
-plot_data %>% arrange(start_time) %>% mutate(itin = row_number()) %>% ggplot(aes(color = route_mta_id)) + geom_segment(aes(x = start_time, xend = departure_time, y = itin, yend = itin)) + geom_text(aes(label = realtime_trip_id, x = start_time, y = itin))
+plot_data %>% arrange(start_time) %>%
+  mutate(itin = row_number()) %>%
+  ggplot(aes(color = route_mta_id)) +
+  geom_segment(aes(x = start_time, xend = departure_time, y = itin, yend = itin)) +
+  geom_text(aes(label = realtime_trip_id, x = start_time, y = itin))
 
-# TODO: FIGURE OUT WHY THERE ARE DUPLICATES
-  
-  #  for ii in range(2, len(counter_list)+1):
-#    while data[ii][counter_list[ii]] < arrival_time:
-#      counter_list[ii] += 1
-#    #record when train ii leaves
-#    arrival_time = data[ii][counter_list[ii]]$end_time
-#    #record when train ii departs
-
-
-# #list of start_times 
+# PSUEDOCODE
+# list of start_times 
 # for (x in counter_list) {
 #  add start_time_column to list of start times
 #  add end_time_column to list of end times
 #  add train_id column to list of train ids
 # }
 # 
-# times <- vector('numeric')
-# start_times <- vector('double')
-# # transfer_arrival_times.1 <- vector('double')
-# # transfer_arrival_times.2 <- vector('double')
-# end_times <- vector('double')
-# final_df <- c(start_time_train1, start_time_train2, start_time_train3)
-# # transfer_departure_times <- vector('double')
-# realtime_start_ids <- vector('numeric')
-# realtime_end_ids <- vector('numeric')
-# 
 # data is a list of dataframes, where data[i] corresponds to the ith train in the itinerary
 # 
-# while (i < nrow(data_1_train)) {
-#  record when train i leaves
-#  arrival_time = data_1[i]$end_time #record when train i arrives
-#  #put this in arrival_time_list for the 1 train
-#  for ii in range(2, len(counter_list)+1):
-#    while data[ii][counter_list[ii]] < arrival_time:
-#      counter_list[ii] += 1
-#    #record when train ii leaves
-#    arrival_time = data[ii][counter_list[ii]]$end_time
-#    #record when train ii departs
+# while (i < nrow(leg_1_data)) {
+#   record when train i leaves
+#   record when train i arrives
+#   store for train i
+#   
+#   for ii in range(2, len(counter_list)+1) {
+#       while data[ii][counter_list[ii]] < start_time!!!! {
+#           counter_list[ii] += 1
+#       }
+#       
+#       record when train ii leaves
+#       record when train ii arrives
+#       record when train ii departs
+#   }
+#       
 # }
 
 ```
