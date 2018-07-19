@@ -217,7 +217,9 @@ stop_station <- list(c("120S", "127S"),
 # test <- data.frame("itin_id" = c("1","1","1"), 
 #                    "station"= c("120S", "127S","127S", "132S", "L02S", "L06S"),
 #                    "line" = c("1", "1","2","2","L","L"))
+```
 
+```{r test-chunk}
 # list of data frames
 train_data <- list()
 
@@ -236,13 +238,14 @@ for (i in 1:length(trains)) {
     # get rid of records for extra record at start stops
     filter(n() >= 2, stop_mta_id == end) %>%
     ungroup() %>%
-    arrange(arrival_time)
+    arrange(arrival_time) %>%
+    slice(1:10)
   # append to list
   # print(nrow(leg_data))
   train_data[[i]] <- leg_data
 }
 
-N <- 50 # nrow(train_data[[1]])
+N <- nrow(train_data[[1]])
 
 test_df <- data.frame(d=numeric(N))
 
@@ -283,7 +286,8 @@ while (i <= N) {
                 end_time)
   
   for (ii in 2:length(trains)) {
-    while (train_data[[ii]]$departure_time[counters[ii]] < end_time) {
+    while ((counters[ii] <= nrow(train_data[[ii]])) &
+           (train_data[[ii]]$departure_time[counters[ii]] < end_time)) {
       counters[ii] = counters[ii] + 1
     }
     
@@ -297,6 +301,7 @@ while (i <= N) {
                   end_time)
     
     # NOTE: DEBUG CODE
+    print(sprintf("Leg #%s", ii))
     print(row_info)
   }
   test_df[i, ] <- row_info
@@ -314,6 +319,9 @@ for (i in 1:length(trains)) {
 end.time <- Sys.time()
 time.taken <- end.time - start.time
 time.taken
+
+plot_data <- bind_rows(train_data[[1]], train_data[[2]], train_data[[3]])
+plot_data %>% arrange(start_time) %>% mutate(itin = row_number()) %>% ggplot(aes(color = route_mta_id)) + geom_segment(aes(x = start_time, xend = departure_time, y = itin, yend = itin)) + geom_text(aes(label = realtime_trip_id, x = start_time, y = itin))
 
 # TODO: FIGURE OUT WHY THERE ARE DUPLICATES
   
