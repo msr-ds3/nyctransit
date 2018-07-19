@@ -1,0 +1,64 @@
+---
+title: "Subway Data"
+author: "Amanda Rodriguez"
+date: "July 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(readr)
+library(tidyverse)
+# todd_subway_data <- read_csv("MTA Data/todd_subway_data.csv", col_types = cols(route_mta_id = col_factor(levels = NULL)))
+# save(todd_subway_data, file = "todd_subway_data.RData")
+
+load("../../data/todd_subway_realtime.RData")
+todd_subway_data <- realtime
+
+stops <- read_csv("../../data/google_transit_subway_static/stops.txt")
+
+weather_2018 <- read_csv("../../data/weather_2018.csv")
+
+```
+
+```{r}
+# NYC Wait Time Distributions
+
+# Attempt 1
+library(lubridate)
+
+weather_2018 <- weather_2018 %>% mutate(date = yday(DATE))
+todd_subway_data <- todd_subway_data %>% mutate(date = yday(departure_time))
+
+filtered <- todd_subway_data %>% mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time)) %>% 
+  group_by(date, day, stop_mta_id, route_mta_id) %>% 
+  summarise(exp_wait = sum(seconds_until_next_departure^2)/(2*sum(seconds_until_next_departure)), total_sec = sum(seconds_until_next_departure)) %>%
+  ungroup()
+```
+
+
+```{r empirical_analysis}
+
+filtered %>% filter(route_mta_id == "7") %>% left_join(weather_2018) %>% left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
+  ggplot() +
+  geom_point(aes(PRCP, exp_wait)) + 
+  geom_smooth(aes(PRCP, exp_wait)) +
+  ylim(0, 500) +
+  xlim(0.0001, 10) +
+  scale_x_log10() +
+  facet_wrap(~stop_mta_id)
+
+```
+
+``` {r}
+
+rho_stations <- filtered %>% left_join(weather_2018) %>% group_by(stop_mta_id, route_mta_id) %>% summarize(rho = cor(log(PRCP + 1), exp_wait, use="complete.obs"), num = n()) %>% filter(num > 129/2) %>% mutate(magnitude = abs(rho)) %>% arrange(desc(magnitude)) %>% left_join(stops, by = c("stop_mta_id" = "stop_id"))
+
+filtered %>% left_join(weather_2018) %>% inner_join(head(rho_stations, 10)) %>%
+  ggplot() +
+  geom_point(aes(log(PRCP + 1), exp_wait)) +
+  facet_wrap(~stop_mta_id)
+  
+```
