@@ -1,0 +1,85 @@
+---
+title: "20180716_taxi"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source('../../src/taxi/Util/index.r')
+```
+
+```{r load_data}
+source('../../src/taxi/Util/index.r')
+load.mult('../../data/taxi_cleaned/')
+```
+
+```{r}
+
+
+adjusted.interval.timePeriod <- interval.timePeriod
+adjusted.interval.timePeriod[1,1] <- '6:00:00'
+adjusted.interval.timePeriod[6,2] <- '6:00:00'
+adjusted.interval.timePeriod %>% View
+adjusted.trips <- trips %>% mutate(period = categorize.timeInterval(first_arrival_time, adjusted.interval.timePeriod)) 
+
+percentage.trips <- adjusted.trips %>% mutate(x = paste(period, day_type,sep='*')) %>% spread_key_mult('x') %>% 
+    select(-ends_with('id'),trip_id,-trip_headsign,-direction,- ends_with('time'),-duration, -period, -day_type) %>% 
+    mutate_at(.vars=vars(-trip_id),function(x) ifelse(is.na(x),0,x)) %>% group_by(trip_id) %>% 
+    summarize_at(.vars = vars(-trip_id), mean) 
+
+percentage.trips %>% 
+  mutate(rush = `rush.am*Weekday` + `rush.pm*Weekday`) %>% select(-matches('rush.*Weekday')) %>% 
+  mutate(evening = `evening*Weekday` + `evening.early*Weekday`) %>% select(-matches('evening.*Weekday')) %>% View
+
+names.og <- names(percentage.trips)[-1]
+names.weekends <- names(percentage.trips) %>% grep(pattern = '^[^l].*(Sun|Sat)') 
+names.rush <- names(percentage.trips) %>% grep(pattern = 'rush.*Weekday')
+names.midday <- names(percentage.trips) %>% grep(pattern = 'midday.*Weekday')
+names.evening <- names(percentage.trips) %>% grep(pattern = 'evening.*Weekday')
+names.latenight <- names(percentage.trips) %>% grep(pattern = 'latenight.*')
+
+percentage.trips.2 <- percentage.trips %>% mutate(weekends = rowSums(.[,names.weekends]),
+                            rush = rowSums(.[, names.rush]),
+                            midday = rowSums(.[,names.midday]),
+                            evening = rowSums(.[,names.evening]),
+                            latenight = rowSums(.[,names.latenight])) %>% 
+  .[,!names(.) %in%names.og]
+
+percentage.trips.i <- percentage.trips.2 %>% mutate_at(.vars = vars(-trip_id), function(x) ifelse(x >0,1,0)) %>% 
+  mutate(alltime = rowSums(.[,-1]),alltime =  ifelse(alltime==5,1,0)) %>% 
+  mutate(weekdays = rowSums(.[,c('rush','midday','evening')]), weekdays = ifelse(weekdays == 3,1,0)) 
+
+trips.latenight <- trips %>% left_join(percentage.trips.i, by = 'trip_id') %>% filter(latenight ==1) %>%  select(trip_id) %>% distinct 
+
+edges.latenight <- trips_edges[trips_edges$trip_id %in% trips.latenight$trip_id,]
+
+ trips %>% left_join(percentage.trips.i, by = 'trip_id') %>% 
+  mutate(arrival_time = as.timeStr(first_arrival_time)) %>% group_by(route_id)%>% summarize(latenight = mean(latenight)*100)%>% View
+
+ trips_edges %>% translate(trips, trip_id, route_id, trip_id=route_id) %>% select(route_id, stop_id, nxt.stop_id) %>% distinct %>% spread(key='route_id', value= 1) %>% unite(x,`1`:Z, sep=' ') %>% mutate(x = gsub(x, pattern = ' NA', replacement = '')) %>% View
+
+```
+```{r}
+source('../../src/taxi/Util/index.r')
+load.mult('../../data/taxi_cleaned/')
+```
+
+```{R}
+timeInfo <- trips %>% mutate(last_period = categorize.timePeriod(last_arrival_time)) %>% select(trip_id, direction, day_type, first_period = period, last_period, path_id, route_id)
+stoptimes_info <- stop_times %>% mutate(period = categorize.timePeriod(arrival_time)) 
+
+stoptimes_info.2 <- stoptimes_info %>% group_by(trip_id, period) %>% summarize(count = n()) %>% group_by(trip_id) %>% 
+  mutate(count = count / sum(count)) %>% arrange(count) 
+
+stoptimes_info.3 <- stoptimes_info.2 %>% group_by(trip_id) %>% summarize(max = last(count), period = last(period)) 
+
+timeInfo <- left_join(timeInfo, stoptimes_info.3, by='trip_id')  
+
+first_period <- timeInfo %>% group_by(path_id, direction, day_type, route_id) %>% spread_key('first_period') %>%
+  select(-ends_with('period'), -max, -trip_id) %>% summarize_all(mean)  
+last_period <- timeInfo %>% group_by(path_id, direction, day_type, route_id) %>% spread_key('last_period') %>%
+  select(-ends_with('period'), -max, -trip_id) %>% summarize_all(mean)  
+max_period <- timeInfo %>% group_by(path_id, direction, day_type, route_id) %>% spread_key('period') %>%
+  select(-ends_with('period'), -max, -trip_id) %>% summarize_all(mean)  
+
+```

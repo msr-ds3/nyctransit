@@ -1,0 +1,28 @@
+---
+title: "Map"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+
+trip_interval <- stop_times %>% group_by(trip_id) %>% summarize(start=first(arrival_time), end=last(departure_time)) %>%
+  translate(trips.info,trip_id,c(type,route_id), trip_id)
+ttest <- hms('10:30:20') + date('2018-1-1')
+trip_interval %>% rowwise %>% filter(hms(t)>= hms(start) && hms(t) <= hms(end))
+trip_interval.start <- hms(trip_interval$start)+date('2018-1-1')
+trip_interval.end <- hms(trip_interval$end)+date('2018-1-1')
+
+t <- data.frame(p=trip_interval.start %--% trip_interval.end) 
+
+ids <- trip_interval[t$p %>% sapply(function(x) ttest %within% x),]$trip_id
+ids <- ids[!is.na(ids)]
+ids %>% View
+
+stop_times %>% filter(trip_id %in% ids) %>%
+    mutate(nxt = lead(stop_id)) %>% select(trip_id, stop_id.cur = stop_id, stop_id.nxt = nxt) %>%
+  filter(!is.na(stop_id.nxt)) %>%
+  View
+```

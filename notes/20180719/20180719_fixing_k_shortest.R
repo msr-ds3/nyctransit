@@ -1,29 +1,28 @@
 library(tidyverse)
 library(igraph)
-edgeList <- tibble(from=character(), to=character(), weight = numeric())
-edgeList[nrow(edgeList)+1,] <-list('c','d',3)
-edgeList[nrow(edgeList)+1,] <-list('d','f',4)
-edgeList[nrow(edgeList)+1,] <-list('f','h',1)
-edgeList[nrow(edgeList)+1,] <-list('c','e',2)
-edgeList[nrow(edgeList)+1,] <-list('e','d',1)
-edgeList[nrow(edgeList)+1,] <-list('e','f',2)
-edgeList[nrow(edgeList)+1,] <-list('e','g',3)
-edgeList[nrow(edgeList)+1,] <-list('g','h',2)
-edgeList[nrow(edgeList)+1,] <-list('f','g',2)
 
-graph <- graph.data.frame(edgeList)
-
+#returns the shortest path from to 'to'
+#when there is no path returns null instead of warning message
+#also instead of returning vertex id, it returns vertex name
 shortestPath <- function(graph, from, to){
-  path <- suppressWarnings(get.shortest.paths(graph, from, to, mode = 'out', output = 'both')) 
+  path <- tryCatch(get.shortest.paths(graph,from, to, mode = 'out', output = 'vpath'), warning = function(x) NULL)
   names(unlist(path$vpath))
 }
 
-k_shortests.yen <- function(graph, from, to, k){
+#calculates the distance/length/sum of weights for a given path
+#the path should be a list of vertex names. e.g c('a','b','c') 
+distance <- function(graph, path) sum(E(graph, path=path)$weight)
+
+#sorts the path
+sortPath <- function(graph,paths) paths[paths %>% sapply(distance, graph=graph) %>% order]
+
+#yen
+k_shortest.yen <- function(graph, from, to, k){
   A <- list(shortestPath(graph,from,to))
   B <- list()
   for (k_i in 2:k){
     for(i in 1:(length(A[[k_i-1]])-1)){
-      spurNodes <- A[[k_i-1]][i]
+      spurNode <- A[[k_i-1]][i]
       rootPath <- A[[k_i-1]][1:i]
       edgesToDelete <- list()
       for (p in A){
@@ -38,16 +37,16 @@ k_shortests.yen <- function(graph, from, to, k){
       for (edge in edgesToDelete){
         t_g <- delete.edges(t_g, edge)
       }
-      spurPath <- shortestPath(t_g,spurNodes,to)
-      if (length(spurPath) != 1){
-        total_path <- c(rootPath[-i], spurPath)
-        B[[length(B)+1]] <- total_path
+      spurPath <- shortestPath(t_g,spurNode,to)
+      if (!is.null(spurPath)){
+        total_path <- list(c(rootPath[-i], spurPath))
+        if (!total_path %in% B) B[length(B)+1] <- total_path
         #print('fouuuuuund')
       }
       #print(paste('I:', i))
       #print(paste('A:',paste(A[[k_i-1]], collapse = ' ')))
       #print(paste('Edges TO Remove: ', paste(edgesToDelete, collapse = ' ')))
-      #print(paste('spurNode', spurNodes))
+      #print(paste('spurNode', spurNode))
       #print(paste('spurPath:', paste(spurPath, collapse = ' ')))
       #print(paste('RootPath:', paste(rootPath, collapse = ' ')))
       #print(paste('TotalPath: ', paste(total_path, collapse = ' ')))
@@ -55,7 +54,6 @@ k_shortests.yen <- function(graph, from, to, k){
     }
     if (length(B) == 0) break
     B <- sortPath(graph, B)
-    while (B[1] %in% A) B <- B[-1]
     A[k_i] <- B[1]
     B <- B[-1]
    # print('***************************************')
@@ -63,11 +61,41 @@ k_shortests.yen <- function(graph, from, to, k){
   A
 }
 
-distance <- function(graph, path) sum(E(graph, path=path)$weight)
-
-sortPath <- function(graph,paths){
-  order <- sapply(paths, function(x) distance(graph,x)) %>% order
-  paths[order]
+#extracts route_ids, and direction_id from path
+extract_data <- function(graph,i,path){
+  edges <- E(graph, path=path)
+  
+  direction <- edges$direction_id
+  direction <- c(direction,direction[length(direction)])
+  
+  line <- c(edges$route_ids,'end')
+  
+  tibble(itinerary_id = i, station = path, line, direction)
+}
+#combines paths into a tibble
+paths_to_tibble <- function(graph, paths) {
+  paths.asTibble <- 1:length(paths) %>%
+  lapply(function(i) extract_data(graph,i, paths[[i]])) %>%
+  reduce(rbind) 
 }
 
-k_shortests.yen(graph, 'c','h',7)
+#wrapper around yen, processes yen's result so the itinery functon can interact with it
+k_shortest_path <- function(graph, from, to, k) k_shortest.yen(graph, from, to, k) %>% paths_to_tibble(graph=graph)
+  
+
+#===================Test==========================#
+edgeList <- tibble(from=character(), to=character(), weight = numeric())
+edgeList[nrow(edgeList)+1,] <-list('c','d',3)
+edgeList[nrow(edgeList)+1,] <-list('d','f',4)
+edgeList[nrow(edgeList)+1,] <-list('f','h',1)
+edgeList[nrow(edgeList)+1,] <-list('c','e',2)
+edgeList[nrow(edgeList)+1,] <-list('e','d',1)
+edgeList[nrow(edgeList)+1,] <-list('e','f',2)
+edgeList[nrow(edgeList)+1,] <-list('e','g',3)
+edgeList[nrow(edgeList)+1,] <-list('g','h',2)
+edgeList[nrow(edgeList)+1,] <-list('f','g',2)
+edgeList[nrow(edgeList)+1,] <-list('a','b',2)
+
+graph <- graph.data.frame(edgeList)
+
+k_shortest.yen(graph, 'c','h',7)
