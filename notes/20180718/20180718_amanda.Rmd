@@ -46,7 +46,7 @@ weather_2018 <- read_csv("~/Microsoft DS3/project/project data/weather_2018.csv"
 ```
 
 ```{r}
-# graph that shows weekday from 7am-8pm distribution of wait times by station for each line
+# get df that has both exp wait time and weather data
 todd_and_stop_data <- 
   todd_and_stop_data[!(todd_and_stop_data$route_mta_id %in% c("GS","SS","FS","H","SI")), ] %>%
   mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time, label = TRUE))
@@ -57,6 +57,26 @@ exp_wait_time_by_station <- todd_and_stop_data %>%
 
 exp_wait_time_and_weather <- left_join(exp_wait_time_by_station,weather_2018, by = c("ymd" = "DATE"))
 
+```
+
+```{r}
+set.seed(41815)
+sample <- sample.int(n = nrow(exp_wait_time_and_weather), 
+                     size = floor(.05*nrow(exp_wait_time_and_weather)), 
+                     replace = F)
+train <- exp_wait_time_and_weather[sample, ]
+test  <- exp_wait_time_and_weather[-sample, ]
+# best model without interactions
+model <- lm(exp_wait ~ PRCP + stop_mta_id + route_mta_id + day + hour, train) 
+summary(model)
+# PRCP coef is 11.83; although the model says PRCP is significant, PRCP only increases exp wait time by roughly 12 seconds
+
+# exp_wait ~ PRCP + stop_name + route_mta_id + day + hour + SNOW + SNWD + TMIN
+#                     0.09,       0.13,       0.15,  0.23,  0.23, 0.23, 0.23
+
+# without PRCP still 0.23 
+# without SNOW/ SNWD still 0.23 
+# PRCP and SNOW are interchangable
 ```
 
 ```{r}
@@ -72,29 +92,4 @@ exp_wait_time_and_weather <- left_join(exp_wait_time_by_station,weather_2018, by
 # best model without interactions
 #model <- cv.glmnet(df1, exp_wait_time_and_weather$exp_wait, family = "binomial") 
 #summary(model)
-
-# exp_wait ~ PRCP + stop_name, route_mta_id + day + hour + SNOW + SNWD + TMIN
-#                     0.09,       0.13,       0.15,  0.23,  0.23, 0.23, 0.23
-
-# without PRCP still 0.23 
-# without SNOW/ SNWD still 0.23 
-# PRCP and SNOW are interchangable
-```
-
-```{r}
-#long_wait <- exp_wait_time_and_weather %>% 
-#  group_by(stop_mta_id, hour, day) %>% 
-#  mutate(long_wait = ifelse(exp_wait > median(exp_wait), 1, 0)) %>% 
-#  left_join(weather_2018)
-
-#set.seed(41815)
-#sample <- sample.int(n = nrow(long_wait), 
-#                     size = floor(.05*nrow(long_wait)), 
-#                     replace = F)
-#train <- long_wait[sample, ]
-#test  <- long_wait[sample, ]
-#logit <- glm(long_wait ~ stop_mta_id + PRCP + route_mta_id + day + hour, data = train, family = "binomial")
-#summary(logit)
-#test$y_hat <- predict(logit, test, type = "response")
-
 ```
