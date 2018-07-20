@@ -267,7 +267,7 @@ start.time <- Sys.time()
 
 counters <- rep(1, length(trains))
 
-
+no_more_trips <- F
 
 while (i <= N) {
 
@@ -294,6 +294,7 @@ while (i <= N) {
     
     # break out if this train_data doesn't exist
     if(is.na(train_data[[ii]]$departure_time[curr_idx])) {
+      no_more_trips <- T
       break
     }
     
@@ -309,17 +310,22 @@ while (i <= N) {
     # print(sprintf("Leg #%s\n", ii))
     # print(row_info)
   }
-  test_df[i, ] <- row_info
+  ifelse(no_more_trips == F, test_df[i, ] <- row_info, test_df[i, ] <- NA)
   row_info <- numeric()
   # increment i
   i = i + 1
 }
+
+# remove any unused rows
+
 
 for (i in 1:length(trains)) {
   train <- trains[i]
   test_df[[paste('start_time', i, train, sep='_')]] <- as.POSIXct(test_df[[paste('start_time', i, train, sep='_')]], origin = "1970-01-01", tz = "UTC")
   test_df[[paste('end_time', i, train, sep='_')]] <- as.POSIXct(test_df[[paste('end_time', i, train, sep='_')]], origin = "1970-01-01", tz = "UTC")
 }
+
+test_df$time_diff <- test_df[ncol(test_df)] - test_df[2]
 
 end.time <- Sys.time()
 time.taken <- end.time - start.time
@@ -347,6 +353,10 @@ test_df %>% mutate(itin = row_number()) %>%
     geom_text(aes(label = train_id_3_L, x = start_time_3_L, y = itin), color = "green") + 
   ylim(c(0, 10))
 
+test_df %>% ggplot() +
+  geom_histogram(aes(x = .[[ncol(test_df)]])) +
+  xlim(c(0, 200))
+
 # PSUEDOCODE
 # list of start_times 
 # for (x in counter_list) {
@@ -373,5 +383,7 @@ test_df %>% mutate(itin = row_number()) %>%
 #   }
 #       
 # }
+
+
 
 ```
