@@ -1,0 +1,145 @@
+---
+title: "Subway Data"
+author: "Amanda Rodriguez"
+date: "July 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(zoo)
+library(glmnet)
+library(igraph)
+
+# todd_subway_data <- read_csv("MTA Data/todd_subway_data.csv", col_types = cols(route_mta_id = col_factor(levels = NULL)))
+# save(todd_subway_data, file = "todd_subway_data.RData")
+load("~/Microsoft DS3/project/project data/todd_subway_data.RData")
+```
+
+```{r}
+# load station_data from mta
+station_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
+# get stop_id and stop_name fields, and create a stop_id with N and S appended
+station_data <- station_data %>% 
+  rename(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, structure = `Structure`) %>%
+  mutate(stop_id_N = sprintf('%sN', stop_id), stop_id_S = sprintf('%sS', stop_id)) %>%
+  gather(`stop_id_N`, `stop_id_S`, key = "stop_ids", value = "stop_id") %>%
+  select(stop_name, stop_id, structure)
+
+# https://www.ncdc.noaa.gov/cdo-web/datatools/lcd         hourly weather data
+weather_2018 <- read_csv("~/Microsoft DS3/project/project data/weather_2018.csv") %>% 
+  mutate(ymd = as.Date(DATE), hour = hour(DATE)) %>%
+  select(ymd, DATE, hour, HOURLYPrecip)
+
+# replace T's, remove "s" from the end of entries, and remove NA
+weather_2018$HOURLYPrecip[weather_2018$HOURLYPrecip == "T"] <- "0.001" # T = trace amounts(drizzling)
+
+weather_2018$HOURLYPrecip  <- gsub("[^0-9\\.]","",weather_2018$HOURLYPrecip) # s = suspected precip
+
+weather_2018 <- weather_2018 %>% 
+  group_by(ymd) %>% arrange(ymd, hour) %>% 
+  mutate(HOURLYPrecip = na.approx(HOURLYPrecip, rule = 2)) %>%
+  ungroup()
+
+```
+
+```{r}
+# exp wait time for each station for (each hour on) every day
+todd_subway_data <- 
+  todd_subway_data[!(todd_subway_data$route_mta_id %in% c("GS","SS","FS","H","SI")), ] %>% # remove SI and shuttle trains
+  mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time))
+
+todd_and_stop_data <- left_join(todd_subway_data, station_data, by = c("stop_mta_id" = "stop_id"))
+  
+todd_and_stop_normal <- todd_and_stop_data %>% 
+  group_by(route_mta_id, stop_name) %>% 
+  mutate(count = n ()) %>% 
+  filter(count > 13000) %>% # get "normal" stops only
+  ungroup() 
+ 
+exp_wait_time_by_station <- todd_and_stop_normal %>% 
+  group_by(ymd, day, hour, stop_mta_id, route_mta_id) %>% 
+  summarise(exp_wait = sum(seconds_until_next_departure^2)/(2*sum(seconds_until_next_departure))) %>%
+  ungroup()
+
+exp_wait_time_and_weather <- 
+  left_join(exp_wait_time_by_station, weather_2018, by = c("ymd", "hour")) %>%
+  left_join(station_data, by = c("stop_mta_id" = "stop_id"))
+
+```
+
+```{r}
+# correlations between precip and station
+corr <- exp_wait_time_and_weather %>% 
+  group_by(stop_name, stop_mta_id, route_mta_id) %>%
+  mutate(rho = cor(log(HOURLYPrecip + 1), exp_wait, use="complete.obs")) %>%
+  ungroup()
+
+# Top stops with wait time weather correlations
+exp_wait_time_and_weather %>% 
+  group_by(stop_name, stop_mta_id, route_mta_id) %>%
+  summarize(rho = cor(log(HOURLYPrecip + 1), exp_wait, use="complete.obs")) %>% 
+  arrange(desc(rho)) %>% View
+
+# correlation histgram 
+corr %>%
+  ggplot(aes(x=rho)) +
+  geom_histogram()
+
+# D train has the worst service when it rains; this is the worst stop
+corr %>% filter(route_mta_id == "D", stop_name == "50 St") %>%
+  ggplot(aes(x=HOURLYPrecip, y = exp_wait)) +
+  geom_point() + geom_smooth()
+```
+
+```{r}
+# baseline model without precipitation 
+#df <- exp_wait_time_and_weather %>% filter(month(ymd) == 4, day < 7 & day > 1, hour < 20 & hour > 6) %>% select(stop_mta_id, route_mta_id, ymd, hour, exp_wait, HOURLYPrecip)
+
+# add station type
+#x <- model.matrix(exp_wait ~ as.factor(stop_mta_id) + 
+#                    as.factor(route_mta_id) + as.factor(ymd) + 
+#                    as.factor(hour), data = df)[, -1]
+#y <- df$exp_wait
+
+
+#model <- glmnet(x, y, alpha = 0 , lambda = 0)
+#coef(model, s = 0)
+```
+
+```{r}
+# model with precipitation (no interaction)
+
+#x1 <- model.matrix(exp_wait ~ as.factor(stop_mta_id) + 
+#                    as.factor(route_mta_id) + as.factor(ymd) + 
+#                    as.factor(hour) + as.factor(HOURLYPrecip), data = df)[, -1]
+
+#model1 <- glmnet(x1, y, alpha = 0, lambda = 0) # 2 mins run time
+#coef(model1, s = 0)
+```
+
+```{r}
+#set.seed(41815)
+#sample <- sample.int(n = nrow(exp_wait_time_and_weather), 
+#                     size = floor(.15*nrow(exp_wait_time_and_weather)), 
+#                     replace = F)
+#train <- df[sample, ]
+#test  <- exp_wait_time_and_weather[-sample, ]
+
+# too large to run regression
+# model with precipitation interacted with stop
+
+#x2 <- model.matrix(exp_wait ~ as.factor(stop_mta_id)*as.factor(HOURLYPrecip) + 
+#                    as.factor(route_mta_id) + as.factor(ymd) + 
+#                    as.factor(hour), data = train)[, -1]
+
+#model2 <- glmnet(x2, y, alpha = 0, lambda = 0)
+#coef(model2, s = 0)
+```
