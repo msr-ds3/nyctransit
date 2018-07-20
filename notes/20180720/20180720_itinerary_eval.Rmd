@@ -251,9 +251,10 @@ test_df <- data.frame(d=numeric(N))
 # add column_names that are needed
 for (i in 1:length(trains)) {
   train <- trains[i]
-  test_df[[paste('train_id', i, train,  sep='_')]] <- numeric(N)
-  test_df[[paste('start_time', i, train, sep='_')]] <- numeric(N)
-  test_df[[paste('end_time', i, train, sep='_')]] <- numeric(N)
+  test_df[[paste('leg', i, '_line', sep='')]] <- character(N)
+  test_df[[paste('leg', i, '_trip_id',  sep='')]] <- numeric(N)
+  test_df[[paste('leg', i, '_start_time', sep='')]] <- numeric(N)
+  test_df[[paste('leg', i, '_end_time', sep='')]] <- numeric(N)
 }
 
 test_df <- subset(test_df, select = -c(d)) # %>% na.omit
@@ -272,7 +273,9 @@ no_more_trips <- F
 while (i <= N) {
 
   end_time <- train_data[[1]]$departure_time[i]
-  row_info <- c(row_info, train_data[[1]]$realtime_trip_id[i],
+  row_info <- c(row_info,
+                train_data[[1]]$route_mta_id[i],
+                train_data[[1]]$realtime_trip_id[i],
                 train_data[[1]]$start_time[i],
                 end_time)
   
@@ -300,6 +303,7 @@ while (i <= N) {
     
     end_time <- train_data[[ii]]$departure_time[curr_idx]
     row_info <- c(row_info,
+                  train_data[[ii]]$route_mta_id[curr_idx],
                   train_data[[ii]]$realtime_trip_id[curr_idx],
                   train_data[[ii]]$start_time[curr_idx],
                   end_time)
@@ -321,17 +325,19 @@ while (i <= N) {
 
 for (i in 1:length(trains)) {
   train <- trains[i]
-  test_df[[paste('start_time', i, train, sep='_')]] <- as.POSIXct(test_df[[paste('start_time', i, train, sep='_')]], origin = "1970-01-01", tz = "UTC")
-  test_df[[paste('end_time', i, train, sep='_')]] <- as.POSIXct(test_df[[paste('end_time', i, train, sep='_')]], origin = "1970-01-01", tz = "UTC")
+  test_df[[paste('leg', i, '_start_time', sep='')]] <- as.POSIXct(test_df[[paste('leg', i, '_start_time', sep='')]],
+                                                                  origin = "1970-01-01", tz = "UTC")
+  test_df[[paste('leg', i, '_end_time', sep='')]] <- as.POSIXct(test_df[[paste('leg', i, '_end_time', sep='')]],
+                                                                origin = "1970-01-01", tz = "UTC")
 }
 
-test_df$time_diff <- test_df[, ncol(test_df)] - test_df[, 2]
+# test_df$time_diff <- test_df[, ncol(test_df)] - test_df[, 2]
 
 end.time <- Sys.time()
 time.taken <- end.time - start.time
 time.taken
 
-# NOTE: DEBUG PLOT
+# NOTE: DEBUG PLOT - show all trains individually on plot
 
 plot_data <- bind_rows(train_data[[1]], train_data[[2]], train_data[[3]])
 plot_data %>% arrange(start_time) %>%
