@@ -1,0 +1,232 @@
+---
+title: "Graph/Itinerary"
+author: "Sasha, Ayliana, Taxi"
+date: "July 18, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+*Sasha, Ayliana, & Taxi*  
+
+#### Load libraries
+```{r}
+library(tidyverse)
+library(igraph)
+library(lubridate)
+library(leaflet)
+library(mapview)
+
+```
+
+#### Load data
+```{r}
+stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
+routes_data <- read_csv('../../data/google_transit_subway_static/routes.txt')
+trips <- read_csv('../../data/google_transit_subway_static/trips.txt')
+stop_times <- read_csv('../../data/google_transit_subway_static/stop_times.txt')
+transfers <- read_csv('../../data/google_transit_subway_static/transfers.txt')
+
+load('../../data/todd_subway_realtime.RData')
+source('../../src/k_shortest.R')
+
+load('../../data/mta_igraph.RData')
+
+```
+
+#### Greedy function
+```{r}
+greedy <- function(shortest_routes, num_itineraries){
+ all_lines <- vector(mode = "character")
+ 
+ for(i in 1:num_itineraries){
+   
+   df <- shortest_routes %>% 
+     filter(itinerary_id == i)
+   
+   lines <- vector(mode = "character")
+   
+   # keep track of how many prev_line_ids to append
+   r = 0
+   
+   prev_line_ids <-  str_split(df$line[i], "_")[[1]]
+   
+   for (j in 1:nrow(df)) {
+     
+     cur_line_ids <- str_split(df$line[j], "_")[[1]]
+     intersect_lines <- intersect(cur_line_ids, prev_line_ids)
+     
+     if (length(intersect_lines) == 0){
+       
+       if("T" %in% cur_line_ids){
+         
+         shortest_routes[j,]$direction <- shortest_routes[j-1,]$direction
+       }
+       
+       else{
+         # otherwise set to current line_ids
+         intersect_lines <- cur_line_ids
+       }
+     
+       # fill in all of the common lines up until the transfer
+       lines <- append(lines, rep(paste(prev_line_ids, collapse = "_"), r))
+       r = 0
+     }
+
+     r = r+1
+     prev_line_ids <- intersect_lines
+   
+     }
+  
+   all_lines <- append(all_lines, lines)
+   all_lines <- append(all_lines, "END")
+   
+ } # endfor
+ shortest_routes$line <- all_lines
+ 
+ return(shortest_routes)
+
+}
+```
+
+#### Function to get formatted itineraries
+```{r}
+get_itinerary <- function(shortest_paths_df, num_ititeraries) {
+
+shortest_paths_df <- greedy(shortest_paths_df, num_ititeraries)
+
+  # new df for the formatted itineraries
+  itinerary <- setNames(data.frame(matrix(ncol = 7, nrow = 0)),
+            c("itinerary_id", "station", "line", "direction", "leg", "event", "event_id"))
+  
+  # format each itinerary_id separately
+  for (i in 1:num_ititeraries) {
+    df <- shortest_paths_df %>%
+      filter(itinerary_id == i)
+    
+    # current index
+    k = 1
+    
+    # keep track of leg
+    l = 1
+    
+    df <- df %>% mutate(leg = l, event = "travel")
+    df$event[1] <- "start_trip"
+    
+    # compare current and next rows for whole itinerary
+    while (k < nrow(df)){
+      # next index
+      j = k+1
+      
+      # identify transfers
+      if (df$station[k] != df$station[j] & df$line[k] != df$line[j]) {
+        
+        # identify an 'implicit transfer (e.g. transfer 120->120 from 1 to 2/3)
+        if (df$line[j] != "") {
+          df <- df %>% add_row(itinerary_id = df$itinerary_id[j], station = df$station[j],
+                line = df$line[k], direction = df$direction[k], leg = l, .after = k)
+        }
+        
+        # identify an 'explicit' transfer (e.g. transfer R11->629 from N/R to 4)
+        else {
+          df$line[j] <- df$line[k] 
+          df$leg[j] <- df$leg[k]
+        }
+        
+        # make note of transfer events
+        df$event[j] <- "start_transfer"
+        df$event[j+1] <- "end_transfer"
+        
+        # start_transfer direction gets inherited from previous station
+        df$direction[j] <- df$direction[k]
+        
+        # skip newly added row
+        k = k+1
+        
+        # new leg starts with a transfer
+        l = l+1
+
+      }
+      
+      k = k+1
+      df$leg[k] <- l
+      
+    }
+    
+    # very last row is redundant
+    df <- df[1:nrow(df)-1,]
+    df$event[nrow(df)] <- "end_trip" 
+    df <- df %>% mutate(event_id = seq(1:nrow(df)))
+  
+    # put it all together
+    itinerary <- rbind(itinerary, df) 
+  }
+  itinerary <- itinerary %>% left_join(stops, by = c("station" = "stop_id")) %>% select(itinerary_id, station, stop_name, line, direction, event_id, event, leg)
+
+    return(itinerary)
+}
+```
+
+#### format data for map
+```{r}
+format_map_data <- function(itin){
+  routes <- routes_data
+  routes$route_color <- replace_na(routes$route_color, "000000")
+  routes <- routes %>% mutate(route_color = sprintf("#%s", route_color))
+ 
+   itin_map_data <- itin %>% left_join(stops, by = c("station" = "stop_id", 
+                                                    "stop_name" = "stop_name"))
+  itin_map_data <- itin_map_data %>% 
+    extract(line, c("route_id"),"([^_][^_]?)_?.*", remove = FALSE) %>% 
+    left_join(routes)
+  
+  return(itin_map_data)
+}
+```
+
+#### Multiple maps from multiple paths
+```{r}
+leaflet_multiple_maps <- function(itin_map_data, k_num){
+  maps = list()
+  for(j in 1:k_num){
+    itin_map <- itin_map_data %>% filter(itinerary_id == j)
+    map <- leaflet() %>%
+      addTiles() %>%
+      setView(-74.00, 40.71, zoom = 12) %>%
+      addProviderTiles("CartoDB.Positron") %>%
+      addCircleMarkers(itin_map$stop_lon, itin_map$stop_lat, 
+                       color = itin_map$route_color,
+                       popup = itin_map$stop_name,
+                       radius = 3) 
+    
+    for (i in 1:(nrow(itin_map)-1)) {
+      map <- map %>%
+        addPolylines(lat = c(itin_map[i,]$stop_lat, itin_map[i+1,]$stop_lat),
+                     lng = c(itin_map[i,]$stop_lon, itin_map[i+1,]$stop_lon),
+                     color = itin_map[i,]$route_color,
+                     popup = itin_map[i,]$line,
+                     dashArray = ifelse(itin_map[i,]$event == "start_transfer",
+                                        c(8), c(0)), weight = 1)
+    }
+    #Add map to list
+    maps[[j]] = map
+  }
+  return(maps)
+}
+```
+
+#### Test itinerary function
+```{r}
+k_num <- 4
+
+#Find k_num shortest paths leading going from stop R13 to stop D05 
+k_shortest <- k_shortest_path(mta_igraph, "129", "G34", k=k_num)
+itin <- get_itinerary(k_shortest, k_num)
+
+itin
+
+map_data <- format_map_data(itin)
+sync(leaflet_multiple_maps(map_data, k_num))
+```
