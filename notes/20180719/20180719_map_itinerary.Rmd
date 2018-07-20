@@ -20,7 +20,10 @@ library(igraph)
 library(lubridate)
 library(leaflet)
 ```
-
+#### Load functions
+```{r}
+source('../../src/taxi/Util/k_shortest.R')
+```
 #### Load data
 ```{r}
 stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
@@ -32,6 +35,7 @@ transfers <- read_csv('../../data/google_transit_subway_static/transfers.txt')
 load('../../data/todd_subway_realtime.RData')
 
 ```
+
 
 #### Set filters for time intervals/day
 ```{r}
@@ -423,95 +427,14 @@ mta_igraph <- graph.data.frame(igraph_edges, directed=TRUE)
 # plot(mta_igraph)
 
 ```
-fixed k_shortest
-```{r fixed_k_shortest}
-#returns the shortest path from to 'to'
-#when there is no path returns null instead of warning message
-#also instead of returning vertex id, it returns vertex name
-shortestPath <- function(graph, from, to){
-  path <- tryCatch(get.shortest.paths(graph,from, to, mode = 'out', output = 'vpath'), warning = function(x) NULL)
-  names(unlist(path$vpath))
-}
+#### fixed k_shortest
 
-#calculates the distance/length/sum of weights for a given path
-#the path should be a list of vertex names. e.g c('a','b','c') 
-distance <- function(graph, path) sum(E(graph, path=path)$weight)
-
-#sorts the path
-sortPath <- function(graph,paths) paths[paths %>% sapply(distance, graph=graph) %>% order]
-
-#yen
-k_shortest.yen <- function(graph, from, to, k){
-  A <- list(shortestPath(graph,from,to))
-  B <- list()
-  for (k_i in 2:k){
-    for(i in 1:(length(A[[k_i-1]])-1)){
-      spurNode <- A[[k_i-1]][i]
-      rootPath <- A[[k_i-1]][1:i]
-      edgesToDelete <- list()
-      for (p in A){
-        if (all(p[1:i] == rootPath)) {
-          edge <- paste(p[i], p[i+1], sep = '|')
-          edgesToDelete <- append(edgesToDelete, edge)
-        }
-      }
-      edgesToDelete <- unique(edgesToDelete)
-      
-      t_g <- graph
-      for (edge in edgesToDelete){
-        t_g <- delete.edges(t_g, edge)
-      }
-      spurPath <- shortestPath(t_g,spurNode,to)
-      if (!is.null(spurPath)){
-        total_path <- list(c(rootPath[-i], spurPath))
-        if (!total_path %in% B) B[length(B)+1] <- total_path
-        #print('fouuuuuund')
-      }
-      #print(paste('I:', i))
-      #print(paste('A:',paste(A[[k_i-1]], collapse = ' ')))
-      #print(paste('Edges TO Remove: ', paste(edgesToDelete, collapse = ' ')))
-      #print(paste('spurNode', spurNode))
-      #print(paste('spurPath:', paste(spurPath, collapse = ' ')))
-      #print(paste('RootPath:', paste(rootPath, collapse = ' ')))
-      #print(paste('TotalPath: ', paste(total_path, collapse = ' ')))
-      #print('========================')
-    }
-    if (length(B) == 0) break
-    B <- sortPath(graph, B)
-    A[k_i] <- B[1]
-    B <- B[-1]
-   # print('***************************************')
-  }
-  A
-}
-
-#extracts route_ids, and direction_id from path
-extract_data <- function(graph,i,path){
-  edges <- E(graph, path=path)
-  
-  direction <- edges$direction_id
-  direction <- c(direction,direction[length(direction)])
-  
-  line <- c(edges$route_ids,'end')
-  
-  tibble(itinerary_id = i, station = path, line, direction)
-}
-#combines paths into a tibble
-paths_to_tibble <- function(graph, paths) {
-  paths.asTibble <- 1:length(paths) %>%
-  lapply(function(i) extract_data(graph,i, paths[[i]])) %>%
-  reduce(rbind) 
-}
-
-#wrapper around yen, processes yen's result so the itinery functon can interact with it
-k_shortest_path <- function(graph, from, to, k) k_shortest.yen(graph, from, to, k) %>% paths_to_tibble(graph=graph)
-```
 #### Run k shortest paths function
 ```{r}
 k_num <- 3
 
 # find k_num shortest paths leading going from stop R13 to stop D05 
-k_shortest <- k_shortest_path(mta_igraph, from = "227", to = "131", k=k_num)
+k_shortest <- k_shortest_path(mta_igraph, from = "103", to = "103", k=k_num)
 k_shortest %>% View
 ```
 
