@@ -340,12 +340,12 @@ time.taken
 # NOTE: DEBUG PLOT - show all trains individually on plot
 
 plot_data <- bind_rows(train_data[[1]], train_data[[2]], train_data[[3]])
-plot_data %>% arrange(start_time) %>%
+plot_data %>% filter(month(start_time) == 1 & day(start_time) == 20 & hour(start_time) > 9 & hour(start_time) < 12) %>%
+  arrange(start_time) %>%
   mutate(itin = row_number()) %>%
   ggplot(aes(color = route_mta_id)) +
   geom_segment(aes(x = start_time, xend = departure_time, y = itin, yend = itin)) +
-  geom_text(aes(label = realtime_trip_id, x = start_time, y = itin)) +
-  xlim(c("2018-01-01 00:00:00", "2018-01-02 00:00:00"))
+  geom_text(aes(label = realtime_trip_id, x = start_time, y = itin))
 
 # ITINERARY PLOT
 test_df %>% mutate(itin = row_number()) %>%
