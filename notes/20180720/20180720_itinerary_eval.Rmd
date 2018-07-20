@@ -293,7 +293,7 @@ test_df <- subset(test_df, select = -c(d)) # %>% na.omit
 
 i <- 1
 
-row_info <- numeric()
+row_info <- list()
 
 start.time <- Sys.time()
 
@@ -305,7 +305,7 @@ while (i <= N) {
 
   end_time <- train_data[[1]]$departure_time[i]
   row_info <- c(row_info,
-                train_data[[1]]$route_mta_id[i],
+                as.character(train_data[[1]]$route_mta_id[i]),
                 train_data[[1]]$realtime_trip_id[i],
                 train_data[[1]]$start_time[i],
                 end_time)
@@ -334,7 +334,7 @@ while (i <= N) {
     
     end_time <- train_data[[ii]]$departure_time[curr_idx]
     row_info <- c(row_info,
-                  train_data[[ii]]$route_mta_id[curr_idx],
+                  as.character(train_data[[ii]]$route_mta_id[curr_idx]),
                   train_data[[ii]]$realtime_trip_id[curr_idx],
                   train_data[[ii]]$start_time[curr_idx],
                   end_time)
@@ -346,7 +346,7 @@ while (i <= N) {
     # print(row_info)
   }
   ifelse(no_more_trips == F, test_df[i, ] <- row_info, test_df[i, ] <- NA)
-  row_info <- numeric()
+  row_info <- list()
   # increment i
   i = i + 1
 }
