@@ -221,6 +221,23 @@ stop_station <- list(c("120S", "127S"),
 
 ```{r test-chunk}
 
+# Helper Function To Get Leg Data
+get_leg_data <- function(lines, start, end) {
+  
+  lines_list <- first(strsplit(lines, split = "_"))
+  leg_data <- subway_data.2 %>%
+    filter(stop_mta_id == start | stop_mta_id == end,
+           route_mta_id %in% lines_list) %>%
+    group_by(realtime_trip_id) %>%
+    mutate(start_time = min(departure_time)) %>%
+    filter(n() >= 2, stop_mta_id == end) %>%
+    ungroup() %>%
+    arrange(arrival_time)
+  
+  return(leg_data)
+  
+}
+
 # TEST DATA for itinerary
 
 test_data <- read_csv('../../data/sample_itinerary.csv')
@@ -230,28 +247,29 @@ test_train <- test_data %>%
   filter(event != "travel") %>%
   mutate(stop_station = paste(station, direction, sep=''))
   
-#trains <- c("1", "2", "L")
+# get trains for first itinerary
+trains <- test_train %>% filter(itinerary_id == 1) %>% .$line %>% unique()
 #stop_station <- list(c("120S", "127S"), c("127S", "132S"), c("L02S", "L06S"))
+# get stops for each leg of the trip
+test_stops <- test_train %>% filter(itinerary_id == 1) %>% select(leg, stop_station) %>% split(.$leg)
+stop_station <- list()
+# extract start and stop for each leg
+for (i in 1:length(trains)) {
+  stop_station[[i]] <- c(test_stops[[i]]$stop_station[1], test_stops[[i]]$stop_station[2])
+}
 
 # list of data frames
 train_data <- list()
+
 
 for (i in 1:length(trains)) {
   
   start <- stop_station[[i]][1]
   end <- stop_station[[i]][2]
+  lines <- trains[i]
   
   # TODO: filter subway_data to get appropriate information for each train
-  leg_data <- subway_data.2 %>%
-    filter(stop_mta_id == start | stop_mta_id == end,
-           # TODO: modify filter to take multiple lines
-           route_mta_id == trains[i]) %>%
-    group_by(realtime_trip_id) %>%
-    mutate(start_time = min(departure_time)) %>%
-    # get rid of records for extra record at start stops
-    filter(n() >= 2, stop_mta_id == end) %>%
-    ungroup() %>%
-    arrange(arrival_time)
+  leg_data <- get_leg_data(lines, start, end)
   # append to list
   # print(nrow(leg_data))
   train_data[[i]] <- leg_data
