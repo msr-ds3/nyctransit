@@ -1,4 +1,4 @@
-source('../../Util/k_shortest.R')
+source('../k_shortest.R')
 #===================Test==========================#
 edgeList <- tibble(from=character(), to=character(), weight = numeric())
 edgeList[nrow(edgeList)+1,] <-list('c','d',3)
@@ -16,4 +16,4 @@ edgeList[nrow(edgeList)+1,] <-list('c','c',4)
 graph <- graph.data.frame(edgeList)
 
 k_shortest.yen(graph, 'c','c',7) #expect error
-k_shortest.yen(graph,'c','h',7)
+k_shortest.yen(graph,'c','h',1)

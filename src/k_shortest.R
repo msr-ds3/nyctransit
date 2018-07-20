@@ -21,6 +21,7 @@ sortPath <- function(graph,paths) paths[paths %>% sapply(distance, graph=graph) 
 k_shortest.yen <- function(graph, from, to, k){
   if (from == to) stop('from and to can not be the same(currently)!!!')
   A <- list(shortestPath(graph,from,to))
+  if (k == 1) return (A)
   B <- list()
   for (k_i in 2:k){
     for(i in 1:(length(A[[k_i-1]])-1)){
