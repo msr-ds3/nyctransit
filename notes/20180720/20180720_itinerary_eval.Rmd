@@ -221,6 +221,11 @@ stop_station <- list(c("120S", "127S"),
 
 ```{r test-chunk}
 
+# Helper Function to Determine if Day is Weekend
+isWeekend <- function(day_of_week) {
+  ifelse(day_of_week == "Saturday" | day_of_week == "Sunday", T, F)
+}
+
 # Helper Function To Get Leg Data
 get_leg_data <- function(lines, start, end) {
   
@@ -228,6 +233,9 @@ get_leg_data <- function(lines, start, end) {
   leg_data <- subway_data.2 %>%
     filter(stop_mta_id == start | stop_mta_id == end,
            route_mta_id %in% lines_list) %>%
+    mutate(day_of_week = weekdays((departure_time)),
+           hour = hour(departure_time)) %>%
+    filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
     group_by(realtime_trip_id) %>%
     mutate(start_time = min(departure_time)) %>%
     filter(n() >= 2, stop_mta_id == end) %>%
@@ -237,6 +245,7 @@ get_leg_data <- function(lines, start, end) {
   return(leg_data)
   
 }
+
 
 # TEST DATA for itinerary
 
