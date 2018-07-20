@@ -203,13 +203,7 @@ test_df <- compute_itenerary_pair("2", "1", "120S", "127S", "127S", "131S", star
 # counter_list <- c(i,j,k)
 
 
-# TEST DATA
 
-trains <- c("1", "2", "L")
-
-stop_station <- list(c("120S", "127S"),
-                      c("127S", "132S"),
-                      c("L02S", "L06S"))
 
 
 
@@ -219,10 +213,20 @@ stop_station <- list(c("120S", "127S"),
 #                    "line" = c("1", "1","2","2","L","L"))
 ```
 
+### Multi-leg Trip
+
 ```{r test-chunk}
+# TEST DATA
+
+trains <- c("1", "2", "L")
+
+stop_station <- list(c("120S", "127S"),
+                      c("127S", "132S"),
+                      c("L02S", "L06S"))
 # list of data frames
 train_data <- list()
 
+# dataframe for each leg
 for (i in 1:length(trains)) {
   
   start <- stop_station[[i]][1]
@@ -251,9 +255,9 @@ test_df <- data.frame(d=numeric(N))
 # add column_names that are needed
 for (i in 1:length(trains)) {
   train <- trains[i]
-  test_df[[paste('train_id', i, train,  sep='_')]] <- numeric(N)
-  test_df[[paste('start_time', i, train, sep='_')]] <- numeric(N)
-  test_df[[paste('end_time', i, train, sep='_')]] <- numeric(N)
+  test_df[[paste('train_id_leg', i, 'train', train,  sep='_')]] <- numeric(N)
+  test_df[[paste('start_time_leg', i,'train', train, sep='_')]] <- numeric(N)
+  test_df[[paste('end_time_leg', i,'train', train, sep='_')]] <- numeric(N)
 }
 
 test_df <- subset(test_df, select = -c(d)) # %>% na.omit
@@ -321,11 +325,13 @@ while (i <= N) {
 
 for (i in 1:length(trains)) {
   train <- trains[i]
-  test_df[[paste('start_time', i, train, sep='_')]] <- as.POSIXct(test_df[[paste('start_time', i, train, sep='_')]], origin = "1970-01-01", tz = "UTC")
-  test_df[[paste('end_time', i, train, sep='_')]] <- as.POSIXct(test_df[[paste('end_time', i, train, sep='_')]], origin = "1970-01-01", tz = "UTC")
+  test_df[[paste('start_time_leg', i, 'train', train, sep='_')]] <- as.POSIXct(test_df[[paste('start_time_leg', i,'train', train, sep='_')]], origin = "1970-01-01", tz = "UTC")
+  test_df[[paste('end_time_leg', i, 'train', train, sep='_')]] <- as.POSIXct(test_df[[paste('end_time_leg', i,'train', train, sep='_')]], origin = "1970-01-01", tz = "UTC")
 }
 
-test_df$time_diff <- test_df[ncol(test_df)] - test_df[2]
+test_df$time_diff <-  test_df[,ncol(test_df)] - test_df[,2]
+
+# test_df$time_diff <- as.numeric(difftime(test_df[ncol(test_df)], leg1_data$trip_start_time[leg1_ptr]), units = "mins"))
 
 end.time <- Sys.time()
 time.taken <- end.time - start.time
@@ -339,18 +345,18 @@ plot_data %>% arrange(start_time) %>%
   ggplot(aes(color = route_mta_id)) +
   geom_segment(aes(x = start_time, xend = departure_time, y = itin, yend = itin)) +
   geom_text(aes(label = realtime_trip_id, x = start_time, y = itin)) +
-  ylim(c(0, 100))
+  ylim(c(0, 10))
 
 # ITINERARY PLOT
 test_df %>% mutate(itin = row_number()) %>%
   filter(itin <= 5) %>%
   ggplot() +
-    geom_segment(aes(x = start_time_1_1, xend = end_time_1_1, y = itin, yend = itin), color = 'red') +
-    geom_segment(aes(x = start_time_3_L, xend = end_time_3_L, y = itin, yend = itin), color = 'green') +
-    geom_segment(aes(x = start_time_2_2, xend = end_time_2_2, y = itin, yend = itin), color = 'blue') +
-    geom_text(aes(label = train_id_1_1, x = start_time_1_1, y = itin), color = "red") +
-    geom_text(aes(label = train_id_2_2, x = start_time_2_2, y = itin), color = "blue") +
-    geom_text(aes(label = train_id_3_L, x = start_time_3_L, y = itin), color = "green") + 
+    geom_segment(aes(x = start_time_leg_1_train_1, xend = end_time_leg_1_train_1, y = itin, yend = itin), color = 'red') +
+    geom_segment(aes(x = start_time_leg_3_train_L, xend = end_time_leg_3_train_L, y = itin, yend = itin), color = 'green') +
+    geom_segment(aes(x = start_time_leg_2_train_2, xend = end_time_leg_2_train_2, y = itin, yend = itin), color = 'blue') +
+    geom_text(aes(label = train_id_leg_1_train_1, x = start_time_leg_1_train_1, y = itin), color = "red") +
+    geom_text(aes(label = train_id_leg_2_train_2, x = start_time_leg_2_train_2, y = itin), color = "blue") +
+    geom_text(aes(label = train_id_leg_3_train_L, x = start_time_leg_3_train_L, y = itin), color = "green") + 
   ylim(c(0, 10))
 
 test_df %>% ggplot() +

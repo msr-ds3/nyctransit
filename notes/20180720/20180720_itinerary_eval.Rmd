@@ -220,6 +220,17 @@ stop_station <- list(c("120S", "127S"),
 ```
 
 ```{r test-chunk}
+
+# TEST DATA for itinerary
+test_data <- read_csv('../../data/sample_itinerary.csv')
+
+#filter out event 
+trains <- c("1", "2", "L")
+
+stop_station <- list(c("120S", "127S"),
+                      c("127S", "132S"),
+                      c("L02S", "L06S"))
+
 # list of data frames
 train_data <- list()
 
