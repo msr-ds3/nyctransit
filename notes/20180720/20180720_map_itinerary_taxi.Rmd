@@ -434,7 +434,7 @@ mta_igraph <- graph.data.frame(igraph_edges, directed=TRUE)
 k_num <- 3
 
 # find k_num shortest paths leading going from stop R13 to stop D05 
-k_shortest <- k_shortest_path(mta_igraph, from = "103", to = "103", k=k_num)
+k_shortest <- k_shortest_path(mta_igraph, from = "R13", to = "D05", k=k_num)
 k_shortest %>% View
 ```
 
