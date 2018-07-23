@@ -218,6 +218,7 @@ stop_station <- list(c("120S", "127S"),
 #                    "station"= c("120S", "127S","127S", "132S", "L02S", "L06S"),
 #                    "line" = c("1", "1","2","2","L","L"))
 ```
+### Multi-leg trip itinerary evaluation
 
 ```{r test-chunk}
 
@@ -256,157 +257,170 @@ test_train <- test_data %>%
   filter(event != "travel") %>%
   mutate(stop_station = paste(station, direction, sep=''))
 
+itin_max <- max(test_train$itinerary_id)
+result <- vector ("list", length = itin_max)
+# test_stops <- list()
+
+for (i in 1:itin_max) { 
+itin <- test_train %>% filter(itinerary_id == i)
+result[[i]] <- get_itinerary_times(itin) 
+print(result[[i]])
+}
+
+
 get_itinerary_times <- function(itinerary) {
+  trains <- itinerary %>% .$line %>% unique()
+  stops_data <- itinerary %>% select(leg, stop_station) %>% split(.$leg)
+  stop_station <- list()
   
-}
-# get trains for first itinerary
-trains <- test_train %>% filter(itinerary_id == 1) %>% .$line %>% unique()
-#stop_station <- list(c("120S", "127S"), c("127S", "132S"), c("L02S", "L06S"))
-# get stops for each leg of the trip
-test_stops <- test_train %>% filter(itinerary_id == 1) %>% select(leg, stop_station) %>% split(.$leg)
-stop_station <- list()
-# extract start and stop for each leg
-for (i in 1:length(trains)) {
-  stop_station[[i]] <- c(test_stops[[i]]$stop_station[1], test_stops[[i]]$stop_station[2])
-}
-
-# list of data frames
-train_data <- list()
-
-
-for (i in 1:length(trains)) {
+  len_trains <- length(trains)
+  # populate our stop_station list
+  for (i in 1:len_trains) {
+    stop_station[[i]] <- c(stops_data[[i]]$stop_station[1], stops_data[[i]]$stop_station[2])
+  }
   
-  start <- stop_station[[i]][1]
-  end <- stop_station[[i]][2]
-  lines <- trains[i]
+  # list of train data frames
+  train_data <- list()
   
-  # TODO: filter subway_data to get appropriate information for each train
-  leg_data <- get_leg_data(lines, start, end)
-  # append to list
-  # print(nrow(leg_data))
-  train_data[[i]] <- leg_data
-}
-
-N <- nrow(train_data[[1]])
-
-test_df <- data.frame(d=numeric(N))
-
-# add column_names that are needed
-for (i in 1:length(trains)) {
-  train <- trains[i]
-  test_df[[paste('leg', i, '_line', sep='')]] <- character(N)
-  test_df[[paste('leg', i, '_trip_id',  sep='')]] <- numeric(N)
-  test_df[[paste('leg', i, '_start_time', sep='')]] <- numeric(N)
-  test_df[[paste('leg', i, '_end_time', sep='')]] <- numeric(N)
-}
-
-test_df <- subset(test_df, select = -c(d)) # %>% na.omit
-# generate the values needed for each as a vector and rbind to add "rows" to our df
-
-i <- 1
-
-row_info <- list()
-
-start.time <- Sys.time()
-
-counters <- rep(1, length(trains))
-
-no_more_trips <- F
-waited_too_long <- F
-
-while (i <= N) {
-
-  end_time <- train_data[[1]]$departure_time[i]
-  row_info <- c(row_info,
-                as.character(train_data[[1]]$route_mta_id[i]),
-                train_data[[1]]$realtime_trip_id[i],
-                train_data[[1]]$start_time[i],
-                end_time)
-  
-  for (ii in 2:length(trains)) {
+  for (i in 1:len_trains) {
+    start <- stop_station[[i]][1]
+    end <- stop_station[[i]][2]
+    lines <- trains[i]
+    
+    leg_data <- get_leg_data(lines, start, end)
+    
     # NOTE: DEBUG CODE
-    # print(sprintf("ii = %d", ii))
-    # print(train_data[[ii]]$realtime_trip_id[counters[ii]])
-    # print(train_data[[ii]]$departure_time[counters[ii]])
-    # print(end_time)
-    while ((counters[ii] <= nrow(train_data[[ii]])) &
-           (train_data[[ii]]$start_time[counters[ii]] < end_time)) {
-      # NOTE: DEBUG CODE
-      # print(sprintf("counters[ii] = ", counters[ii]))
-      # print(sprintf("skipping train %s on leg %d", train_data[[ii]]$realtime_trip_id[counters[ii]], ii))
-      counters[ii] = counters[ii] + 1
-    }
+    # print(nrow(leg_data))
     
-    curr_idx <- counters[ii]
-    
-    # break out if this train_data doesn't exist
-    if(is.na(train_data[[ii]]$departure_time[curr_idx])) {
-      no_more_trips <- T
-      break
-    }
-    
-    # Added condition here to ignore trips where you wait at a station for more than an hour
-    if(train_data[[ii]]$departure_time[curr_idx] > end_time + 3600) {
-      waited_too_long <- T
-      break
-    }
-    
-    end_time <- train_data[[ii]]$departure_time[curr_idx]
+    # append to list
+    train_data[[i]] <- leg_data
+  }
+  
+  num_trains <- nrow(train_data[[1]])
+  
+  output_df <- data.frame(d=numeric(num_trains))
+  # format output_df with appropriate columns
+  for (i in 1:len_trains) {
+    train <- trains[i]
+    output_df[[paste('leg', i, '_line', sep='')]] <- character(num_trains)
+    output_df[[paste('leg', i, '_trip_id',  sep='')]] <- numeric(num_trains)
+    output_df[[paste('leg', i, '_start_time', sep='')]] <- numeric(num_trains)
+    output_df[[paste('leg', i, '_end_time', sep='')]] <- numeric(num_trains)
+  }
+  
+  output_df <- subset(output_df, select = -c(d))
+  
+  i <- 1
+  row_info <- list()
+  
+  # NOTE: DEBUG CODE
+  # start.time <- Sys.time()
+  
+  counters <- rep(1, len_trains)
+  
+  # set up flags
+  no_more_trips <- F
+  waited_too_long <- F
+  
+  while (i <= num_trains) {
+    end_time <- train_data[[1]]$departure_time[i]
     row_info <- c(row_info,
-                  as.character(train_data[[ii]]$route_mta_id[curr_idx]),
-                  train_data[[ii]]$realtime_trip_id[curr_idx],
-                  train_data[[ii]]$start_time[curr_idx],
+                  as.character(train_data[[1]]$route_mta_id[i]),
+                  train_data[[1]]$realtime_trip_id[i],
+                  train_data[[1]]$start_time[i],
                   end_time)
     
+    for (ii in 2:len_trains) {
+      # NOTE: DEBUG CODE
+      # print(sprintf("ii = %d", ii))
+      # print(train_data[[ii]]$realtime_trip_id[counters[ii]])
+      # print(train_data[[ii]]$departure_time[counters[ii]])
+      # print(end_time)
+      while ((counters[ii] <= nrow(train_data[[ii]])) &
+             (train_data[[ii]]$start_time[counters[ii]] < end_time)) {
+        # NOTE: DEBUG CODE
+        # print(sprintf("counters[ii] = ", counters[ii]))
+        # print(sprintf("skipping train %s on leg %d", train_data[[ii]]$realtime_trip_id[counters[ii]], ii))
+        counters[ii] = counters[ii] + 1
+      }
+      
+      curr_idx <- counters[ii]
+      
+      # break out if this train_data doesn't exist
+      if(is.na(train_data[[ii]]$departure_time[curr_idx])) {
+        no_more_trips <- T
+        break
+      }
+      
+      # Added condition here to ignore trips where you wait at a station for more than an hour
+      if(train_data[[ii]]$departure_time[curr_idx] > end_time + 3600) {
+        waited_too_long <- T
+        break
+      }
+      
+      end_time <- train_data[[ii]]$departure_time[curr_idx]
+      row_info <- c(row_info,
+                    as.character(train_data[[ii]]$route_mta_id[curr_idx]),
+                    train_data[[ii]]$realtime_trip_id[curr_idx],
+                    train_data[[ii]]$start_time[curr_idx],
+                    end_time)
+      
+      # NOTE: DEBUG CODE
+      # print(sprintf("Leg #%s\n", ii))
+      # print(row_info)
+    }
     
-    
-    # NOTE: DEBUG CODE
-    # print(sprintf("Leg #%s\n", ii))
-    # print(row_info)
+    if (no_more_trips == T) {
+      output_df[i, ] <- NA
+    } else if (waited_too_long == T) {
+      output_df[i, ] <- NA
+      # do nothing
+      waited_too_long = F
+    } else {
+      output_df[i, ] <- row_info
+    }
+    row_info <- list()
+    # increment i
+    i = i + 1
   }
   
-  if (no_more_trips == T) {
-    test_df[i, ] <- NA
-  } else if (waited_too_long == T) {
-    # do nothing
-    waited_too_long = F
-  } else {
-    test_df[i, ] <- row_info
+  output_df <- na.omit(output_df)
+  
+  for (i in 1:len_trains) {
+    train <- trains[i]
+    output_df[[paste('leg', i, '_start_time', sep='')]] <- as.POSIXct(output_df[[paste('leg', i, '_start_time', sep='')]],
+                                                                      origin = "1970-01-01", tz = "UTC")
+    output_df[[paste('leg', i, '_end_time', sep='')]] <- as.POSIXct(output_df[[paste('leg', i, '_end_time', sep='')]],
+                                                                    origin = "1970-01-01", tz = "UTC")
   }
-  row_info <- list()
-  # increment i
-  i = i + 1
+  
+  output_df$time_diff <- output_df[, ncol(output_df)] - output_df[, 3]
+  
+  return(output_df)
 }
+
 
 # remove any unused rows
 
+test_itin <- test_train %>% filter(itinerary_id == 1)
+test_df <- get_itinerary_times(test_itin)
 
-for (i in 1:length(trains)) {
-  train <- trains[i]
-  test_df[[paste('leg', i, '_start_time', sep='')]] <- as.POSIXct(test_df[[paste('leg', i, '_start_time', sep='')]],
-                                                                  origin = "1970-01-01", tz = "UTC")
-  test_df[[paste('leg', i, '_end_time', sep='')]] <- as.POSIXct(test_df[[paste('leg', i, '_end_time', sep='')]],
-                                                                origin = "1970-01-01", tz = "UTC")
-}
-
-test_df$time_diff <- test_df[, ncol(test_df)] - test_df[, 3]
-
-end.time <- Sys.time()
-time.taken <- end.time - start.time
-time.taken
+#end.time <- Sys.time()
+#time.taken <- end.time - start.time
+#time.taken
 
 # NOTE: DEBUG PLOT - show all trains individually on plot
 
 filtered_test_df <- test_df %>% filter(hour(leg1_start_time) >= 8 & hour(leg1_start_time) <= 9)
 
 
-plot_data <- bind_rows(train_data[[1]], train_data[[2]], train_data[[3]])
-plot_data %>% filter(month(start_time) == 2 & day(start_time) == 16 & hour(start_time) > 19 & hour(start_time) < 24) %>%
-  arrange(start_time) %>%
-  mutate(itin = row_number()) %>%
-  ggplot(aes(color = route_mta_id)) +
-  geom_segment(aes(x = start_time, xend = departure_time, y = itin, yend = itin)) +
-  geom_text(aes(label = realtime_trip_id, x = start_time, y = itin))
+# plot_data <- bind_rows(train_data[[1]], train_data[[2]], train_data[[3]])
+# plot_data %>% filter(month(start_time) == 2 & day(start_time) == 16 & hour(start_time) > 19 & hour(start_time) < 24) %>%
+#   arrange(start_time) %>%
+#   mutate(itin = row_number()) %>%
+#   ggplot(aes(color = route_mta_id)) +
+#   geom_segment(aes(x = start_time, xend = departure_time, y = itin, yend = itin)) +
+#   geom_text(aes(label = realtime_trip_id, x = start_time, y = itin))
 
 # ITINERARY PLOT
 filtered_test_df %>% mutate(itin = row_number()) %>%

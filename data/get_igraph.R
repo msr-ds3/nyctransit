@@ -113,9 +113,9 @@ station_weights <- realtime %>%
          hour(departure_time) %in% time_filter,
          day_of_week %in% day_filter) %>% 
   group_by(stop_mta_id, prev_stop_mta_id) %>% 
-  summarize(weight = mean(travel_time), sd = sd(travel_time, na.rm=TRUE),
+  summarize(weight = median(travel_time), sd = sd(travel_time, na.rm=TRUE),
             lower_quartile = quantile(travel_time, 0.25),
-            median = median(travel_time), upper_quartile = quantile(travel_time, 0.75))
+            mean = mean(travel_time), upper_quartile = quantile(travel_time, 0.75))
 
 ######### COMBINE STATION IDs ##############
 station_route_ids <- unique_sequences %>% 
