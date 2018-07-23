@@ -57,9 +57,9 @@ all_trips <- stop_times %>%
 
 transfer_sequences <- transfers %>% left_join(stops, by = c("to_stop_id" = "stop_id")) %>% 
   left_join(stops, by = c("from_stop_id" = "stop_id")) %>%
-  mutate(route_ids = "T", direction_id = "T", weight = min_transfer_time, sd = NA, lower_quartile = NA, median = NA, upper_quartile = NA) %>%
+  mutate(route_ids = "T", direction_id = "T", weight = min_transfer_time, sd = NA, lower_quartile = NA, mean = NA, upper_quartile = NA) %>%
   select(route_ids, direction_id, stop_id = to_stop_id, stop_name = stop_name.x, prev_stop_id = from_stop_id, 
-         prev_stop_name = stop_name.y, weight, sd, lower_quartile, median, upper_quartile)
+         prev_stop_name = stop_name.y, weight, sd, lower_quartile, mean, upper_quartile)
 
 #### Realtime Formatting
 
@@ -113,9 +113,9 @@ station_weights <- realtime %>%
          hour(departure_time) %in% time_filter,
          day_of_week %in% day_filter) %>% 
   group_by(stop_mta_id, prev_stop_mta_id) %>% 
-  summarize(weight = mean(travel_time), sd = sd(travel_time, na.rm=TRUE),
+  summarize(weight = median(travel_time), sd = sd(travel_time, na.rm=TRUE),
             lower_quartile = quantile(travel_time, 0.25),
-            median = median(travel_time), upper_quartile = quantile(travel_time, 0.75))
+            mean = mean(travel_time), upper_quartile = quantile(travel_time, 0.75))
 
 ######### COMBINE STATION IDs ##############
 station_route_ids <- unique_sequences %>% 
@@ -131,7 +131,7 @@ full_sequences <- station_route_ids %>%
   left_join(station_weights, by = c("stop_id" = "stop_mta_id", "prev_stop_id" =
                                       "prev_stop_mta_id"))%>%
   select(route_ids, direction_id, stop_id, stop_name, prev_stop_id, prev_stop_name, 
-         weight, sd, lower_quartile, median, upper_quartile)
+         weight, sd, lower_quartile, mean, upper_quartile)
 
 # Transfers already has weights from the min_transfer_time field (now renamed weight) so we rbind the two sequence objects
 full_sequences <- bind_rows(full_sequences, transfer_sequences)

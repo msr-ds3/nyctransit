@@ -1,100 +1,10 @@
 library(tidyverse)
 library(igraph)
+library(lubridate)
 
-#returns the shortest path from to 'to'
-#when there is no path returns null instead of warning message
-#also instead of returning vertex id, it returns vertex name
-shortestPath <- function(graph, from, to){
-  path <- tryCatch(get.shortest.paths(graph,from, to, mode = 'out', output = 'vpath'), warning = function(x) NULL)
-  names(unlist(path$vpath))
-}
+#### Load data
 
-#calculates the distance/length/sum of weights for a given path
-#the path should be a list of vertex names. e.g c('a','b','c') 
-distance <- function(graph, path) sum(E(graph, path=path)$weight)
-
-#sorts the path
-sortPath <- function(graph,paths) paths[paths %>% sapply(distance, graph=graph) %>% order]
-
-#yen doesnt work when from and to are the same node
-#this is due to the way get.shortest.paths works(it doesnt respect self loop edges)
-k_shortest.yen <- function(graph, from, to, k){
-  if (from == to) stop('from and to can not be the same(currently)!!!')
-  A <- list(shortestPath(graph,from,to))
-  if (k == 1) return (A)
-  B <- list()
-  for (k_i in 2:k){
-    for(i in 1:(length(A[[k_i-1]])-1)){
-      spurNode <- A[[k_i-1]][i]
-      rootPath <- A[[k_i-1]][1:i]
-      edgesToDelete <- list()
-      for (p in A){
-        if (all(p[1:i] == rootPath)) {
-          edge <- paste(p[i], ifelse(is.na(p[i+1]),p[i],p[i+1]), sep = '|')
-          edgesToDelete <- append(edgesToDelete, edge)
-        }
-      }
-      edgesToDelete <- unique(edgesToDelete)
-      t_g <- graph
-      for (edge in edgesToDelete){
-        t_g <- delete.edges(t_g, edge)
-      }
-      spurPath <- shortestPath(t_g,spurNode,to)
-      if (!is.null(spurPath)){
-        total_path <- c(rootPath[-i], spurPath)
-        total_path <- path_adjuster(graph, from, to, total_path)
-        total_path <- list(total_path)
-        if (!total_path %in% B && !total_path %in% A) B[length(B)+1] <- total_path
-      }
-    }
-    if (length(B) == 0) break
-    B <- sortPath(graph, B)
-    A[k_i] <- B[1]
-    B <- B[-1]
-  }
-  A
-}
-
-path_adjuster <- function(graph, from, to, path){
-  edges <- E(graph, path = path)
-  directions <- edges$direction_id
-  for (i in 1:(length(directions)-1))
-  {
-    if (directions[i] == 'T' && directions[i+1] == 'T'){
-      edge2remove <- paste(path[i], path[i+1], sep = '|')
-      graph <- delete.edges(graph,edge2remove)
-      path <- path_adjuster(graph, from,to,shortestPath(graph,from,to))
-      break
-    }
-  }
-  path
-}
-
-#extracts route_ids, and direction_id from path
-extract_data <- function(graph,i,path){
-  edges <- E(graph, path=path)
-  
-  direction <- edges$direction_id
-  direction <- c(direction,direction[length(direction)])
-  
-  line <- c(edges$route_ids,'end')
-  weight <- c(edges$weight, 'end')
-  
-  tibble(itinerary_id = i, station = path, line, direction, weight)
-}
-
-#combines paths into a tibble
-paths_to_tibble <- function(graph, paths) {
-  paths.asTibble <- 1:length(paths) %>%
-  lapply(function(i) extract_data(graph,i, paths[[i]])) %>%
-  reduce(rbind) 
-}
-
-#wrapper around yen, processes yen's result so the itinery functon can interact with it
-k_shortest_path <- function(graph, from, to, k) k_shortest.yen(graph, from, to, k) %>% paths_to_tibble(graph=graph) %>%
-  greedy(k)
-
-#for demo go to the demo folder 
+stops <- read_csv('../data/google_transit_subway_static/stops.txt')
 
 # time/day filtering happens in '../../data/get_igraph.R'
 # if necessary, change filters there and rerun script before running next line
@@ -154,9 +64,10 @@ greedy <- function(shortest_paths_df, num_itineraries){
   
 }
 
+
 ############ GET FORMATTED ITINERARIES #################
 
-get_itinerary_raw <- function(shortest_paths_df, stops) {
+get_itinerary <- function(shortest_paths_df, stops) {
   
   # new df for the formatted itineraries
   itinerary <- setNames(data.frame(matrix(ncol = 8, nrow = 0)),
@@ -257,8 +168,3 @@ get_itinerary_raw <- function(shortest_paths_df, stops) {
   
   return(itinerary)
 }
-
-get_itinerary <- function(graph, stops, from, to, k){
-  k_shortest_path(graph, from, to, k) %>% get_itinerary_raw(stops)
-}
-
