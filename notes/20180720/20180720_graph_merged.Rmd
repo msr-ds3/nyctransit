@@ -329,7 +329,7 @@ leaflet_multiple_maps <- function(itin_map_data, k_num){
 
 #### Test itinerary function
 ```{r}
-k_num <- 5
+k_num <- 10
 
 #Find k_num shortest paths leading going from stop R13 to stop D05 
 k_shortest <- k_shortest_path(mta_igraph, "A27", "132", k=k_num)

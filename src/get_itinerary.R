@@ -4,9 +4,8 @@ library(lubridate)
 
 #### Load data
 
-stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
-route <- read_csv('../../data/google_transit_subway_static/routes.txt')
-source('../../src/k_shortest.R')
+stops <- read_csv('../data/google_transit_subway_static/stops.txt')
+route <- read_csv('../data/google_transit_subway_static/routes.txt')
 
 # time/day filtering happens in '../../data/get_igraph.R'
 # if necessary, change filters there and rerun script before running next line
