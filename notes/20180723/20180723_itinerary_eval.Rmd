@@ -218,6 +218,7 @@ stop_station <- list(c("120S", "127S"),
 #                    "station"= c("120S", "127S","127S", "132S", "L02S", "L06S"),
 #                    "line" = c("1", "1","2","2","L","L"))
 ```
+### Multi-leg trip itinerary evaluation
 
 ```{r test-chunk}
 
@@ -255,6 +256,17 @@ test_data <- read_csv('../../data/sample_itinerary.csv')
 test_train <- test_data %>% 
   filter(event != "travel") %>%
   mutate(stop_station = paste(station, direction, sep=''))
+
+itin_max <- max(test_train$itinerary_id)
+result <- vector ("list", length = itin_max)
+# test_stops <- list()
+
+for (i in 1:itin_max) { 
+itin <- test_train %>% filter(itinerary_id == i)
+result[[i]] <- get_itinerary_times(itin) 
+print(result[[i]])
+}
+
 
 get_itinerary_times <- function(itinerary) {
   trains <- itinerary %>% .$line %>% unique()
