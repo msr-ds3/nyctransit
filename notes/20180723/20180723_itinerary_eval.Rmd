@@ -1,7 +1,7 @@
 ---
-title: "20180720_mta_triptime_distribution"
+title: "20180723_mta_triptime_distribution"
 author: "Phoebe Nguyen, Akbar Mirza"
-date: "July 20, 2018"
+date: "July 23, 2018"
 output: html_document
 ---
 
