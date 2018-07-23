@@ -1,0 +1,11 @@
+itinerary_id,station,line,direction,weight,leg,event,event_id,stop_name
+1,A27,T,T,300,0,transfer,0,42 St - Port Authority Bus Terminal
+1,127,2_3,S,125.659038326124,1,start_trip,1,Times Sq - 42 St
+1,128,2_3,S,174.851604339269,1,travel,2,34 St - Penn Station
+1,132,2_3,S,0,1,end_trip,3,14 St
+2,A27,A,S,137.902550522648,1,start_trip,1,42 St - Port Authority Bus Terminal
+2,A28,A,S,142.150836225939,1,travel,2,34 St - Penn Station
+2,A31,A,S,90,1,start_transfer,3,14 St
+2,L01,L,S,96.9706918416232,2,end_transfer,4,8 Av
+2,L02,L,S,180,2,start_transfer,5,6 Av
+2,132,,T,end,3,end_trip,6,14 St
