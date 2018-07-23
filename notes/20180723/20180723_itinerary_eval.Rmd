@@ -1,7 +1,7 @@
 ---
-title: "20180720_mta_triptime_distribution"
+title: "20180723_mta_triptime_distribution"
 author: "Phoebe Nguyen, Akbar Mirza"
-date: "July 20, 2018"
+date: "July 23, 2018"
 output: html_document
 ---
 
@@ -233,9 +233,9 @@ get_leg_data <- function(lines, start, end) {
   leg_data <- subway_data.2 %>%
     filter(stop_mta_id == start | stop_mta_id == end,
            route_mta_id %in% lines_list) %>%
-    # mutate(day_of_week = weekdays((departure_time)),
-    #        hour = hour(departure_time)) %>%
-    # filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
+    mutate(day_of_week = weekdays((departure_time)),
+           hour = hour(departure_time)) %>%
+    filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
     group_by(realtime_trip_id) %>%
     mutate(start_time = min(departure_time)) %>%
     filter(n() >= 2, stop_mta_id == end) %>%
@@ -256,21 +256,14 @@ test_train <- test_data %>%
   filter(event != "travel") %>%
   mutate(stop_station = paste(station, direction, sep=''))
 
-
-itin_max <- max(test_train$itinerary_id)
-
 get_itinerary_times <- function(itinerary) {
   
 }
-
 # get trains for first itinerary
-for (i in 1:itin_max) { 
-trains <- test_train %>% filter(itinerary_id == i) %>% .$line %>% unique()
+trains <- test_train %>% filter(itinerary_id == 1) %>% .$line %>% unique()
 #stop_station <- list(c("120S", "127S"), c("127S", "132S"), c("L02S", "L06S"))
 # get stops for each leg of the trip
-test_stops <- test_train %>% filter(itinerary_id == i) %>% select(leg, stop_station) %>% split(.$leg)
-}
-
+test_stops <- test_train %>% filter(itinerary_id == 1) %>% select(leg, stop_station) %>% split(.$leg)
 stop_station <- list()
 # extract start and stop for each leg
 for (i in 1:length(trains)) {
