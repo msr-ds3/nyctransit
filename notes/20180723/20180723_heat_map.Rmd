@@ -1,0 +1,65 @@
+---
+title: "Heat Map (we're trying)"
+author: "Sasha, Ayliana, Taxi"
+date: "July 23, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#### Load libraries
+```{r}
+library(tidyverse)
+library(igraph)
+library(leaflet)
+library(leaflet.extras)
+library(RColorBrewer)
+```
+
+#### Load data
+```{r cars}
+stations <- read_csv('http://web.mta.info/developers/data/nyct/subway/Stations.csv')
+stations <- stations %>%
+  select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, 
+         stop_lat = `GTFS Latitude`, stop_lon = `GTFS Longitude`)
+
+load('../../data/reverse_mta_igraph.RData')
+distance <- function(graph, path) sum(E(graph, path=path)$weight)
+```
+
+
+#### Stuff
+```{r}
+
+V(mta_igraph) %>% str
+pathsss <- get.all.shortest.paths(mta_igraph, "123", to=V(mta_igraph))
+map_data <- pathsss$res %>% lapply(function(x)data.frame(stop_id = names(x)[length(x)], distance = distance(mta_igraph, x), path = paste0(names(x), collapse = '>'))) %>%
+  reduce(rbind) 
+
+map_data <- map_data %>%
+  left_join(stops)
+
+clrs <- brewer.pal(5, "RdYlGn")
+
+pal <- colorNumeric(
+  palette = clrs,
+  domain = map_data$distance,
+  reverse = TRUE)
+
+
+leaflet(map_data) %>%
+  addTiles() %>%
+  setView(-74.00, 40.71, zoom = 12) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addCircleMarkers(~stop_lon, ~stop_lat,
+                   popup = paste("<b>", map_data$stop_name, "</b>",
+                                 "<br/>", map_data$distance/60, "mins"),
+                   radius = 5,
+                   color = ~pal(distance))
+
+
+
+```
