@@ -228,13 +228,13 @@ isWeekend <- function(day_of_week) {
 }
 
 # Helper Function To Get Leg Data
-get_leg_data <- function(lines, start, end, start_time) {
+get_leg_data <- function(lines, start, end) {
   
   lines_list <- first(strsplit(lines, split = "_"))
   leg_data <- subway_data.2 %>%
     filter(stop_mta_id == start | stop_mta_id == end,
-           route_mta_id %in% lines_list,
-           departure_time > start_time) %>%
+           route_mta_id %in% lines_list) %>%
+           # departure_time > start_time) %>%
     mutate(day_of_week = weekdays((departure_time)),
            hour = hour(departure_time)) %>%
     filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
@@ -252,12 +252,12 @@ get_leg_data <- function(lines, start, end, start_time) {
 
 
 
-get_itinerary_times <- function(itinerary, start_time) {
+get_itinerary_times <- function(itinerary) {
   
   # handle the initial transfer special case
   transfer_special_case <- itinerary %>% filter(leg == 0)
   print(transfer_special_case$weight)
-  transfer_time <- ifelse(nrow(transfer_special_case) == 0, 0, as.integer(transfer_special_case$weight))
+  # transfer_time <- ifelse(nrow(transfer_special_case) == 0, 0, as.integer(transfer_special_case$weight))
   
   # handle final transfer special case
   end_transfer_special_case <- itinerary %>% filter(event == "end_trip", direction == "T")
@@ -265,12 +265,12 @@ get_itinerary_times <- function(itinerary, start_time) {
   curr_itin <- itinerary %>% anti_join(transfer_special_case) %>% anti_join(end_transfer_special_case)
   print(nrow(curr_itin))
   
-  end_transfer_time <- ifelse(nrow(end_transfer_special_case) == 0, 0, as.integer(last(curr_itin$weight)))
+  # end_transfer_time <- ifelse(nrow(end_transfer_special_case) == 0, 0, as.integer(last(curr_itin$weight)))
   
   # adjust the start time to take into account that transfer time
-  adjusted_start <- as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC") +
-    as.integer(transfer_time)
-  print(adjusted_start)
+  # adjusted_start <- as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC") +
+  #   as.integer(transfer_time)
+  # print(adjusted_start)
   
   trains <- curr_itin %>% .$line %>% unique()
   # print(length(trains))
@@ -292,7 +292,7 @@ get_itinerary_times <- function(itinerary, start_time) {
     end <- stop_station[[i]][2]
     lines <- trains[i]
     
-    leg_data <- get_leg_data(lines, start, end, adjusted_start)
+    leg_data <- get_leg_data(lines, start, end)
     
     # NOTE: DEBUG CODE
     # print(nrow(leg_data))
@@ -406,9 +406,9 @@ get_itinerary_times <- function(itinerary, start_time) {
                                                                     origin = "1970-01-01", tz = "UTC")
   }
   
-  output_df$time_diff <- output_df[, ncol(output_df)] - as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC")
-  output_df$given_start_time <- as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC")
-  output_df$adjusted_end_time <- output_df[, ncol(output_df) - 2] + end_transfer_time
+  output_df$time_diff <- output_df[, ncol(output_df)] - output_df[, 3] # as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC")
+  # output_df$given_start_time <- as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC")
+  output_df$adjusted_end_time <- output_df[, ncol(output_df) - 1] # + end_transfer_time
   
   # filter out the beginning ti
   
@@ -440,7 +440,7 @@ test_train <- test_data %>%
 # remove any unused rows
 
 test_itin <- test_train %>% filter(itinerary_id == 2)
-test_df <- get_itinerary_times(test_itin, start_time = "2018-01-22 09:30:00")
+test_df <- get_itinerary_times(test_itin) # , start_time = "2018-01-22 09:30:00")
 
 #end.time <- Sys.time()
 #time.taken <- end.time - start.time
