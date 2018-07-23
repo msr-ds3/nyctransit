@@ -5,7 +5,6 @@ library(lubridate)
 #### Load data
 
 stops <- read_csv('../data/google_transit_subway_static/stops.txt')
-route <- read_csv('../data/google_transit_subway_static/routes.txt')
 
 # time/day filtering happens in '../../data/get_igraph.R'
 # if necessary, change filters there and rerun script before running next line
@@ -68,7 +67,7 @@ greedy <- function(shortest_paths_df, num_itineraries){
 
 ############ GET FORMATTED ITINERARIES #################
 
-get_itinerary <- function(shortest_paths_df) {
+get_itinerary <- function(shortest_paths_df, stops) {
   
   # new df for the formatted itineraries
   itinerary <- setNames(data.frame(matrix(ncol = 8, nrow = 0)),

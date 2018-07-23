@@ -91,18 +91,10 @@ paths_to_tibble <- function(graph, paths) {
 }
 
 #wrapper around yen, processes yen's result so the itinery functon can interact with it
-k_shortest_path <- function(graph, from, to, k) k_shortest.yen(graph, from, to, k) %>% paths_to_tibble(graph=graph)
-  
+k_shortest_path <- function(graph, from, to, k) k_shortest.yen(graph, from, to, k) %>% paths_to_tibble(graph=graph) %>%
+  greedy(k)
 
 #for demo go to the demo folder 
-
-
-#===============================================================================================================
-
-#### Load data
-
-stops <- read_csv('../data/google_transit_subway_static/stops.txt')
-route <- read_csv('../data/google_transit_subway_static/routes.txt')
 
 # time/day filtering happens in '../../data/get_igraph.R'
 # if necessary, change filters there and rerun script before running next line
@@ -162,10 +154,9 @@ greedy <- function(shortest_paths_df, num_itineraries){
   
 }
 
-
 ############ GET FORMATTED ITINERARIES #################
 
-get_itinerary <- function(shortest_paths_df) {
+get_itinerary_raw <- function(shortest_paths_df, stops) {
   
   # new df for the formatted itineraries
   itinerary <- setNames(data.frame(matrix(ncol = 8, nrow = 0)),
@@ -266,3 +257,8 @@ get_itinerary <- function(shortest_paths_df) {
   
   return(itinerary)
 }
+
+get_itinerary <- function(graph, stops, from, to, k){
+  k_shortest_path(graph, from, to, k) %>% get_itinerary_raw(stops)
+}
+
