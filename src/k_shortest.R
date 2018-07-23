@@ -42,7 +42,7 @@ k_shortest.yen <- function(graph, from, to, k){
       spurPath <- shortestPath(t_g,spurNode,to)
       if (!is.null(spurPath)){
         total_path <- c(rootPath[-i], spurPath)
-        total_path <- path_adjuster(t_g, from, to, total_path)
+        total_path <- path_adjuster(graph, from, to, total_path)
         total_path <- list(total_path)
         if (!total_path %in% B && !total_path %in% A) B[length(B)+1] <- total_path
       }
@@ -61,14 +61,15 @@ path_adjuster <- function(graph, from, to, path){
   for (i in 1:(length(directions)-1))
   {
     if (directions[i] == 'T' && directions[i+1] == 'T'){
-      graph <- delete.edges(graph,edges[i])
-      path <- shortestPath(graph,from,to)
+      edge2remove <- paste(path[i], path[i+1], sep = '|')
+      graph <- delete.edges(graph,edge2remove)
+      path <- path_adjuster(graph, from,to,shortestPath(graph,from,to))
+      break
     }
-    #print(directions)
-    #print(directions[i])
   }
   path
 }
+
 #extracts route_ids, and direction_id from path
 extract_data <- function(graph,i,path){
   edges <- E(graph, path=path)
@@ -77,8 +78,9 @@ extract_data <- function(graph,i,path){
   direction <- c(direction,direction[length(direction)])
   
   line <- c(edges$route_ids,'end')
+  weight <- c(edges$weight, 'end')
   
-  tibble(itinerary_id = i, station = path, line, direction)
+  tibble(itinerary_id = i, station = path, line, direction, weight)
 }
 #combines paths into a tibble
 paths_to_tibble <- function(graph, paths) {
