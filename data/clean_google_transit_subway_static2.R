@@ -1,9 +1,9 @@
 library(tidyverse)
 library(assertthat)
 library(geosphere)
-source('../src/taxi/Util/read.R')
-source('../src/taxi/Util/translate.R')
-source('../src/taxi/Util/time.R')
+source('../src/read.R')
+source('../src/translate.R')
+source('../src/time.R')
 
 #================================#
 #Load raw data(columns with all nas are removed automatically)
@@ -70,7 +70,7 @@ shapes_info <- shapes_info %>% translate(trips, shape_id, route_id,shape_id = ro
 #================================#
 #trip_edges: create edges, filters out the incomplete edges(at the end of a trip)
 trip_edges <- stop_times %>% group_by(trip_id) %>% mutate(nxt.stop_id = lead(stop_id),nxt.stop_id.u = lead(stop_id.u), nxt.arrival_time = lead(arrival_time)) %>%
-  filter(!is.na(nxt.stop_id))
+  filter(!is.na(nxt.stop_id)) %>% ungroup
 #trip_edges: adds time_diff column which is the time from when the train arrives at the current stop to when the train arrives at the next stop
 #trip_edges: adds time_diff_d column which is the time from when the train leaves the current stop to when it arrives at the next stop
 trip_edges <- trip_edges %>% mutate(time_diff = diff.time(arrival_time, nxt.arrival_time), time_diff_d = diff.time(departure_time, nxt.arrival_time))
