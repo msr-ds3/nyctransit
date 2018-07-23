@@ -124,7 +124,7 @@ k_shortest_path <- function(graph, from, to, k) k_shortest.yen(graph, from, to, 
 greedy <- function(shortest_paths_df, num_itineraries){
   all_lines <- vector(mode = "character")
   
-  for(i in 1:num_itineraries){
+  for(i in 1:max(shortest_paths_df$itinerary_id)){
     
     df <- shortest_paths_df %>% 
       filter(itinerary_id == i)
@@ -145,7 +145,7 @@ greedy <- function(shortest_paths_df, num_itineraries){
         
         if("T" %in% cur_line_ids){
           
-          shortest_paths_df[j,]$direction <- shortest_paths_df[j-1,]$direction
+          # df[j,]$direction <- df[j-1,]$direction
         }
         
         else{
@@ -170,6 +170,7 @@ greedy <- function(shortest_paths_df, num_itineraries){
   shortest_paths_df$line <- all_lines
   
   return(shortest_paths_df)
+  # return(all_lines)
 
 }
 
@@ -179,17 +180,17 @@ greedy <- function(shortest_paths_df, num_itineraries){
 #### Function to get formatted itineraries
 ```{r}
 
-get_itinerary <- function(shortest_paths_df, num_ititeraries) {
+get_itinerary <- function(shortest_paths_df) {
   
   # new df for the formatted itineraries
   itinerary <- setNames(data.frame(matrix(ncol = 7, nrow = 0)),
                               c("itinerary_id", "station", "line", "direction", "leg", "event", "event_id"))
   
   # get correct lines with greedy function
-  shortest_paths_df <- greedy(shortest_paths_df, num_ititeraries)
+  shortest_paths_df <- greedy(shortest_paths_df)
   
   # format each itinerary_id separately
-  for (i in 1:num_ititeraries) {
+  for (i in 1:max(shortest_paths_df$itinerary_id)) {
     df <- shortest_paths_df %>%
       filter(itinerary_id == i)
     
@@ -207,8 +208,12 @@ get_itinerary <- function(shortest_paths_df, num_ititeraries) {
       # next index
       j = k+1
       
+      if (df$direction[k] == "T" & k == 1) {
+        df$direction[k] <- "T"
+      }
+      
       # identify transfers
-      if (df$station[k] != df$station[j] & df$line[k] != df$line[j]) {
+      else if (df$station[k] != df$station[j] & df$line[k] != df$line[j]) {
         
         # identify an 'implicit transfer (e.g. transfer 120->120 from 1 to 2/3)
         if (df$line[j] != "") {
@@ -347,7 +352,7 @@ tile_maps <- function(itinerary) {
   map_df <- get_map_data(itinerary) %>%
       mutate(line = str_replace_all(line, "_", " "))
   
-  for(j in 1:k_num){
+  for(j in 1:max(itinerary$itinerary_id)){
     df <- map_df %>% filter(itinerary_id == j)
     
     map <- leaflet() %>%
@@ -357,7 +362,7 @@ tile_maps <- function(itinerary) {
       addCircleMarkers(df$stop_lon, df$stop_lat, 
                        color = df$route_color,
                        popup = paste("<b>", df$stop_name, "</b>", "<br/>", df$line),
-                       radius = 3) 
+                       radius = 4) 
     
     for (i in 1:nrow(df)){
       map <- map %>%
@@ -384,10 +389,10 @@ tile_maps <- function(itinerary) {
 ### *Tests*
 #### Run k shortest paths function
 ```{r}
-k_num <- 5
+k_num <- 4
 
 # find k_num shortest paths leading going from stop R13 to stop D05 
-k_shortest <- k_shortest_path(mta_igraph, from = "R13", to = "D05", k=k_num)
+k_shortest <- k_shortest_path(mta_igraph, from = "A27", to = "F14", k=k_num)
 
 as.data.frame(k_shortest)
 ```
@@ -395,7 +400,8 @@ as.data.frame(k_shortest)
 
 #### Get itinerary!
 ```{r test-get-itin}
-itin <- get_itinerary(k_shortest, k_num)
+greedy(k_shortest) %>% View
+itin <- get_itinerary(k_shortest)
 
 as.data.frame(itin)
 ```
