@@ -1,0 +1,51 @@
+---
+title: "20180720_timebased_edge_filter"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## library + functions
+```{r library}
+library(tidyverse)
+library(igraph)
+source('../../src/cache.R')
+source('../../src/translate.R')
+```
+
+```{r data}
+init_cache('../../cache/timebased_edge_filter')
+load('../../data/taxi_cleaned/taxi_cleaned.rdata')
+stations <- read_csv('http://web.mta.info/developers/data/nyct/subway/Stations.csv')
+```
+
+```{r}
+create_route_stops <- function() trip_edges %>% ungroup() %>% 
+  translate(trips, trip_id, route_id, trip_id = route_id) %>% select(route_id, stop_id.u, nxt.stop_id.u) %>%
+  distinct %>% gather(key ='c', value ='stop_id', stop_id.u, nxt.stop_id.u) %>% select(-c) %>% distinct %>% group_by(stop_id) %>%
+  summarize(route_ids = paste(route_id, collapse = ',')) 
+
+cache('route_stops')
+
+create_path_stops <- function() stop_times %>% select(trip_id, stop_id = stop_id.u) %>% translate(trips, trip_id, path_id, trip_id = path_id) %>% select(stop_id, path_id) %>% distinct %>% group_by(stop_id) %>% summarize(path_ids = paste0(path_id, collapse = ',')) %>% select(path_ids) %>% distinct()
+
+cache('path_stops')
+
+path_connectness <- path_stops %>% sapply(strsplit, split=',') %>% sapply(function(x) {
+  if(length(x) == 1) return(NULL)
+  permutations(n=length(x), r=2, v= x)
+}) %>% reduce(rbind) %>% as.tibble() %>%distinct
+
+
+z <- graph.data.frame(transfers) %>% decompose
+#the complex id does not always depict a transfer relationship
+transfer_groups <- 1:length(z) %>% lapply(function(i) tibble(group_id = i, stop_id = names(unlist(V(z[[i]]))))) %>% reduce(rbind)
+
+indices <- rep(1:nrow(transfers),2)
+indices <- indices[order(indices)]
+transfers.1 <- transfers[indices,]
+transfers.1[1:nrow(transfers.1) %% 2 ==1,] %>% View
+
+```
