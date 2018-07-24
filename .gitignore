@@ -3,3 +3,5 @@
 *.zip
 .ipynb_checkpoints
 .Rproj.user
+.RData
+cache

@@ -1,0 +1,101 @@
+---
+title: "Subway Data"
+author: "Amanda Rodriguez"
+date: "July 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(readr)
+library(tidyverse)
+# todd_subway_data <- read_csv("MTA Data/todd_subway_data.csv", col_types = cols(route_mta_id = col_factor(levels = NULL)))
+# save(todd_subway_data, file = "todd_subway_data.RData")
+
+load("../../data/todd_subway_realtime.RData")
+todd_subway_data <- realtime
+
+weather_2018 <- read_csv("../../data/weather_2018.csv")
+
+```
+
+```{r}
+# NYC Wait Time Distributions
+
+# Attempt 1
+library(lubridate)
+
+weather_2018 <- weather_2018 %>% mutate(ymd = as.POSIXct(DATE, format = "%Y-%m-%d"), date = yday(ymd))
+todd_subway_data <- todd_subway_data %>% mutate(date = yday(departure_time))
+
+filtered <- todd_subway_data %>% mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time)) %>% 
+  group_by(date, day, hour, stop_mta_id, route_mta_id) %>% 
+  summarise(exp_wait = sum(seconds_until_next_departure^2)/(2*sum(seconds_until_next_departure)), total_sec = sum(seconds_until_next_departure)) %>%
+  ungroup()
+```
+
+```{r model_generation}
+set.seed(16)
+model_data <- filtered %>% left_join(weather_2018)
+training_data <- sample_frac(model_data, 0.05)
+test_data <- anti_join(model_data, training_data)
+
+exp_wait_model <- lm(data = training_data, formula = exp_wait ~ stop_mta_id*PRCP + route_mta_id)
+training_data$predictions <- predict(exp_wait_model, training_data)
+training_data %>% gather(key = type, value = val, exp_wait, predictions) %>% select(type, val, PRCP) %>% filter(PRCP > 0.1) %>% group_by(type, PRCP) %>% summarize(avg_val = mean(val), num = n()) %>%
+  ggplot() +
+  geom_point(aes(PRCP, avg_val, color = type, size = num))
+
+prcp_interaction_model <- exp_wait_model
+summary(prcp_interaction_model)
+save(prcp_interaction_model, file = "prcp_model.RData")
+
+```
+
+```{r logistic_model}
+set.seed(16)
+model_data <- filtered %>% group_by(stop_mta_id, day, hour) %>% mutate(long_delay = ifelse(exp_wait > median(exp_wait), 1, 0)) %>% left_join(weather_2018) 
+training_data <- sample_frac(model_data, 0.05)
+test_data <- anti_join(model_data, training_data)
+
+logistic_model <- glm(data = training_data, formula = long_delay ~ stop_mta_id + route_mta_id + day + hour + PRCP, family="binomial")
+training_data$predictions <- predict(logistic_model, training_data, type="response")
+training_data %>% gather(key = type, value = val, long_delay, predictions) %>%
+  ggplot() +
+  geom_point(aes(hour, val, color = type))
+
+```
+
+```{r empirical_analysis}
+
+filtered %>% group_by(date) %>% summarize(avg_wait = mean(exp_wait)) %>% left_join(weather_2018) %>%
+  ggplot() +
+  geom_point(aes(PRCP, avg_wait)) + 
+  geom_smooth(aes(PRCP, avg_wait))
+
+```
+
+```{r glmnet_model}
+
+set.seed(16)
+model_data <- filtered %>% group_by(stop_mta_id, day, hour) %>% mutate(long_delay = ifelse(exp_wait > median(exp_wait), 1, 0)) %>% left_join(weather_2018) %>% ungroup()
+training_data <- sample_frac(model_data, .01)
+test_data <- anti_join(model_data, training_data)
+
+library(glmnet)
+
+training_data <- training_data %>% select(long_delay, stop_mta_id, route_mta_id, day, hour, PRCP) %>% na.omit()
+
+x <- model.matrix(long_delay ~ as.factor(stop_mta_id) + as.factor(route_mta_id) + as.factor(day) + as.factor(hour) + PRCP, data = training_data)[, -1]
+y <- training_data$long_delay
+
+logistic_model <- cv.glmnet(x=x, y=as.factor(y), family="binomial")
+training_data$prob <- as.numeric(predict(logistic_model, newx = x, type="response", s = "lambda.min"))
+
+training_data %>% gather(key = type, value = val, long_delay, prob) %>% group_by(hour, type) %>% summarize(avg = mean(val)) %>%
+  ggplot() +
+  geom_point(aes(hour, avg, color = type))
+
+```

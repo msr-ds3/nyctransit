@@ -1,0 +1,225 @@
+---
+title: "Subway Data"
+author: "Amanda Rodriguez"
+date: "July 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(zoo)
+library(glmnet)
+library(broom)
+
+# todd_subway_data <- read_csv("MTA Data/todd_subway_data.csv", col_types = cols(route_mta_id = col_factor(levels = NULL)))
+# save(todd_subway_data, file = "todd_subway_data.RData")
+load("~/Microsoft DS3/project/project data/todd_subway_data.RData")
+```
+
+```{r}
+# organize weather data and station level data 
+
+# load station_data from mta
+station_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
+# get stop_id and stop_name fields, and create a stop_id with N and S appended
+station_data <- station_data %>% 
+  rename(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, structure = `Structure`, 
+         lat = `GTFS Latitude`, long = `GTFS Longitude`) %>%
+  mutate(stop_id_N = sprintf('%sN', stop_id), stop_id_S = sprintf('%sS', stop_id)) %>%
+  gather(`stop_id_N`, `stop_id_S`, key = "stop_ids", value = "stop_id") %>%
+  select(stop_name, stop_id, structure, lat, long)
+
+# https://www.ncdc.noaa.gov/cdo-web/datatools/lcd         hourly weather data
+weather_2018 <- read_csv("~/Microsoft DS3/project/project data/weather_2018.csv") %>% 
+  mutate(ymd = as.Date(DATE), hour = hour(DATE)) %>%
+  select(ymd, DATE, hour, HOURLYPrecip)
+
+# replace T's, remove "s" from the end of entries, and remove NA
+weather_2018$HOURLYPrecip[weather_2018$HOURLYPrecip == "T"] <- "0.001" # T = trace amounts(drizzling)
+
+weather_2018$HOURLYPrecip  <- gsub("[^0-9\\.]","",weather_2018$HOURLYPrecip) # s = suspected precip
+
+weather_2018 <- weather_2018 %>% 
+  group_by(ymd) %>% arrange(ymd, hour) %>% 
+  mutate(HOURLYPrecip = na.approx(HOURLYPrecip, rule = 2)) %>%
+  ungroup()
+
+```
+
+```{r}
+# exp wait time for each station by station type for each day and hour
+todd_subway_data <- 
+  todd_subway_data[!(todd_subway_data$route_mta_id %in% c("GS","SS","FS","H","SI")), ] %>% # remove SI and shuttle trains
+  mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time))
+
+todd_and_stop_normal <- left_join(todd_subway_data, station_data, by = c("stop_mta_id" = "stop_id")) %>%
+  group_by(route_mta_id, stop_name) %>% 
+  mutate(count = n ()) %>% 
+  filter(count > 13000) %>% # get "normal" stops only
+  ungroup()
+ 
+exp_wait_time_by_station <- todd_and_stop_normal %>% 
+  group_by(ymd, day, hour, route_mta_id, stop_mta_id) %>% 
+  summarise(exp_wait = sum(seconds_until_next_departure^2)/(2*sum(seconds_until_next_departure))) %>%
+  ungroup()
+
+exp_wait_time_and_weather <- 
+  left_join(exp_wait_time_by_station, weather_2018, by = c("ymd", "hour")) %>%
+  left_join(station_data, by = c("stop_mta_id" = "stop_id"))
+
+```
+
+```{r}
+# correlations between precip and station
+corr <- exp_wait_time_and_weather %>% 
+  group_by(stop_name, stop_mta_id, route_mta_id) %>%
+  mutate(rho = cor(log(HOURLYPrecip + 1), exp_wait, use="complete.obs")) %>%
+  ungroup()
+
+# Top stops with wait time weather correlations
+exp_wait_time_and_weather %>% 
+  group_by(stop_name, stop_mta_id, route_mta_id) %>%
+  summarize(rho = cor(log(HOURLYPrecip + 1), exp_wait, use="complete.obs")) %>% 
+  arrange(desc(rho)) %>% View
+
+# correlation histgram 
+corr %>%
+  ggplot(aes(x=rho)) +
+  geom_histogram()
+
+# D train has the worst service when it rains; this is the worst stop
+corr %>% filter(route_mta_id == "D", stop_name == "50 St") %>%
+  ggplot(aes(x=HOURLYPrecip, y = exp_wait)) +
+  geom_point() + geom_smooth()
+```
+
+```{r}
+# wait time correlations by structure
+corr_structure <- exp_wait_time_and_weather %>% filter(HOURLYPrecip >0) %>%
+  group_by(structure) %>%
+  mutate(corr = cor(log(HOURLYPrecip+1), exp_wait, use="complete.obs"), num = n()) %>% 
+  arrange(desc(corr)) %>%
+  ungroup() 
+
+
+exp_wait_time_and_weather %>% 
+  group_by(structure) %>%
+  summarize(corr = cor(log(HOURLYPrecip + 1), exp_wait, use="complete.obs")) %>% 
+  arrange(desc(corr)) %>% View
+
+# correlation histgram 
+corr_structure %>%
+  ggplot(aes(x=corr)) +
+  geom_histogram()
+
+# corr for each structure
+corr_structure %>%  ggplot(aes(x=log(HOURLYPrecip + 1), y = exp_wait)) +
+  geom_point() + 
+  geom_smooth() + 
+  facet_wrap(~structure)
+```
+
+```{r}
+# plot this one
+# baseline model without precipitation 
+df <- exp_wait_time_and_weather %>% filter(month(ymd) == 4, day < 7 & day > 1, hour < 20 & hour > 6) %>% select(stop_mta_id, route_mta_id, day, hour, exp_wait, HOURLYPrecip, structure)
+
+# add station type
+x <- sparse.model.matrix(exp_wait ~ as.factor(stop_mta_id) + 
+                    as.factor(route_mta_id) + as.factor(day) + 
+                    as.factor(hour), data = df)
+y <- df$exp_wait
+
+
+model <- glmnet(x, y, alpha = 0 , lambda = 0)
+```
+
+```{r}
+# interaction of stop with log(precip)
+
+x1 <- sparse.model.matrix(exp_wait ~ as.factor(stop_mta_id)*log(HOURLYPrecip + 1) + 
+                    as.factor(route_mta_id) + as.factor(day) + 
+                    as.factor(hour), data = df)[, -1]
+
+model1 <- glmnet(x1, y, alpha = 0, lambda = 0) 
+
+```
+
+```{r}
+# plot this one
+# interaction of stop with precip 
+x2 <- sparse.model.matrix(exp_wait ~ as.factor(stop_mta_id)*HOURLYPrecip + 
+                    as.factor(route_mta_id) + as.factor(day) + 
+                    as.factor(hour), data = df)
+
+model2 <- glmnet(x2, y, alpha = 0, lambda = 0)
+model_df <- tidy(model2)
+
+model_df$term  <- gsub("[as.factor(stop_mta_id)]*","",model_df$term)
+
+model_df <- model_df %>% arrange(desc(estimate)) 
+
+model_df$term  <- substring(model_df$term, 1, 4) 
+
+model_df <- left_join(model_df, station_data, by = c("term" = "stop_id"))
+
+```
+
+```{r}
+# baseline model for structure
+
+x3 <- sparse.model.matrix(exp_wait ~ as.factor(structure) + log(HOURLYPrecip + 1) + 
+                    as.factor(day) + as.factor(hour), data = df)[, -1]
+
+model3 <- glmnet(x3, y, alpha = 0 , lambda = 0)
+
+df$model3 <- as.numeric(predict(model3, newx = x3))
+
+```
+
+```{r}
+# interaction with precip
+
+x4 <- sparse.model.matrix(exp_wait ~ as.factor(structure)*log(HOURLYPrecip + 1) + 
+                    as.factor(day) + as.factor(hour), data = df)[, -1]
+
+model4 <- glmnet(x4, y, alpha = 0 , lambda = 0)
+
+df$model4 <- as.numeric(predict(model4, newx = x4))
+
+df %>% 
+  ggplot(aes(x = log(HOURLYPrecip + 1), y = exp_wait)) + 
+  geom_smooth(aes(y = model4, color = "red")) +
+  geom_point() +
+  facet_wrap(~structure) 
+
+```
+
+```{r}
+library(rgeos)
+library(tigris)
+library(dplyr)
+library(leaflet)
+library(sp)
+library(ggmap)
+library(maptools)
+library(httr)
+library(rgdal)
+
+nyc_map <- get_map(location = c(lon = -73.98766, lat = 40.72595), maptype = "terrain", zoom = 11)
+
+ggmap(nyc_map) + 
+  geom_point(data=model_df, aes(x=long, y = lat, color = estimate)) + 
+  scale_color_gradient(low = "white", high = "red")
+
+ggplot(aes(x = estimate), data = model_df) + geom_histogram() + xlim(-500, 500)
+
+#model_df <- model_df %>% mutate(estimate = pmax(estimate, quantile(estimate, .75)))
+```

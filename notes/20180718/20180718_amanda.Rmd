@@ -1,0 +1,95 @@
+---
+title: "Subway Data"
+author: "Amanda Rodriguez"
+date: "July 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(igraph)
+library(tm)
+library(Matrix)
+library(glmnet)
+library(ROCR)
+library(broom)
+# todd_subway_data <- read_csv("MTA Data/todd_subway_data.csv", col_types = cols(route_mta_id = col_factor(levels = NULL)))
+# save(todd_subway_data, file = "todd_subway_data.RData")
+load("~/Microsoft DS3/project/project data/todd_subway_data.RData")
+```
+
+```{r}
+# Perform a regression using exp_wait times and other features
+
+# load station_data from mta
+station_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
+# get stop_id and stop_name fields, and create a stop_id with N and S appended
+station_data <- station_data %>% 
+  rename(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`) %>%
+  mutate(stop_id_N = sprintf('%sN', stop_id), stop_id_S = sprintf('%sS', stop_id)) %>%
+  gather(`stop_id_N`, `stop_id_S`, key = "stop_ids", value = "stop_id") %>%
+  select(stop_name, stop_id)
+
+#station_and_stop_data <- left_join(stop_times, station_data, by = c("stop_id" = "stop_id"))
+ 
+#todd_and_stop_data <- left_join(todd_subway_data, station_and_stop_data, by = c("stop_mta_id" = "stop_id"))
+
+todd_and_stop_data <- left_join(todd_subway_data, station_data, by = c("stop_mta_id" = "stop_id"))
+weather_2018 <- read_csv("~/Microsoft DS3/project/project data/weather_2018.csv") %>% select(DATE, PRCP, SNOW, SNWD, TMAX, TMIN)
+```
+
+```{r}
+# get df that has both exp wait time and weather data
+todd_and_stop_data <- 
+  todd_and_stop_data[!(todd_and_stop_data$route_mta_id %in% c("GS","SS","FS","H","SI")), ] %>%
+  mutate(ymd = as.Date(departure_time), hour = hour(departure_time), day = wday(departure_time, label = TRUE))
+  
+exp_wait_time_by_station <- todd_and_stop_data %>% 
+  group_by(ymd, day, hour, stop_mta_id, route_mta_id) %>% 
+  summarise(exp_wait = sum(seconds_until_next_departure^2)/(2*sum(seconds_until_next_departure)))
+
+exp_wait_time_and_weather <- left_join(exp_wait_time_by_station,weather_2018, by = c("ymd" = "DATE"))
+
+```
+
+```{r}
+set.seed(41815)
+sample <- sample.int(n = nrow(exp_wait_time_and_weather), 
+                     size = floor(.05*nrow(exp_wait_time_and_weather)), 
+                     replace = F)
+train <- exp_wait_time_and_weather[sample, ]
+test  <- exp_wait_time_and_weather[-sample, ]
+# best model without interactions
+model <- lm(exp_wait ~ PRCP + stop_mta_id + route_mta_id + day + hour, train) 
+summary(model)
+# PRCP coef is 11.83; although the model says PRCP is significant, PRCP only increases exp wait time by roughly 12 seconds
+
+# exp_wait ~ PRCP + stop_name + route_mta_id + day + hour + SNOW + SNWD + TMIN
+#                     0.09,       0.13,       0.15,  0.23,  0.23, 0.23, 0.23
+
+# without PRCP still 0.23 
+# without SNOW/ SNWD still 0.23 
+# PRCP and SNOW are interchangable
+```
+
+```{r}
+#df <-exp_wait_time_and_weather %>% select(PRCP, stop_mta_id, route_mta_id, day, hour)
+#df1 <- data.matrix(df)
+
+#set.seed(41815)
+#sample <- sample.int(n = nrow(exp_wait_time_and_weather), 
+#                     size = floor(.05*nrow(exp_wait_time_and_weather)), 
+#                     replace = F)
+#train <- exp_wait_time_and_weather[sample, ]
+#test  <- exp_wait_time_and_weather[-sample, ]
+# best model without interactions
+#model <- cv.glmnet(df1, exp_wait_time_and_weather$exp_wait, family = "binomial") 
+#summary(model)
+```

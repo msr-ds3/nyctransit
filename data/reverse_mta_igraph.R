@@ -67,7 +67,7 @@ realtime <- realtime %>%
   mutate(day_of_week = weekdays(departure_time),
          day_of_week = ifelse(day_of_week != "Saturday" & day_of_week != "Sunday",
                               "Weekday", day_of_week),
-         direction_id = ifelse(direction == 1, "N", "S"))
+         direction_id = ifelse(direction == 1, "S", "N"))
 
 ### RERUN FROM THIS POINT ON IF TIME/DAY FILTER CHANGES
 #### FILTERING FOR RARE TRIPS #####################
@@ -113,7 +113,7 @@ station_weights <- realtime %>%
          hour(departure_time) %in% time_filter,
          day_of_week %in% day_filter) %>% 
   group_by(stop_mta_id, prev_stop_mta_id) %>% 
-  summarize(weight = median(travel_time), sd = sd(travel_time, na.rm=TRUE),
+  summarize(weight = quantile(travel_time, .9), sd = sd(travel_time, na.rm=TRUE),
             lower_quartile = quantile(travel_time, 0.25),
             mean = mean(travel_time), upper_quartile = quantile(travel_time, 0.75))
 
@@ -142,8 +142,11 @@ full_sequences <- bind_rows(full_sequences, transfer_sequences)
 igraph_edges <- full_sequences %>%
   filter(!is.na(prev_stop_id), !is.na(weight)) %>%
   select(prev_stop_id, stop_id, weight, route_ids, direction_id, stop_name)
+  
+names(igraph_edges) <- c("stop_id", "prev_stop_id", "weight", "route_ids", "direction_id", "stop_name")
+  igraph_edges <- igraph_edges %>% select(prev_stop_id, stop_id, weight, route_ids, direction_id, stop_name)
 
 mta_igraph <- graph.data.frame(igraph_edges, directed=TRUE)
 
 ################# SAVE IGRAPH #################
-save(mta_igraph, file='mta_igraph.RData')
+save(mta_igraph, file='reverse_mta_igraph.RData')

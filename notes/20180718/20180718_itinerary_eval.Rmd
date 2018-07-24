@@ -1,0 +1,410 @@
+---
+title: "20180718_mta_triptime_distribution"
+author: "Phoebe Nguyen, Akbar Mirza"
+date: "July 18, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(ggthemes)
+
+# load todd's subway_data
+load(file = "../../data/todd_subway_realtime.RData")
+# NOTE: How We Get Subway_data_2
+# subway_data.2 <- subway_data %>%
+#   group_by(realtime_trip_id) %>%
+#   arrange(desc(departure_time)) %>%
+#   mutate(arrival_time=lead(departure_time)) %>%
+#   ungroup()
+#
+# save(subway_data.2, file = "../../data/todd_subway_realtime_2.RData")
+load(file = "../../data/todd_subway_realtime_2.RData")
+
+
+
+# load stop_times from GTFS Static
+stop_times <- read_csv("../../data/google_transit_subway_static/stop_times.txt")
+
+# load station_data from mta
+station_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
+# get stop_id and stop_name fields, and create a stop_id with N and S appended
+station_data <- station_data %>% group_by(`GTFS Stop ID`, `Stop Name`) %>%
+  select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`) %>%
+  mutate(stop_id_N = sprintf('%sN', stop_id), stop_id_S = sprintf('%sS', stop_id)) %>%
+  gather(`stop_id_N`, `stop_id_S`, key = "stop_ids", value = "stop_id") %>%
+  select(stop_name, stop_id)
+
+################################################################################
+# Getting Station Information
+################################################################################
+# Generate edges between stations
+trips <- stop_times %>% extract(trip_id, "route", regex=".*_.*_(.*)\\.\\..*", remove = FALSE)
+trip_edges <- trips %>% mutate(prev_stop_id = ifelse(lag(trip_id) == trip_id, lag(stop_id), NA))
+edges <- trip_edges %>% select(route, stop_id, prev_stop_id) %>% distinct()
+# create stations dataframe with line, stop_id, stop_name
+stations <- edges %>% left_join(station_data, by = c("stop_id"="stop_id")) %>% select(line=route, stop_id, stop_name)
+```
+
+## Introducing One Stop Transfer
+
+- Explore a slightly different route on this line that could use either the local or a combination of the local and express with a transfer in between(e.g., 18th to 96th st.)
+- Compare the distribution of trip times using the local to those using the local + express
+
+```{r compute-trip-time}
+
+# NOTE: DEBUG CODE
+start_station <- "120S"
+start_line <- "2"
+transfer_station <- "127S"
+transfer_line <- "1"
+end_station <- "131S"
+start_time <- "2018-01-20 09:30:00"
+
+compute_trip_time <- function (start_station, start_line, transfer_station, transfer_line, end_station, start_time) {
+
+    # find first trips on the start_line at the start_station that depart after start_time
+    first_trains <- subway_data.2 %>%
+      filter(stop_mta_id == start_station | stop_mta_id == transfer_station,
+             route_mta_id == start_line) %>%
+      filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
+      group_by(realtime_trip_id) %>%
+      mutate(count = n()) %>%
+      filter(count >= 2) %>%
+      ungroup() %>%
+      arrange(departure_time)
+    # ungroup and arrange by departure_time
+
+    # get the trip_id of the first trip after the depart_time
+    first_trip_id <- first(first_trains$realtime_trip_id)
+
+    # NOTE: arrival_time to first_train # 971896
+
+    # find the arrival time for trip_id at transfer station
+    transfer_arrival_time <- subway_data.2 %>%
+      filter(realtime_trip_id == first_trip_id,
+             stop_mta_id == transfer_station) %>%
+      .$arrival_time
+
+    # find the first trip on the transfer_line at the transfer_station that departs after the arrival_time of our express train
+    transfer_trains <- subway_data.2 %>%
+      filter(stop_mta_id == transfer_station | stop_mta_id == end_station,
+             route_mta_id == transfer_line) %>%
+      filter(ymd_hms(departure_time) > ymd_hms(transfer_arrival_time)) %>%
+      group_by(realtime_trip_id) %>%
+      mutate(count = n()) %>%
+      filter(count >= 2) %>%
+      ungroup() %>%
+      arrange(departure_time)
+      # note above
+
+    transfer_trip_id <- first(transfer_trains$realtime_trip_id)
+
+    # NOTE: arrival_time to transfer_train
+
+    # compute the time difference of when our train arrives at end_station and start_time
+    dest_arrival_time <- subway_data.2 %>%
+      filter(realtime_trip_id == transfer_trip_id,
+             stop_mta_id == end_station) %>%
+      .$arrival_time
+
+    time_diff <- as.numeric(difftime(ymd_hms(dest_arrival_time), ymd_hms(start_time)), units = "mins")
+
+     return(time_diff)
+#
+}
+#
+compute_trip_time("120S", "2", "127S", "1", "131S", "2018-01-22 09:30:00")
+
+```
+
+## Comparing Distributions of Local vs Local + Express
+
+### Computing Local + Express Wait Times On Large Scale Efficiently
+
+```{r example-for-trips}
+
+compute_itenerary_pair <- function(start_lines, end_lines, start_id, transfer_start_id, transfer_end_id, end_id, start_time) {
+
+  # TODO: filter subway_data to only trips within a certain time_interval
+
+  # get train information for start_lines at start_id
+  leg1_data <- subway_data.2 %>%
+    filter(stop_mta_id == start_id | stop_mta_id == transfer_start_id,
+           # TODO: modify filter to take multiple lines
+           route_mta_id == start_lines) %>%
+    group_by(realtime_trip_id) %>%
+    mutate(trip_start_time = min(departure_time)) %>%
+    # get rid of records for extra record at start stops
+    filter(n() >= 2, stop_mta_id == transfer_start_id) %>%
+    arrange(arrival_time)
+
+  leg2_data <- subway_data.2 %>%
+    filter(stop_mta_id == transfer_end_id | stop_mta_id == end_id,
+            # TODO: modify filter to take multiple lines
+            route_mta_id == end_lines) %>%
+    group_by(realtime_trip_id) %>%
+    mutate(trip_end_time = max(departure_time)) %>%
+    # get rid of records for extra record at start stops
+    filter(n() >= 2, stop_mta_id == transfer_end_id) %>%
+    arrange(departure_time)
+
+
+  leg1_ptr <- 1
+  leg2_ptr <- 1
+  # create vectors to store new info
+  diffs <- vector('numeric')
+  start_times <- vector('double')
+  transfer_arrival_times <- vector('double')
+  end_times <- vector('double')
+  transfer_departure_times <- vector('double')
+  realtime_start_ids <- vector('numeric')
+  realtime_end_ids <- vector('numeric')
+
+  while (leg1_ptr < nrow(leg1_data)) {
+
+    if (leg2_data$departure_time[leg2_ptr] > leg1_data$arrival_time[leg1_ptr]) {
+      # populate fields that will be used for our returned data_frame
+      realtime_start_ids <- c(realtime_start_ids, leg1_data$realtime_trip_id[leg1_ptr])
+      start_times <- c(start_times, leg1_data$trip_start_time[leg1_ptr])
+      transfer_arrival_times <- c(transfer_arrival_times, leg1_data$arrival_time[leg1_ptr])
+      realtime_end_ids <- c(realtime_end_ids, leg2_data$realtime_trip_id[leg2_ptr])
+      transfer_departure_times <- c(transfer_departure_times, leg2_data$departure_time[leg2_ptr])
+      end_times <- c(end_times, leg2_data$trip_end_time[leg2_ptr])
+      diffs <- c(diffs,
+                 as.numeric(difftime(leg2_data$trip_end_time[leg2_ptr],
+                                     leg1_data$trip_start_time[leg1_ptr]),
+                            units = "mins"))
+      
+      leg1_ptr = leg1_ptr + 1
+    } else {
+      leg2_ptr = leg2_ptr + 1
+    }
+  
+  }
+
+  new_df <- data.frame(start_trip_id = realtime_start_ids,
+                       starts = as.POSIXct(start_times, origin = "1970-01-01", tz = "UTC"),
+                       transfer_starts = as.POSIXct(transfer_arrival_times, origin = "1970-01-01", tz = "UTC"),
+                       end_trip_id = realtime_end_ids,
+                       transfer_ends = as.POSIXct(transfer_departure_times, origin = "1970-01-01", tz = "UTC"),
+                       ends = as.POSIXct(end_times, origin = "1970-01-01", tz = "UTC"),
+                       diffs = diffs)
+
+  return(new_df)
+}
+
+local_line <- "1"
+express_line <- "2"
+start_stop_id <- "120S"
+transfer_stop_id <- "127S"
+end_stop_id <- "131S"
+start_time <- "2018-01-20 09:30:00"
+
+# Getting 2 Trains
+data_2_train <- subway_data.2 %>%
+  filter(stop_mta_id == "120S" | stop_mta_id == "127S",
+         route_mta_id == "2") %>%
+  # filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
+  group_by(realtime_trip_id) %>%
+  mutate(start_time = min(departure_time)) %>%
+  filter(n() >= 2, stop_mta_id == "127S") %>%
+  arrange(arrival_time)
+
+# Getting 1 Trains
+data_1_train <- subway_data.2 %>%
+  filter(stop_mta_id == "127S" | stop_mta_id == end_stop_id,
+         route_mta_id == local_line) %>%
+  # filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
+  group_by(realtime_trip_id) %>%
+  mutate(end_time = max(departure_time)) %>%
+  filter(n() >= 2, stop_mta_id == "127S") %>%
+  arrange(departure_time)
+
+
+# NOTE: train 1 start time and train 2 end time for debugging and evaluating purposes
+i = 1
+j = 1
+times <- vector('numeric')
+start_times <- vector('double')
+transfer_arrival_times <- vector('double')
+end_times <- vector('double')
+transfer_departure_times <- vector('double')
+realtime_start_ids <- vector('numeric')
+realtime_end_ids <- vector('numeric')
+
+while (i < nrow(data_2_train)) {
+  if (data_1_train$departure_time[j] > data_2_train$arrival_time[i]) {
+    # df <- data.frame(trip_time = 0, start_trip = 0, end_trip = 0)
+    realtime_start_ids <- c(realtime_start_ids, data_2_train$realtime_trip_id[i])
+    start_times <- c(start_times, data_2_train$start_time[i])
+    transfer_arrival_times <- c(transfer_arrival_times, data_2_train$arrival_time[i])
+    realtime_end_ids <- c(realtime_end_ids, data_1_train$realtime_trip_id[j])
+    transfer_departure_times <- c(transfer_departure_times, data_1_train$departure_time[j])
+    end_times <- c(end_times, data_1_train$end_time[j])
+    times <- c(times, as.numeric(difftime(data_1_train$end_time[j], data_2_train$start_time[i]), units = "mins"))
+    i = i + 1
+  } else {
+    j = j + 1
+  }
+}
+
+# verify with real data
+new_df <- data.frame(start_trip_id = realtime_start_ids,
+                     starts = as.POSIXct(start_times, origin = "1970-01-01", tz = "UTC"),
+                     transfer_starts = as.POSIXct(transfer_arrival_times, origin = "1970-01-01", tz = "UTC"),
+                     end_trip_id = realtime_end_ids,
+                     transfer_ends = as.POSIXct(transfer_departure_times, origin = "1970-01-01", tz = "UTC"),
+                     ends = as.POSIXct(end_times, origin = "1970-01-01", tz = "UTC"),
+                     diffs = times)
+
+# Views to Verify Trips
+# ORIGINAL SUBWAY DATA
+subway_data %>% filter(realtime_trip_id == 3300 & stop_mta_id == "120S" | realtime_trip_id == 3327 & stop_mta_id == "131S") %>% View("subway_data 3300")
+# NEW DATA FRAME DATA
+new_df %>% filter(start_trip_id == 3300) %>% View("new_df 3300")
+
+test_df <- compute_itenerary_pair("2", "1", "120S", "127S", "127S", "131S", start_time)
+# TODO: figure out multiple transfers with multiple lists
+
+# PSEUDOCODE
+# # NOTE: adding third train to the loop
+# # parsing two rows for each train 
+# i = 1
+# j = 1
+# k = 1
+# counter_list <- c(i,j,k)
+
+
+test_df <- data.frame(d=1)
+
+trains <- c("1", "2", "L")
+
+stop_station <- list(c("120S", "127S"),
+                      c("127S", "132S"),
+                      c("L02S", "L06S"))
+
+counters <- rep(1, length(trains))
+
+# create data frame that we're going to use
+# test <- data.frame("itin_id" = c("1","1","1"), 
+#                    "station"= c("120S", "127S","127S", "132S", "L02S", "L06S"),
+#                    "line" = c("1", "1","2","2","L","L"))
+
+# add column_names that are needed
+for (train in trains) {
+  test_df[[paste(train, 'train_id', sep='_')]] <- NA
+  test_df[[paste(train, 'start_time', sep='_')]] <- NA
+  test_df[[paste(train, 'end_time', sep='_')]] <- NA
+}
+
+test_df <- subset(test_df, select = -c(d)) # %>% na.omit
+# generate the values needed for each as a vector and rbind to add "rows" to our df
+
+# list of data frames
+len <- length(trains)
+train_data <- list()
+
+for (i in 1:len) {
+  
+  start <- stop_station[[i]][1]
+  end <- stop_station[[i]][2]
+  
+  # TODO: filter subway_data to get appropriate information for each train
+  leg_data <- subway_data.2 %>%
+    filter(stop_mta_id == start | stop_mta_id == end,
+           # TODO: modify filter to take multiple lines
+           route_mta_id == trains[i]) %>%
+    group_by(realtime_trip_id) %>%
+    mutate(start_time = min(departure_time)) %>%
+    # get rid of records for extra record at start stops
+    filter(n() >= 2, stop_mta_id == end) %>%
+    arrange(arrival_time)
+  # append to list
+  print(nrow(leg_data))
+  train_data[[i]] <- leg_data
+}
+
+diffs <- vector('numeric')
+start_times <- vector('double')
+transfer_arrival_times <- vector('double')
+end_times <- vector('double')
+transfer_departure_times <- vector('double')
+realtime_start_ids <- vector('numeric')
+realtime_end_ids <- vector('numeric')
+
+i <- 1
+
+row_info <- list()
+
+while (i < nrow(train_data[[1]])) {
+  train_num <- trains[1]
+  # df[sprintf("%s_train_id"), train_num] <- train_data[1]$realtime_trip_id[i]
+  # df[sprintf("%s_start_time"), train_num] <- train_data[1]$start_time[i]
+  end_time <- train_data[[1]]$departure_time[i]
+  # df[sprintf("%s_end_time"), train_num] <- end_time
+  row_info <- c(row_info, train_data[[1]]$realtime_trip_id[i], train_data[[1]]$start_time[i], train_data[[1]]$departure_time[i])
+  
+  for (ii in 2:length(trains)) {
+    while (train_data[[ii]]$departure_time[counters[ii]] < end_time) {
+      counters[ii] = counters[ii] + 1
+    }
+    train_num_ii <- trains[ii]
+    curr_idx <- counters[ii]
+    # df[sprintf("%s_train_id"), train_num_ii] <- train_data[ii]$realtime_trip_id[curr_idx]
+    # df[sprintf("%s_start_time"), train_num_ii] <- train_data[ii]$start_time[curr_idx]
+    # end_time_ii <- train_data[ii]$departure_time[curr_idx]
+    # df[sprintf("%s_end_time"), train_num_ii] <- end_time_ii
+    row_info <- c(row_info, train_data[[ii]]$realtime_trip_id[curr_idx], train_data[[ii]]$start_time[curr_idx], train_data[[ii]]$departure_time[curr_idx])
+  }
+  test_df <- rbind(test_df, row_info)
+  row_info <- list()
+  # increment i
+  i = i + 1
+}
+
+# TODO: FIGURE OUT WHY THERE ARE DUPLICATES
+  
+  #  for ii in range(2, len(counter_list)+1):
+#    while data[ii][counter_list[ii]] < arrival_time:
+#      counter_list[ii] += 1
+#    #record when train ii leaves
+#    arrival_time = data[ii][counter_list[ii]]$end_time
+#    #record when train ii departs
+
+
+# #list of start_times 
+# for (x in counter_list) {
+#  add start_time_column to list of start times
+#  add end_time_column to list of end times
+#  add train_id column to list of train ids
+# }
+# 
+# times <- vector('numeric')
+# start_times <- vector('double')
+# # transfer_arrival_times.1 <- vector('double')
+# # transfer_arrival_times.2 <- vector('double')
+# end_times <- vector('double')
+# final_df <- c(start_time_train1, start_time_train2, start_time_train3)
+# # transfer_departure_times <- vector('double')
+# realtime_start_ids <- vector('numeric')
+# realtime_end_ids <- vector('numeric')
+# 
+# data is a list of dataframes, where data[i] corresponds to the ith train in the itinerary
+# 
+# while (i < nrow(data_1_train)) {
+#  record when train i leaves
+#  arrival_time = data_1[i]$end_time #record when train i arrives
+#  #put this in arrival_time_list for the 1 train
+#  for ii in range(2, len(counter_list)+1):
+#    while data[ii][counter_list[ii]] < arrival_time:
+#      counter_list[ii] += 1
+#    #record when train ii leaves
+#    arrival_time = data[ii][counter_list[ii]]$end_time
+#    #record when train ii departs
+# }
+
+```
