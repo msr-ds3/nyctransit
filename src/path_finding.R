@@ -16,12 +16,12 @@ add_path_attributes <- function(graph, id, path){
 
   line <- c(edges$route_ids,'end')
   weight <- c(edges$weight, 'end')
-
   tibble(itinerary_id = id, station = path, line, direction, weight)
 
 }
 
 combine_paths_to_tibble <- function(graph, paths){
+  if (is.null(paths[[1]])) return (NULL)
   1:length(paths) %>%
     lapply(function(i) add_path_attributes(graph,i, paths[[i]])) %>%
     reduce(rbind)
@@ -252,8 +252,13 @@ get_itinerary_raw <- function(shortest_paths_df, stops) {
 }
 
 get_itinerary <- function(graph, stops, src,dest, k){
- k_shortest_yen(graph, src, dest, k) %>% 
-    combine_paths_to_tibble(graph = graph) %>% 
-    greedy(k) %>%
-    get_itinerary_raw(stops)
+ path_tibble <- k_shortest_yen(graph, src, dest, k) %>% combine_paths_to_tibble(graph = graph) 
+ 
+ if (is.null(path_tibble)) {
+   warning(paste('No path between', src, dest))
+   return(NULL)
+   }
+ else {
+   return(greedy(path_tibble,k) %>% get_itinerary_raw(stops))
+   }
 }
