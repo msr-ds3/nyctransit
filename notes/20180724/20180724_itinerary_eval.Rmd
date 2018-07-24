@@ -304,15 +304,15 @@ test_train <- test_data %>%
   filter(event != "travel", itinerary_id < 4) %>%
   mutate(stop_station = paste(station, direction, sep=''))
 
-# # TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
-# itin_max <- max(test_train$itinerary_id)
-# result <- vector ("list", length = itin_max)
-# # test_stops <- list()
-# 
-# for (i in 1:itin_max) {
-#   itin <- test_train %>% filter(itinerary_id == i)
-#   result[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id=i)
-# }
+# TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
+itin_max <- max(test_train$itinerary_id)
+result <- vector ("list", length = itin_max)
+# test_stops <- list()
+
+for (i in 1:itin_max) {
+  itin <- test_train %>% filter(itinerary_id == i)
+  result[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id=i)
+}
 
 
 
@@ -330,8 +330,9 @@ filtered <- all_itin_df %>%
 filtered$itin_id <- as.factor(filtered$itin_id)
 
 filtered %>%
-  ggplot() +
-  geom_histogram(aes(x = time_diff, group=itin_id, col=itin_id, fill=itin_id))
+  ggplot(aes(x = time_diff, group=itin_id, col=itin_id, fill=itin_id)) +
+           geom_density(alpha = 0.5)
+  # geom_histogram(), position = "identity", alpha = 0.5)
 
 
 plot_data <- all_itin_df %>% 
