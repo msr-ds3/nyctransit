@@ -1,29 +1,114 @@
-library(tidyverse)
 library(igraph)
-library(lubridate)
+library(tidyverse)
 
-#### Load data
+shortest_name_path <- function(graph, src, dest){
+  path <- suppressWarnings(get.shortest.paths(graph, src, dest, mode = 'out', output = 'vpath'))
+  path <- names(path$vpath[[1]])
+  if (length(path)==1) return(NULL)
+  path
+}
 
-stops <- read_csv('../data/google_transit_subway_static/stops.txt')
+add_path_attributes <- function(graph, id, path){
+  edges <- E(graph, path = path)
 
-# time/day filtering happens in '../../data/get_igraph.R'
-# if necessary, change filters there and rerun script before running next line
+  direction <- edges$direction_id
+  direction <- c(direction, direction[length(direction)])
+
+  line <- c(edges$route_ids,'end')
+  weight <- c(edges$weight, 'end')
+  tibble(itinerary_id = id, station = path, line, direction, weight)
+
+}
+
+combine_paths_to_tibble <- function(graph, paths){
+  if (is.null(paths[[1]])) return (NULL)
+  1:length(paths) %>%
+    lapply(function(i) add_path_attributes(graph,i, paths[[i]])) %>%
+    reduce(rbind)
+}
+
+path_distance <- function(graph, path) sum(E(graph, path=path)$weight)
+
+sort_path <- function(graph,paths) paths[paths %>% sapply(path_distance, graph=graph) %>% order]
+
+find_edges_to_delete <- function(A, C,i,rootPath){
+  edgesToDelete <- list()
+  for (p in append(A,C)){
+    rootPath_p <- p[1:i]
+    if (all(rootPath_p == rootPath)){
+      edge <- paste(p[i], ifelse(is.na(p[i+1]),p[i],p[i+1]), sep = '|')
+      edgesToDelete <- append(edgesToDelete, edge)
+    }
+  }
+  unique(edgesToDelete)
+}
+
+check_for_double_transfer <- function(graph, path){
+  edges <- E(graph, path = path)
+  directions <- edges$direction_id
+  for (i in 1:(length(directions)-1))
+  {
+    if (directions[i] == 'T' && directions[i+1] == 'T') return (T)
+  }
+  F
+}
 
 
-########### GREEDY FUNCTION ###################
+k_shortest_yen <- function(graph, src, dest, k){
+  if (src == dest) stop('src and dest can not be the same (currently)')
+
+  #accepted paths
+  A <- list(shortest_name_path(graph, src, dest))
+  if (k == 1) return (A)
+  #potential paths
+  B <- list()
+  #accepted paths but invalid due to double transfer or any other reasons
+  C <- list()
+
+  for (k_i in 2:k){
+    prev_path <- A[[k_i-1]]
+    num_nodes_to_loop <- length(prev_path)-1
+    for(i in 1:num_nodes_to_loop){
+      spurNode <- prev_path[i]
+      rootPath <- prev_path[1:i]
+
+      edgesToDelete <- find_edges_to_delete(A,C, i,rootPath)
+      t_g <- graph
+      for (edge in edgesToDelete) t_g <- delete.edges(t_g, edge)
+
+      spurPath <- shortest_name_path(t_g,spurNode, dest)
+
+      if (!is.null(spurPath)){
+        total_path <- list(c(rootPath[-i], spurPath))
+        #check for double transfer
+        if (check_for_double_transfer(graph, total_path[[1]])){
+          C[length(C)+1] <- total_path
+        }else{
+          if (!total_path %in% B) B[length(B)+1] <- total_path
+        }
+        
+      }
+    }
+    if (length(B) == 0) break
+    B <- sort_path(graph, B)
+    A[k_i] <- B[1]
+    B <- B[-1]
+  }
+  A
+}
+
 greedy <- function(shortest_paths_df, num_itineraries){
   all_lines <- vector(mode = "character")
   
   for(i in 1:max(shortest_paths_df$itinerary_id)){
     
-    df <- shortest_paths_df %>% 
+    df <- shortest_paths_df %>%
       filter(itinerary_id == i)
     
     lines <- vector(mode = "character")
     
     # keep track of how many prev_line_ids to append
     r = 0
-    
     prev_line_ids <-  str_split(df$line[i], "_")[[1]]
     
     for (j in 1:nrow(df)) {
@@ -64,10 +149,7 @@ greedy <- function(shortest_paths_df, num_itineraries){
   
 }
 
-
-############ GET FORMATTED ITINERARIES #################
-
-get_itinerary <- function(shortest_paths_df, stops) {
+get_itinerary_raw <- function(shortest_paths_df, stops) {
   
   # new df for the formatted itineraries
   itinerary <- setNames(data.frame(matrix(ncol = 8, nrow = 0)),
@@ -120,7 +202,7 @@ get_itinerary <- function(shortest_paths_df, stops) {
         
         # identify an 'explicit' transfer (e.g. transfer R11->629 from N/R to 4)
         else {
-          df$line[j] <- df$line[k] 
+          df$line[j] <- df$line[k]
           df$leg[j] <- df$leg[k]
         }
         
@@ -151,7 +233,7 @@ get_itinerary <- function(shortest_paths_df, stops) {
     else{
       df$line[nrow(df)] <- ""
     }
-    df$event[nrow(df)] <- "end_trip" 
+    df$event[nrow(df)] <- "end_trip"
     df <- df %>% mutate(event_id = seq(1:nrow(df)))
     
     if(! is.null(first_row)){
@@ -167,4 +249,16 @@ get_itinerary <- function(shortest_paths_df, stops) {
     left_join((stops %>% select(stop_id, stop_name)), by=c("station" = "stop_id"))
   
   return(itinerary)
+}
+
+get_itinerary <- function(graph, stops, src,dest, k){
+ path_tibble <- k_shortest_yen(graph, src, dest, k) %>% combine_paths_to_tibble(graph = graph) 
+ 
+ if (is.null(path_tibble)) {
+   warning(paste('No path between', src, dest))
+   return(NULL)
+   }
+ else {
+   return(greedy(path_tibble,k) %>% get_itinerary_raw(stops))
+   }
 }
