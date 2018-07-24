@@ -12,7 +12,7 @@ library(lubridate)
 library(ggthemes)
 
 # load todd's subway_data
-load(file = "../../data/todd_subway_realtime.RData")
+#load(file = "../../data/todd_subway_realtime.RData")
 # NOTE: How We Get Subway_data_2
 # subway_data.2 <- subway_data %>%
 #   group_by(realtime_trip_id) %>%
@@ -72,7 +72,7 @@ plot_local_express <- function(local_line, express_line, start_stop_id, end_stop
   
   
   # local train
-  local_train <- subway_data %>%
+  local_train <- subway_data.2 %>%
     filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
            route_mta_id == local_line) %>%
     mutate(day_of_week = weekdays((departure_time)),
@@ -88,7 +88,7 @@ plot_local_express <- function(local_line, express_line, start_stop_id, end_stop
     ggplot(aes(x=diff)) + geom_histogram()
 
   # express train
-  express_train <- subway_data %>%
+  express_train <- subway_data.2 %>%
     filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
            route_mta_id == express_line) %>%
     mutate(day_of_week = weekdays(departure_time),
