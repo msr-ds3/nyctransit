@@ -24,6 +24,6 @@ to2 <- '123'
 
 # vertices <- V(graph)$name
 # vertices <- vertices[vertices != from]
-#for (i in vertices) k_shortest_yen(graph, from, i, 3)
+for (i in vertices) k_shortest_yen(graph, from, i, 3)
 
-get_itinerary(graph, stops, 'A27','132',10)
+#get_itinerary(graph, stops, 'A27','132',10)
