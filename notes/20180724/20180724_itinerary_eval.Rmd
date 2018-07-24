@@ -242,9 +242,9 @@ get_leg_data <- function(lines, start, end) {
     # filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
     # group_by trip_id's to ensure all our trips start and end at appropriate stations
     group_by(realtime_trip_id) %>%
-    mutate(start_time = min(departure_time)) %>%
-    filter(n() >= 2, stop_mta_id == end) %>%
+    mutate(start_time = min(departure_time), count = n()) %>%
     ungroup() %>%
+    filter(count >= 2, stop_mta_id == end) %>%
     arrange(arrival_time)
   
   return(leg_data)
@@ -299,11 +299,12 @@ get_itinerary_times <- function(itinerary) {
   # print(adjusted_start)
   
   trains <- curr_itin %>% .$line %>% unique()
+  len_trains <- length(trains)
   # print(length(trains))
   stops_data <- curr_itin %>% select(leg, stop_station) %>% split(.$leg)
-  stop_station <- list()
+  stop_station <- vector("list", len_trains)
   
-  len_trains <- length(trains)
+  
   # populate our stop_station list
   for (i in 1:len_trains) {
     stop_station[[i]] <- c(stops_data[[i]]$stop_station[1], stops_data[[i]]$stop_station[2])
@@ -311,7 +312,7 @@ get_itinerary_times <- function(itinerary) {
   print(stop_station)
   
   # list of train data frames
-  train_data <- list()
+  train_data <- vector("list", len_trains)
   
   for (i in 1:len_trains) {
     start <- stop_station[[i]][1]
@@ -484,10 +485,17 @@ test_df <- get_itinerary_times(test_itin) # , start_time = "2018-01-22 09:30:00"
 plot_distribution_for_itinerary(test_df)
 
 # NOTE: DEBUG CODE
-# start.time <- Sys.time()
-# end.time <- Sys.time()
-# time.taken <- end.time - start.time
-# time.taken
+start.time <- Sys.time()
+test_df <- get_itinerary_times(test_itin)
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
+
+start.time <- Sys.time()
+test_leg_data <- get_leg_data("A", "A27S", "A31S")
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
 
 # NOTE: DEBUG PLOT - show all trains individually on plot
 
