@@ -1,0 +1,156 @@
+---
+title: "Todd's plot on train wait time"
+output: html_document
+name:  "Peter Farquharson"
+---
+
+```{r, "loading in data"}
+
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+library(stats)
+library(base)
+library(readr)
+library(timeDate)
+library(tm)
+library(Matrix)
+library(glmnet)
+library(caret)
+library(zoo)
+
+#todd_data <- read_csv("subwaydata.csv")
+load( file="../../data/todd_subway_realtime.RData")
+todd_data <- realtime
+#weather <- read_csv("../../data/New_Weather.csv")
+weather <- read_csv("New_Weather.csv") 
+# * First, the plot of trains between stations over the course of a day (4th plot in post for May 16th) 
+# Then create the first two plots in the post, for subway wait time distributions and wait time by hour for a given line 
+
+
+```
+
+```{r, Predicting  }
+
+#Wednesday
+ 
+#Calculating exponential wait time
+data <- todd_data %>% filter(!is.na(route_mta_id)) %>% mutate(hour = hour(departure_time), date = as.Date(departure_time), week_day = wday(departure_time)) %>%
+  group_by(stop_mta_id, hour,week_day, date, route_mta_id) %>%
+  summarise(wait = sum(seconds_until_next_departure^2)/(2*sum(seconds_until_next_departure))) %>% mutate(exp_wait = wait/60) %>% ungroup()
+  
+  #select(stop_mta_id, week_day, exp_wait, date, route_mta_id) 
+
+ 
+#Joining with weather
+#new_data <-  data %>% mutate(long_delay = ifelse(exp_wait > median(exp_wait), 1 ,0)) %>%  left_join(weather, by = c("date" = "DATE")) %>% select(stop_mta_id, week_day, route_mta_id,exp_wait, PRCP, SNOW, SNWD,TMAX, TMIN, date, hour, long_delay) %>% ungroup() 
+#%>% filter(stop_mta_id == "101N") 
+
+#new_data %>% group_by(route_mta_id, stop_mta_id) %>% summarize(rho = cor(log(PRCP+1), exp_wait)) %>% mutate(magnitude =abs(rho)) %>% arrange(desc(rho)) %>% View()
+
+
+```
+
+```{r  , "Friday"}
+
+
+Weather <- weather %>%  mutate(ymd = as.Date(DATE), hour =  hour(DATE))
+#Replacing Ts
+
+
+Weather$HOURLYPrecip[Weather$HOURLYPrecip == "T"] <- 0.01
+
+Weather$HOURLYPrecip <- gsub("[^0-9]\\.","",Weather$HOURLYPrecip)
+
+#Interpolates Na values in between actual values
+new_weather <- Weather %>% group_by(ymd) %>%
+  arrange(ymd, hour) %>%
+  mutate(new_HOURLYPREP = na.approx(HOURLYPrecip, rule = 2)) 
+
+new_data <-  data  %>%  left_join(new_weather, by = c("date" = "ymd", "hour" = "hour")) %>% mutate(long_delay = ifelse(exp_wait > median(exp_wait), 1 ,0))
+
+april_data <- new_data %>% filter(month(date) == 4, week_day <7 & week_day >1,hour < 20 & hour > 6) %>% select(stop_mta_id, route_mta_id, date, hour, exp_wait, HOURLYPrecip) 
+
+
+#april_data <- new_data %>% filter(date >= "2018-04-01" & date <= "2018-04-30")
+
+```
+
+
+```{r , Plots }
+
+library(stats)
+
+#Precipitation on wait time
+ new_data  %>% filter(route_mta_id == "2") %>%
+    ggplot()+ geom_point(aes(x = new_HOURLYPREP, y =exp_wait)) + facet_wrap(~stop_mta_id)
+          
+                        
+
+#Plot for each day of the week
+new_data %>% ggplot() + geom_point(aes(x = new_HOURLYPREP, y = exp_wait)) + facet_wrap(~week_day)
+       
+                 
+      
+new_data %>% group_by(route_mta_id, stop_mta_id) %>% summarize(rho = cor(log(new_HOURLYPREP+1), exp_wait, use = "complete.obs"), num = n()) %>% mutate(magnitude =abs(rho)) %>% arrange(desc(rho)) %>% View()
+
+ 
+big_data <- left_join(new_data, new_stations, by = c("STATION_NAME", "stop_name"))
+
+```
+
+
+```{r }
+
+#Splitting into train and test
+set.seed(24)
+
+training_data <- april_data %>% sample_frac(0.5)
+test_data <- anti_join(april_data, training_data)
+
+#regression without precipitation included
+
+
+temp <- model.matrix(exp_wait ~ as.factor(stop_mta_id) + as.factor(route_mta_id)+ as.factor(hour) + as.factor(date), data = training_data)[, -1]
+
+temp2<- training_data$exp_wait
+
+regress <- glmnet(x=temp, y=temp2)
+#summary(regress)
+tidy(coef(regress, s = 0)) %>% View()
+
+
+#regression with precipitation included
+
+f <- as.formula(long_delay ~ as.factor(stop_mta_id) + new_HOURLYPREP + as.factor(stop_mta_id) + as.factor(route_mta_id)+ as.factor(hour) + as.factor(date))
+temp3 <-  model.matrix(f, data = training_data)[, -1]
+
+temp4 <- training_data$exp_wait
+
+regress2 <- glmnet(x = temp3, y =  temp4,  alpha = 0, lambda = 0)
+tidy(coef(regress2, s = 0)) %>% View()
+plot(regress, xvar = "lambda", label = TRUE)
+
+library(broom)
+
+
+
+#training_data <- training_data %>% select(long_delay, stop_mta_id, route_mta_id, day, hour, PRCP) %>% na.omit()
+
+#temp<- data2 %>% model.matrix(exp_wait~stop_mta_id, route_mta_id, week_day, hour, PRCP)
+#temp<- data2 %>% select(stop_mta_id, route_mta_id, week_day, hour, PRCP)
+#temp2 <- data.matrix(data %>% select(exp_wait))
+
+#temp <- model.matrix(long_delay ~ factor(stop_mta_id) + factor(route_mta_id) + factor(week_day) + factor(hour) + PRCP, data = training_data)
+
+#temp2<- training_data$long_delay
+
+
+#regress <- cv.glmnet(x=temp, y=as.factor(temp2), family="binomial")
+
+#training_data$prob <- as.numeric(predict(regress, newx = x, type="response", s ="0"))
+
+
+```

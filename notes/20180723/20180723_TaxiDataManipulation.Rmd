@@ -1,0 +1,182 @@
+---
+title: "20180723_TaxiDataManipulation"
+output: html_document
+---
+
+```{r , }
+
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+library(tigris)
+library(leaflet)
+library(sp)
+library(ggmap)
+library(maptools)
+library(broom)
+library(httr)
+library(rgdal)
+
+#Read in taxi data (older should have lat / lon, after that may just be "zones") 
+#Read in lat/long of subway stations
+
+load("one_week_taxi.Rdata")
+stop_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
+stations_S <- stop_data %>%
+  rename(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`) %>%
+  mutate(stop_mta_id = sprintf("%sS", stop_id))
+
+stations_N <- stop_data %>% rename(stop_id =`GTFS Stop ID`, stop_name = `Stop Name`) %>%
+  mutate(stop_mta_id = sprintf("%sN", stop_id))
+
+stations <- rbind(stations_S, stations_N)
+Stations <- stations %>% select(`GTFS Latitude`, `GTFS Longitude`, stop_id, stop_name, stop_mta_id)
+
+
+
+
+```
+
+```{r, "rounded lat/longs"}
+
+pickup_rounding_factor <- .002
+dropoff_rounding_factor <- .002
+ 
+
+taxi_clean <- taxi_clean %>% 
+  mutate(rounded_pickup_lat = ifelse(pickup_neighborhood == "John F. Kennedy International Airport" |
+rate_code == 2 , 40.641, ifelse(pickup_neighborhood =="LaGuardia Airport", 40.773,
+ round(pickup_latitude/pickup_rounding_factor)*pickup_rounding_factor)),
+ 
+
+rounded_pickup_lng = ifelse(pickup_neighborhood == "John F. Kennedy International Airport" |
+rate_code == 2 ,-73.777, ifelse(pickup_neighborhood =="LaGuardia Airport",-73.872,
+round(pickup_longitude/pickup_rounding_factor)*pickup_rounding_factor)),
+ 
+rounded_dropoff_lat = ifelse(dropoff_neighborhood == "John F. Kennedy International Airport" |
+          rate_code == 2 , 40.64, ifelse(dropoff_neighborhood =="LaGuardia Airport",40.77,
+          round(dropoff_latitude, dropoff_rounding_factor))),
+rounded_dropoff_lng = ifelse(dropoff_neighborhood == "John F. Kennedy International Airport" |
+  rate_code == 2 ,-73.78, ifelse(dropoff_neighborhood =="LaGuardia Airport", -73.87,
+                                 round(dropoff_longitude, dropoff_rounding_factor))))
+ 
+ 
+#temp <- taxi_clean %>% select(pickup_hour, dropoff_hour, rounded_pickup_lat, rounded_pickup_lng, rounded_dropoff_lat,rounded_dropoff_lng)
+
+
+```
+
+
+```{r , }
+#Find taxis that pick up and depart within some distance of subway station on each end (need to decide on granularity) 
+
+
+
+taxi_clean_sep <- taxi_clean %>% separate(col = pickup_datetime, into = c("pickup_date", "pickup_time"), sep = " ") %>% separate(col = dropoff_datetime, into = c("dropoff_date", "dropoff_time"), sep = " ") %>% mutate(alt_pickuptime = hms(pickup_time), alt_dropofftime = hms(dropoff_time), diff_between_pickup_dropoff= alt_dropofftime - alt_pickuptime) 
+
+
+Station_A <- "123" #72nd
+Station_B <- "132" #14th
+
+Station_A_lat <- 40.77845
+Station_A_long <- -73.98197
+
+Station_B_lat <- 40.73783
+Station_B_long <- -74.0002
+
+
+calc <- taxi_clean  %>%  mutate(dist = sqrt((Station_A_lat - pickup_latitude)^2 + (Station_A_long - pickup_longitude)^2), dist2 = sqrt((Station_B_lat - dropoff_latitude)^2 + (Station_B_long - dropoff_longitude)^2)) %>% filter(dist < 0.002 & dist2 < 0.002)
+
+
+leaflet(calc) %>% addTiles() %>% setView(-74.04, 40.72, zoom = 12) %>%
+  addCircleMarkers(calc$pickup_longitude, calc$pickup_latitude, color = "Blue")%>%
+addCircleMarkers(calc$dropoff_longitude, calc$dropoff_latitude, color = "Red")
+  
+
+#Compute trip time 
+#Compare to subway 
+#Highlight JFK (which has airtrain) and compare to LGA (which has planned 8 min airtrain) from different points in the city 
+
+
+
+```
+
+```{r , "Computing distance using a function"}
+
+compute_distance <-function(LatA, LonA, LatB, LonB){
+  
+  
+  temp <- taxi_clean  %>%  mutate(dist = sqrt((Station_A_lat - LatA)^2 + (Station_A_long - LonA)^2), dist2 = sqrt((Station_B_lat - LatB)^2 + (Station_B_long - LonB)^2)) %>% filter(dist < 0.002 & dist2 < 0.002)
+
+
+plot <- leaflet(temp) %>% addTiles() %>% setView(-74.04, 40.72, zoom = 12) %>%
+  addCircleMarkers(calc$pickup_longitude, calc$pickup_latitude, color = "Blue")%>%
+addCircleMarkers(calc$dropoff_longitude, calc$dropoff_latitude, color = "Red")
+
+return (plot)
+  
+}
+
+compute_distance(40.75467,-73.98675, 40.74104,-73.99787)
+
+#Times SQ = latitude =40.75467, longtitude = -73.98675
+#18th Street = latitude = "40.74104 , longitude = -73.99787
+
+```
+
+```{r, "function for statistics"  }
+
+#trip_time_in_secs
+
+statistics <- function(LatA, LonA, LatB, LonB){
+  
+   calc <- taxi_clean  %>%  mutate(dist = sqrt((LatA - pickup_latitude)^2 + (LonA - pickup_longitude)^2), dist2 = sqrt((LatB - dropoff_latitude)^2 + (LonB - dropoff_longitude)^2)) %>% filter(dist < 0.002 & dist2 < 0.002)
+  
+   
+   func_calc <- calc  %>% separate(col = pickup_datetime, into = c("pickup_date", "pickup_time"), sep = " ") %>%
+separate(col = dropoff_datetime, into = c("dropoff_date", "dropoff_time"), sep = " ")   %>% group_by(day_of_the_week) %>%
+  summarize(count = n(), median = median(trip_time_in_secs), upper_quartile = quantile(trip_time_in_secs, 0.9), lower_quartile = quantile(trip_time_in_secs, 0.1), quart_quartile = quartile(trip_time_in_secs, .25), seventh_quartile = quantile(trip_time_in_secs, .75)) 
+  
+   return(func_calc)
+  
+}
+LatA<- 40.75467
+LonA<--73.98675
+LatB<- 40.74104
+LonB<- -73.99787
+
+#Times_SQ --> 18th Street
+statistics(40.75467,-73.98675, 40.74104,-73.99787) 
+
+
+func_calc <- calc  %>% separate(col = pickup_datetime, into = c("pickup_date", "pickup_time"), sep = " ") %>%
+separate(col = dropoff_datetime, into = c("dropoff_date", "dropoff_time"), sep = " ")   %>% group_by(day_of_the_week) %>%
+  summarize(count = n(), median = median(trip_time_in_secs)/60, upper_quartile = quantile(trip_time_in_secs, 0.9)/60, lower_quartile = quantile(trip_time_in_secs, 0.1/60), quart_quartile = quantile(trip_time_in_secs, .25)/60, seventh_quartile = quantile(trip_time_in_secs, .75)/60) 
+
+func_calc %>% ggplot(aes(x = day_of_the_week, y = median,group = 1)) + geom_line() + geom_ribbon(aes(ymin = lower_quartile, ymax = upper_quartile), fill = "grey80") 
+
+
+
+
+```
+
+
+```{r ,"Exploration and airtrain"}
+
+#Brooklyn Bridge to JFK
+
+statistics(40.75467,-73.98675, 40.6438, -73.7823)
+
+
+
+
+
+
+
+
+````
+
+

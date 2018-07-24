@@ -13,8 +13,8 @@ library(ggplot2)
 library(tidyr)
 library(stats)
 
-load( file="../../data/todd_subway_realtime.RData")
-todd_data <- realtime
+load( file="~/todd_data.RData")
+stop_times <- read.csv("stop_times.txt")
 
 # * First, the plot of trains between stations over the course of a day (4th plot in post for May 16th) 
 # Then create the first two plots in the post, for subway wait time distributions and wait time by hour for a given line 
