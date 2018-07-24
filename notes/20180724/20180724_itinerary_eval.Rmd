@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
 library(ggthemes)
+library(ROCR)
 
 # load todd's subway_data
 # load(file = "../../data/todd_subway_realtime.RData")
@@ -66,9 +67,9 @@ get_leg_data <- function(lines, start, end) {
     filter(stop_mta_id == start | stop_mta_id == end,
            route_mta_id %in% lines_list) %>%
     # departure_time > start_time) %>%
-    # mutate(day_of_week = weekdays((departure_time)),
-    #        hour = hour(departure_time)) %>%
-    # filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
+    mutate(day_of_week = weekdays((departure_time)),
+           hour = hour(departure_time)) %>%
+    filter(isWeekend(day_of_week) == F, hour >= 7, hour < 10) %>%
     # group_by trip_id's to ensure all our trips start and end at appropriate stations
     group_by(realtime_trip_id) %>%
     mutate(start_time = min(departure_time), count = n()) %>%
@@ -293,9 +294,9 @@ plot_distribution_for_itinerary <- function(itin_time_df) {
 # TEST DATA for itinerary
 
 # test_data <- read_csv('../../data/sample_itinerary.csv')
-
+# test_data <- read_csv('../../data/itineraries-Phoebe-train.csv')
 # test_data <- read_csv('../20180723/20180723_edge_case_sample_itinerary.csv')
-test_data <- read_csv('../../data/itineraries_1_train.csv') 
+test_data <- read_csv('../../data/itineraries-1-train.csv') 
 
 
 # filter out event and adding direction to station id  
@@ -316,24 +317,47 @@ for (i in 1:itin_max) {
 
 
 # remove any unused rows
-# test_itin <- test_train %>% filter(itinerary_id == 2)
+test_itin <- test_train %>% filter(itinerary_id == 2)
 # test_df <- get_itinerary_times(test_itin) # , start_time = "2018-01-22 09:30:00")
 
+all_itin_df <- bind_rows(result)
 
-plot_distribution_for_itinerary(test_df)
+filtered <- all_itin_df %>%
+  mutate(day_of_week = weekdays(leg1_start_time),
+         hour = hour(leg1_start_time)) %>%
+  filter(isWeekend(day_of_week) == F,
+         hour >= 7 & hour < 10)
+filtered$itin_id <- as.factor(filtered$itin_id)
+
+filtered %>%
+  ggplot(aes(x = time_diff, group=itin_id, col=itin_id, fill=itin_id)) +
+           geom_density(alpha = 0.5)
+  # geom_histogram(), position = "identity", alpha = 0.5)
+
+
+plot_data <- all_itin_df %>% 
+  mutate(day_of_week = weekdays(leg1_start_time),hour = hour(leg1_start_time)) %>%
+  filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
+  group_by(itin_id) %>%
+  mutate(avg= mean(time_diff), stdv= sd(time_diff))
+
+
+# plot_distribution_for_itinerary(test_df)
 
 # NOTE: DEBUG CODE
 start.time <- Sys.time()
-test_df <- get_itinerary_times(test_itin)
+new_test_df <- get_itinerary_times(test_itin)
 end.time <- Sys.time()
 time.taken <- end.time - start.time
 time.taken
 
-start.time <- Sys.time()
-test_leg_data <- get_leg_data("A", "A27S", "A31S")
-end.time <- Sys.time()
-time.taken <- end.time - start.time
-time.taken
+# save(test_df, file = "test_df_with_orig_method.RData")
+
+# start.time <- Sys.time()
+# test_leg_data <- get_leg_data("A", "A27S", "A31S")
+# end.time <- Sys.time()
+# time.taken <- end.time - start.time
+# time.taken
 
 # NOTE: DEBUG PLOT - show all trains individually on plot
 
@@ -365,9 +389,6 @@ time.taken
 
 ```{r Frontier plot}
 #Frontier plot
-frontier_df <- bind_rows(result)
-
-plot_data <- frontier_df %>% group_by(itin_id) %>% mutate(avg= mean(time_diff), stdv= sd(time_diff))
 
 plot_data %>% ggplot(aes(x= stdv, y= avg)) + 
   geom_point() +
@@ -378,4 +399,15 @@ plot_data %>% ggplot(aes(x= stdv, y= avg)) +
 
 ```{r AUC}
 # pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
-# or pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
+# or  with the pROC package: as.numeric(auc(response = actual, predictor = predicted))
+# itinerary is the actual value, trip time is the predicted value
+
+auc_df <- all_itin_df %>% filter(itin_id == 1 | itin_id == 3) %>% select(itin_id, time_diff)
+
+pred <- prediction(as.numeric(auc_df$time_diff, units = "mins"), as.factor(auc_df$itin_id))
+
+perf_nb <- performance(pred, 'auc')@y.values[[1]]
+performance(pred, 'auc')
+
+```
+taking random trips from itinerary 1 and itinerary 3, 75% of the time trip time of itin 1 will be shorter than trip time of itin 3.
