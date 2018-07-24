@@ -107,6 +107,7 @@ get_leg_data <- function(lines, start, end) {
 #   }
 #       
 # }
+
 get_itinerary_times <- function(itinerary) {
   
   # handle the initial transfer special case
@@ -160,7 +161,9 @@ get_itinerary_times <- function(itinerary) {
   num_trains <- nrow(train_data[[1]])
   
   output_df <- data.frame(d=numeric(num_trains))
+  
   # format output_df with appropriate columns
+  
   for (i in 1:len_trains) {
     train <- trains[i]
     output_df[[paste('leg', i, '_line', sep='')]] <- character(num_trains)
@@ -290,28 +293,32 @@ plot_distribution_for_itinerary <- function(itin_time_df) {
 # TEST DATA for itinerary
 
 # test_data <- read_csv('../../data/sample_itinerary.csv')
-test_data <- read_csv('./itineraries-1-train.csv')
+
+# test_data <- read_csv('../20180723/20180723_edge_case_sample_itinerary.csv')
+test_data <- read_csv('../../data/itineraries_1_train.csv') 
+
 
 # filter out event and adding direction to station id  
 test_train <- test_data %>% 
-  filter(event != "travel") %>%
+  filter(event != "travel", itinerary_id < 4) %>%
   mutate(stop_station = paste(station, direction, sep=''))
 
 # TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
-# itin_max <- max(test_train$itinerary_id)
-# result <- vector ("list", length = itin_max)
-# # test_stops <- list()
-# 
-# for (i in 1:itin_max) { 
-#   itin <- test_train %>% filter(itinerary_id == i)
-#   result[[i]] <- get_itinerary_times(itin, start_time = "2018-01-20 09:30:00") 
-#   print(result[[i]])
-# }
+itin_max <- max(test_train$itinerary_id)
+result <- vector ("list", length = itin_max)
+# test_stops <- list()
+
+for (i in 1:itin_max) {
+  itin <- test_train %>% filter(itinerary_id == i)
+  result[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id=i)
+}
+
+
 
 # remove any unused rows
+# test_itin <- test_train %>% filter(itinerary_id == 2)
+# test_df <- get_itinerary_times(test_itin) # , start_time = "2018-01-22 09:30:00")
 
-test_itin <- test_train %>% filter(itinerary_id == 3)
-test_df <- get_itinerary_times(test_itin) # , start_time = "2018-01-22 09:30:00")
 
 plot_distribution_for_itinerary(test_df)
 
@@ -355,3 +362,20 @@ time.taken
 # filtered_test_df %>% ggplot() +
 #   geom_histogram(aes(x = time_diff))
 ```
+
+```{r Frontier plot}
+#Frontier plot
+frontier_df <- bind_rows(result)
+
+plot_data <- frontier_df %>% group_by(itin_id) %>% mutate(avg= mean(time_diff), stdv= sd(time_diff))
+
+plot_data %>% ggplot(aes(x= stdv, y= avg)) + 
+  geom_point() +
+  xlab('Standard Deviation of trip time')+
+  ylab('Average of trip time')+
+  geom_text(aes(label=itin_id),hjust=1, vjust=1)
+```
+
+```{r AUC}
+# pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
+# or pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]

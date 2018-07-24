@@ -253,11 +253,21 @@ leaflet_multiple_maps <- function(itin_map_data, k_num){
 
 #### Test itinerary function
 ```{r}
-k_num <- 10
+k_num <- 30
 
 #Find k_num shortest paths leading going from stop R13 to stop D05 
 itin <- get_itinerary(mta_igraph, stops, 'A27', '132',k_num)
 
 map_data <- format_map_data(itin)
 sync(leaflet_multiple_maps(map_data, k_num))
+```
+
+
+```{r}
+igraph_edges.reversed <- igraph_edges[, c(2,1,3,4,5)]
+mta_igraph.reversed <- graph.data.frame(igraph_edges.reversed)
+pathsss <-get.all.shortest.paths(mta_igraph.reversed,'A27', mode = 'out')
+pathsss$res %>% sapply(distance,graph =mta_igraph.reversed)
+pathsss$res %>% lapply(function(x)data.frame(stop_id = names(x)[length(x)], distance = distance(mta_igraph.reversed, x), path = paste0(names(x), collapse = '>'))) %>%
+  reduce(rbind) %>% View
 ```
