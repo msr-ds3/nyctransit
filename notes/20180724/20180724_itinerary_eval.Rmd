@@ -66,9 +66,9 @@ get_leg_data <- function(lines, start, end) {
     filter(stop_mta_id == start | stop_mta_id == end,
            route_mta_id %in% lines_list) %>%
     # departure_time > start_time) %>%
-    # mutate(day_of_week = weekdays((departure_time)),
-    #        hour = hour(departure_time)) %>%
-    # filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
+    mutate(day_of_week = weekdays((departure_time)),
+           hour = hour(departure_time)) %>%
+    filter(isWeekend(day_of_week) == F, hour >= 7, hour < 10) %>%
     # group_by trip_id's to ensure all our trips start and end at appropriate stations
     group_by(realtime_trip_id) %>%
     mutate(start_time = min(departure_time), count = n()) %>%
@@ -295,7 +295,7 @@ plot_distribution_for_itinerary <- function(itin_time_df) {
 # test_data <- read_csv('../../data/sample_itinerary.csv')
 
 # test_data <- read_csv('../20180723/20180723_edge_case_sample_itinerary.csv')
-test_data <- read_csv('../../data/itineraries_1_train.csv') 
+test_data <- read_csv('../../data/itineraries-1-train.csv') 
 
 
 # filter out event and adding direction to station id  
@@ -303,37 +303,39 @@ test_train <- test_data %>%
   filter(event != "travel", itinerary_id < 4) %>%
   mutate(stop_station = paste(station, direction, sep=''))
 
-# TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
-itin_max <- max(test_train$itinerary_id)
-result <- vector ("list", length = itin_max)
-# test_stops <- list()
-
-for (i in 1:itin_max) {
-  itin <- test_train %>% filter(itinerary_id == i)
-  result[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id=i)
-}
+# # TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
+# itin_max <- max(test_train$itinerary_id)
+# result <- vector ("list", length = itin_max)
+# # test_stops <- list()
+# 
+# for (i in 1:itin_max) {
+#   itin <- test_train %>% filter(itinerary_id == i)
+#   result[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id=i)
+# }
 
 
 
 # remove any unused rows
-# test_itin <- test_train %>% filter(itinerary_id == 2)
+test_itin <- test_train %>% filter(itinerary_id == 2)
 # test_df <- get_itinerary_times(test_itin) # , start_time = "2018-01-22 09:30:00")
 
 
-plot_distribution_for_itinerary(test_df)
+# plot_distribution_for_itinerary(test_df)
 
 # NOTE: DEBUG CODE
 start.time <- Sys.time()
-test_df <- get_itinerary_times(test_itin)
+new_test_df <- get_itinerary_times(test_itin)
 end.time <- Sys.time()
 time.taken <- end.time - start.time
 time.taken
 
-start.time <- Sys.time()
-test_leg_data <- get_leg_data("A", "A27S", "A31S")
-end.time <- Sys.time()
-time.taken <- end.time - start.time
-time.taken
+# save(test_df, file = "test_df_with_orig_method.RData")
+
+# start.time <- Sys.time()
+# test_leg_data <- get_leg_data("A", "A27S", "A31S")
+# end.time <- Sys.time()
+# time.taken <- end.time - start.time
+# time.taken
 
 # NOTE: DEBUG PLOT - show all trains individually on plot
 
