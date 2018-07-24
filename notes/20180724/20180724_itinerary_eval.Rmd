@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
 library(ggthemes)
+library(ROCR)
 
 # load todd's subway_data
 # load(file = "../../data/todd_subway_realtime.RData")
@@ -293,7 +294,7 @@ plot_distribution_for_itinerary <- function(itin_time_df) {
 # TEST DATA for itinerary
 
 # test_data <- read_csv('../../data/sample_itinerary.csv')
-
+# test_data <- read_csv('../../data/itineraries-Phoebe-train.csv')
 # test_data <- read_csv('../20180723/20180723_edge_case_sample_itinerary.csv')
 test_data <- read_csv('../../data/itineraries_1_train.csv') 
 
@@ -319,21 +320,40 @@ for (i in 1:itin_max) {
 # test_itin <- test_train %>% filter(itinerary_id == 2)
 # test_df <- get_itinerary_times(test_itin) # , start_time = "2018-01-22 09:30:00")
 
+all_itin_df <- bind_rows(result)
 
-plot_distribution_for_itinerary(test_df)
+filtered <- all_itin_df %>%
+  mutate(day_of_week = weekdays(leg1_start_time),
+         hour = hour(leg1_start_time)) %>%
+  filter(isWeekend(day_of_week) == F,
+         hour >= 7 & hour < 10)
+filtered$itin_id <- as.factor(filtered$itin_id)
+
+filtered %>%
+  ggplot() +
+  geom_histogram(aes(x = time_diff, group=itin_id, col=itin_id, fill=itin_id))
+
+
+plot_data <- all_itin_df %>% 
+  mutate(day_of_week = weekdays(leg1_start_time),hour = hour(leg1_start_time)) %>%
+  filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
+  group_by(itin_id) %>%
+  mutate(avg= mean(time_diff), stdv= sd(time_diff))
+
+plot_distribution_for_itinerary(plot_data)
 
 # NOTE: DEBUG CODE
-start.time <- Sys.time()
-test_df <- get_itinerary_times(test_itin)
-end.time <- Sys.time()
-time.taken <- end.time - start.time
-time.taken
-
-start.time <- Sys.time()
-test_leg_data <- get_leg_data("A", "A27S", "A31S")
-end.time <- Sys.time()
-time.taken <- end.time - start.time
-time.taken
+# start.time <- Sys.time()
+# test_df <- get_itinerary_times(test_itin)
+# end.time <- Sys.time()
+# time.taken <- end.time - start.time
+# time.taken
+# 
+# start.time <- Sys.time()
+# test_leg_data <- get_leg_data("A", "A27S", "A31S")
+# end.time <- Sys.time()
+# time.taken <- end.time - start.time
+# time.taken
 
 # NOTE: DEBUG PLOT - show all trains individually on plot
 
@@ -365,9 +385,6 @@ time.taken
 
 ```{r Frontier plot}
 #Frontier plot
-frontier_df <- bind_rows(result)
-
-plot_data <- frontier_df %>% group_by(itin_id) %>% mutate(avg= mean(time_diff), stdv= sd(time_diff))
 
 plot_data %>% ggplot(aes(x= stdv, y= avg)) + 
   geom_point() +
@@ -379,3 +396,6 @@ plot_data %>% ggplot(aes(x= stdv, y= avg)) +
 ```{r AUC}
 # pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
 # or pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
+pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
+
+```
