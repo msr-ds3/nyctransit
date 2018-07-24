@@ -395,7 +395,15 @@ plot_data %>% ggplot(aes(x= stdv, y= avg)) +
 
 ```{r AUC}
 # pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
-# or pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
-pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
+# or  with the pROC package: as.numeric(auc(response = actual, predictor = predicted))
+# itinerary is the actual value, trip time is the predicted value
+
+auc_df <- all_itin_df %>% filter(itin_id == 1 | itin_id == 3) %>% select(itin_id, time_diff)
+
+pred <- prediction(as.numeric(auc_df$time_diff, units = "mins"), as.factor(auc_df$itin_id))
+
+perf_nb <- performance(pred, 'auc')@y.values[[1]]
+performance(pred, 'auc')
 
 ```
+taking random trips from itinerary 1 and itinerary 3, 75% of the time trip time of itin 1 will be shorter than trip time of itin 3.
