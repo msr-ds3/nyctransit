@@ -1,6 +1,6 @@
 library(igraph)
 # setwd('~/projects/ds3/nyctransit/src/demo')
-source('../path_finding2.R')
+source('../path_finding.R')
 load('../../data/igraph_edges.rdata')
 stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
 
@@ -8,8 +8,8 @@ igraph_edges <- mutate(igraph_edges, 'weight'=`50%`)
 
 graph <- graph.data.frame(igraph_edges)
 
-from <- '128'
-to <- 'F18'
+from <- 'R28'
+to <- '132'
 to2 <- '123'
 
 x <- get_itinerary(graph, stops, from, to,3) 

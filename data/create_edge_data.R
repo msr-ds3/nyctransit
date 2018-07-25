@@ -82,7 +82,6 @@ realtime_edges <- realtime_edges %>% select(route_id = route_mta_id, trip_id = r
                                             stop_id, nxt_stop_id,
                                             departure_time, nxt_departure_time,
                                             duration)
-load('edges.rdata')
 save(file = 'edges.rdata',scheduled_edges, transfer_edges, realtime_edges)
 
                                

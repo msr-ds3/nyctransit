@@ -64,7 +64,9 @@ for(i in 1:nrow(grid)){
 }
 grid$walking_time <- unlist(walking_time)
 grid$time <- unlist(total_time)
-grid <- grid %>% filter(walking_time < 1200)
+grid <- grid %>% filter(walking_time < 1200) 
+grid <- grid %>% arrange(desc(time))
+grid <- grid %>% mutate(time_bin = ceiling(time/300))
 ```
 
 #### 
@@ -73,7 +75,7 @@ clrs <- brewer.pal(10, "RdYlGn")
 
 pal <- colorNumeric(
  palette = clrs,
- domain = grid$time,
+ domain = grid$time_bin,
  reverse = TRUE)
 
 
@@ -86,8 +88,15 @@ leaflet() %>%
 #                                  "<br/>", (distances$distance/60), "mins"),
  #                   radius = 5,
 #                  color = ~pal(distance)) %>%
-  addCircleMarkers(data = grid, ~lon, ~lat, radius = 15, stroke = FALSE,
-                   fillOpacity = .4, fillColor = ~pal(time))
+  addMapPane(name = 'circles',zIndex = 450)%>%
+  addCircleMarkers(data = grid, ~lon, ~lat, radius = 30, stroke = FALSE,
+                   fillOpacity = 1, fillColor = ~pal(time_bin), group = 'circles', popup = paste(grid$time_bin*5)) %>%
+  htmlwidgets::onRender(
+    'function(el, x){
+      overlay = el.querySelector(".leaflet-overlay-pane")
+      overlay.style.opacity = ".5"
+    }'
+  )
   #addHeatmap(data = grid, ~lon, ~lat, intensity = ~time, max = max(grid$time), radius = 10,  cellSize = 1)
 ```
 
