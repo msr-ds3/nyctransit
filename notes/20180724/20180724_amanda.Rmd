@@ -28,7 +28,12 @@ library(rgdal)
 library(RColorBrewer)
 
 # load todd data
-load("~/Microsoft DS3/project/project data/todd_subway_data.RData")
+# following only work's on Amanda's machine:
+# load("~/Microsoft DS3/project/project data/todd_subway_data.RData")
+# this should work on everyone's, assuming things were generated with the scripts in ../../data
+load("../../data/todd_subway_realtime.RData")
+todd_subway_data <- realtime
+rm(realtime)
 ```
 
 ```{r}
@@ -46,7 +51,7 @@ station_data <- station_data %>%
   select(stop_name, stop_id, structure, lat, long)
 
 # https://www.ncdc.noaa.gov/cdo-web/datatools/lcd         hourly weather data
-weather_2018 <- read_csv("~/Microsoft DS3/project/project data/weather_2018.csv") %>% 
+weather_2018 <- read_csv("../../data/weather_2018.csv") %>% 
   mutate(ymd = as.Date(DATE), hour = hour(DATE)) %>%
   select(ymd, DATE, hour, HOURLYPrecip)
 
@@ -174,12 +179,6 @@ model2_df <- left_join(model2_df, station_data, by = c("term" = "stop_id")) %>% 
 
 ```
 
-```{r}
-# new df to predict mon at 9am affect
-
-mon_nine <- exp_wait_time_and_weather %>% select(route_mta_id, stop_mta_id, day, hour, HOURLYPrecip) %>% filter(day == 2, hour == 9, HOURLYPrecip == 0) %>% arrange(stop_mta_id) %>% distinct()
-# predict(model2, newx = mon_nine, s=lambda.min)
-```
 
 ```{r}
 
@@ -214,3 +213,51 @@ leaflet(model2_filtered) %>%
 
 ```
 
+```{r}
+# new df to predict mon at 9am affect
+
+mon_nine <- exp_wait_time_and_weather %>%
+  select(route_mta_id, stop_mta_id, stop_name, day, hour, HOURLYPrecip, lat, long) %>%
+  mutate(route_mta_id = as.factor(route_mta_id),
+         stop_mta_id = as.factor(stop_mta_id),
+         day = as.factor(day),
+         hour = as.factor(hour)) %>%
+  filter(day == 2, hour == 9, HOURLYPrecip == 0) %>%
+  arrange(stop_mta_id) %>%
+  distinct()
+mon_nine_matrix <- sparse.model.matrix(~ stop_mta_id*HOURLYPrecip +
+                                     route_mta_id + day +
+                                     hour, mon_nine)
+mon_nine$pred <- as.vector(predict(model2, newx = mon_nine_matrix, s = "lambda.min"))
+```
+
+```{r}
+
+mon_nine <- mon_nine %>%
+  mutate(pred_clipped = pmin(pred, quantile(pred, 0.9)))
+
+
+# map plot of stops interacted with precip
+clrs <- brewer.pal(5, "RdYlGn")
+
+pal <- colorNumeric(
+  palette = clrs,
+  domain = mon_nine$pred_clipped,
+  reverse = TRUE)
+
+
+leaflet(mon_nine) %>%
+  addTiles() %>%
+  setView(-73.9124206, 40.737, zoom = 11) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addCircleMarkers(~long, ~lat,
+                   popup = paste("<b>", mon_nine$stop_name, "</b>",
+                                 "<br/>", round(mon_nine$pred_clipped/60, 2), "mins"),
+                   radius = 5,
+                   color = ~pal(pred_clipped),
+                   stroke = FALSE, 
+                   fillOpacity = 0.5)
+
+
+
+```
