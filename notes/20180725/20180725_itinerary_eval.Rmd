@@ -107,68 +107,68 @@ get_leg_data <- function(lines, start, end) {
     ungroup() %>%
     filter(count >= 2, stop_mta_id == end) %>%
     arrange(arrival_time)
-  
+
   return(leg_data)
 }
 
 # given one specific itinerary dataframe
 # returns a dataframe of what those itineraries looked like in historical data
 get_itinerary_times <- function(itinerary) {
-  
+
   # handle the initial transfer special case
   transfer_special_case <- itinerary %>% filter(leg == 0)
   print(transfer_special_case$weight)
   # transfer_time <- ifelse(nrow(transfer_special_case) == 0, 0, as.integer(transfer_special_case$weight))
-  
+
   # handle final transfer special case
   end_transfer_special_case <- itinerary %>% filter(event == "end_trip", direction == "T")
-  
+
   curr_itin <- itinerary %>% anti_join(transfer_special_case) %>% anti_join(end_transfer_special_case)
   print(nrow(curr_itin))
-  
+
   end_transfer_time <- ifelse(nrow(end_transfer_special_case) == 0, 0, as.integer(last(curr_itin$weight)))
-  
+
   # adjust the start time to take into account that transfer time
   # adjusted_start <- as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC") +
   #   as.integer(transfer_time)
   # print(adjusted_start)
-  
+
   trains <- curr_itin %>% .$line %>% rle %>% .$values
   len_trains <- length(trains)
   # print(length(trains))
   stops_data <- curr_itin %>% select(leg, stop_station) %>% split(.$leg)
   stop_station <- vector("list", len_trains)
-  
-  
+
+
   # populate our stop_station list
   for (i in 1:len_trains) {
     stop_station[[i]] <- c(stops_data[[i]]$stop_station[1], stops_data[[i]]$stop_station[2])
   }
   print(stop_station)
-  
+
   # list of train data frames
   train_data <- vector("list", len_trains)
-  
+
   for (i in 1:len_trains) {
     start <- stop_station[[i]][1]
     end <- stop_station[[i]][2]
     lines <- trains[i]
-    
+
     leg_data <- get_leg_data(lines, start, end)
-    
+
     # NOTE: DEBUG CODE
     # print(nrow(leg_data))
-    
+
     # append to list
     train_data[[i]] <- leg_data
   }
-  
+
   num_trains <- nrow(train_data[[1]])
-  
+
   output_df <- data.frame(d=numeric(num_trains))
-  
+
   # format output_df with appropriate columns
-  
+
   for (i in 1:len_trains) {
     train <- trains[i]
     output_df[[paste('leg', i, '_line', sep='')]] <- character(num_trains)
@@ -176,18 +176,18 @@ get_itinerary_times <- function(itinerary) {
     output_df[[paste('leg', i, '_start_time', sep='')]] <- numeric(num_trains)
     output_df[[paste('leg', i, '_end_time', sep='')]] <- numeric(num_trains)
   }
-  
+
   output_df <- subset(output_df, select = -c(d))
-  
+
   i <- 1
   row_info <- list()
-  
+
   counters <- rep(1, len_trains)
-  
+
   # set up flags
   no_more_trips <- F
   waited_too_long <- F
-  
+
   while (i <= num_trains) {
     end_time <- train_data[[1]]$departure_time[i]
     row_info <- c(row_info,
@@ -195,12 +195,12 @@ get_itinerary_times <- function(itinerary) {
                   train_data[[1]]$realtime_trip_id[i],
                   train_data[[1]]$start_time[i],
                   end_time)
-    
+
     if (len_trains > 1) {
       for (ii in 2:len_trains) {
         start_transfer_time <- itinerary %>% filter(event == 'start_transfer' , leg == ii-1)
         transfer_time <- ifelse(nrow(start_transfer_time) == 0, 0, as.integer(start_transfer_time$weight))
-        
+
         # NOTE: DEBUG CODE
         # print(sprintf("ii = %d", ii))
         # print(train_data[[ii]]$realtime_trip_id[counters[ii]])
@@ -213,35 +213,35 @@ get_itinerary_times <- function(itinerary) {
           # print(sprintf("skipping train %s on leg %d", train_data[[ii]]$realtime_trip_id[counters[ii]], ii))
           counters[ii] = counters[ii] + 1
         }
-        
+
         curr_idx <- counters[ii]
-        
+
         # break out if this train_data doesn't exist
         if(is.na(train_data[[ii]]$departure_time[curr_idx])) {
           no_more_trips <- T
           break
         }
-        
+
         # Added condition here to ignore trips where you wait at a station for more than an hour
         if(train_data[[ii]]$departure_time[curr_idx] > end_time + 3600) {
           waited_too_long <- T
           break
         }
-        
+
         end_time <- train_data[[ii]]$departure_time[curr_idx]
         row_info <- c(row_info,
                       as.character(train_data[[ii]]$route_mta_id[curr_idx]),
                       train_data[[ii]]$realtime_trip_id[curr_idx],
                       train_data[[ii]]$start_time[curr_idx],
                       end_time)
-        
+
         # NOTE: DEBUG CODE
         # print(sprintf("Leg #%s\n", ii))
         # print(row_info)
       }
     }
-    
-    
+
+
     if (no_more_trips == T) {
       output_df[i, ] <- NA
       break;
@@ -256,9 +256,9 @@ get_itinerary_times <- function(itinerary) {
     # increment i
     i = i + 1
   }
-  
+
   output_df <- na.omit(output_df)
-  
+
   for (i in 1:len_trains) {
     train <- trains[i]
     output_df[[paste('leg', i, '_start_time', sep='')]] <- as.POSIXct(output_df[[paste('leg', i, '_start_time', sep='')]],
@@ -271,10 +271,10 @@ get_itinerary_times <- function(itinerary) {
   # set units of time_diff to minutes always
   units(output_df$time_diff) <- "mins"
   # output_df$given_start_time <- as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC")
-  
-  
+
+
   # filter out the beginning ti
-  
+
   return(output_df)
 }
 
@@ -287,11 +287,11 @@ plot_distribution_for_itinerary <- function(itin_time_df) {
            hour = hour(leg1_start_time)) %>%
     filter(isWeekend(day_of_week) == F,
            hour >= 7 & hour < 10)
-  
+
   plot <- filtered %>%
     ggplot() +
     geom_histogram(aes(x = time_diff))
-  
+
   return(plot)
 }
 
@@ -300,10 +300,10 @@ plot_distribution_for_itinerary <- function(itin_time_df) {
 # test_data <- read_csv('../../data/sample_itinerary.csv')
 # test_data <- read_csv('../../data/itineraries-Phoebe-train.csv')
 # test_data <- read_csv('../20180723/20180723_edge_case_sample_itinerary.csv')
-test_data <- read_csv('../../data/itineraries-1-train.csv') 
+test_data <- read_csv('../../data/itineraries-1-train.csv')
 
-# filter out event and adding direction to station id  
-test_train <- test_data %>% 
+# filter out event and adding direction to station id
+test_train <- test_data %>%
   filter(event != "travel", itinerary_id < 4) %>%
   mutate(stop_station = paste(station, direction, sep=''))
 
@@ -318,7 +318,7 @@ for (i in 1:itin_max) {
 }
 
 # remove any unused rows
-test_itin <- test_train %>% filter(itinerary_id == 2)
+# test_itin <- test_train %>% filter(itinerary_id == 2)
 # test_df <- get_itinerary_times(test_itin) # , start_time = "2018-01-22 09:30:00")
 
 all_itin_df <- bind_rows(result)
@@ -334,13 +334,6 @@ filtered %>%
   ggplot(aes(x = time_diff, group=itin_id, col=itin_id, fill=itin_id)) +
   geom_density(alpha = 0.5)
   # geom_histogram(), position = "identity", alpha = 0.5)
-
-
-plot_data <- all_itin_df %>% 
-  mutate(day_of_week = weekdays(leg1_start_time),hour = hour(leg1_start_time)) %>%
-  filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
-  group_by(itin_id) %>%
-  mutate(avg= mean(time_diff), stdv= sd(time_diff))
 
 
 # plot_distribution_for_itinerary(test_df)
@@ -369,7 +362,7 @@ time.taken
 
 # NOTE: DEBUG PLOT - show all trains individually on plot
 
-# filtered_test_df <- test_df %>% filter(hour(leg1_start_time) >= 8 & hour(leg1_start_time) <= 9) 
+# filtered_test_df <- test_df %>% filter(hour(leg1_start_time) >= 8 & hour(leg1_start_time) <= 9)
 
 # plot_data <- bind_rows(train_data[[1]], train_data[[2]], train_data[[3]])
 # plot_data %>% filter(month(start_time) == 2 & day(start_time) == 16 & hour(start_time) > 19 & hour(start_time) < 24) %>%
@@ -390,7 +383,7 @@ time.taken
 #     geom_segment(aes(x = leg3_start_time, xend = leg3_end_time, y = itin, yend = itin), color = 'green') +
 #     geom_text(aes(label = leg1_trip_id, x = leg1_start_time, y = itin), color = "red") +
 #     geom_text(aes(label = leg2_trip_id, x = leg2_start_time, y = itin), color = "blue") +
-#     geom_text(aes(label = leg3_trip_id, x = leg3_start_time, y = itin), color = "green") + 
+#     geom_text(aes(label = leg3_trip_id, x = leg3_start_time, y = itin), color = "green") +
 #     ylim(c(0, 10))
 
 # filtered_test_df %>% ggplot() +
@@ -399,14 +392,28 @@ time.taken
 
 #### Frontier Plots
 
-```{r Frontier plot}
-#Frontier plot
+```{r frontier-plot}
+# given a df with historical time_diffs for many initineraries
+# will return a plot that maps avg time_diff vs variance
+plot_frontier <- function(itins_df) {
 
-plot_data %>% ggplot(aes(x= stdv, y= avg)) + 
-  geom_point() +
-  xlab('Standard Deviation of trip time')+
-  ylab('Average of trip time')+
-  geom_text(aes(label=itin_id),hjust=1, vjust=1)
+  plot_data <- itins_df %>%
+    mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
+    # filter out weekends, and only get hour_start, hour_end
+    filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
+    group_by(itin_id) %>%
+    mutate(avg = mean(time_diff), stdv = sd(time_diff))
+
+  plot <- plot_data %>% ggplot(aes(x = stdv, y = avg)) +
+    geom_point() +
+    xlab('Standard Deviation of Trip Time') +
+    ylab('Average Trip Time') +
+    geom_text(aes(label = itin_id), hjust = 1, vjust = 1)
+
+  return(plot)
+}
+
+plot_frontier(all_itin_df)
 ```
 
 #### AUC Plots
@@ -416,12 +423,16 @@ plot_data %>% ggplot(aes(x= stdv, y= avg)) +
 # or  with the pROC package: as.numeric(auc(response = actual, predictor = predicted))
 # itinerary is the actual value, trip time is the predicted value
 
+# Choosing pairs of itinerary for comparison
 auc_df <- all_itin_df %>% filter(itin_id == 1 | itin_id == 3) %>% select(itin_id, time_diff)
 
+auc_function <- function(auc_df) {
 pred <- prediction(as.numeric(auc_df$time_diff, units = "mins"), as.factor(auc_df$itin_id))
-
 perf_nb <- performance(pred, 'auc')@y.values[[1]]
-performance(pred, 'auc')
+perf <- performance(pred, 'auc')
+return(perf)
+}
 
+auc_function(auc_df)
 ```
 taking random trips from itinerary 1 and itinerary 3, 75% of the time trip time of itin 1 will be shorter than trip time of itin 3.
