@@ -1,0 +1,128 @@
+---
+title: "taxi_analysis"
+author: "Model Team"
+date: "July 25, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(lubridate)
+library(geosphere)
+library(leaflet)
+library(ggmap)
+
+load("../../data/taxi_data_2015_01-06-lite_clean.Rdata")
+stations <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
+```
+
+####Creating New Column With Rounded (lat, lng)
+
+```{r rounding}
+
+pickup_rounding_factor <- .002
+dropoff_rounding_factor <- .002
+ 
+taxi_clean_lite <- taxi_clean_lite %>% 
+  mutate(rounded_pickup_lat = ifelse(pickup_neighborhood == "John F. Kennedy International Airport", 40.641, ifelse(pickup_neighborhood =="LaGuardia Airport", 40.773,
+ round(pickup_latitude/pickup_rounding_factor)*pickup_rounding_factor)),
+
+rounded_pickup_lng = ifelse(pickup_neighborhood == "John F. Kennedy International Airport",-73.777, ifelse(pickup_neighborhood =="LaGuardia Airport",-73.872,
+round(pickup_longitude/pickup_rounding_factor)*pickup_rounding_factor)),
+ 
+rounded_dropoff_lat = ifelse(dropoff_neighborhood == "John F. Kennedy International Airport", 40.64, ifelse(dropoff_neighborhood =="LaGuardia Airport",40.77,
+          round(dropoff_latitude, dropoff_rounding_factor))),
+rounded_dropoff_lng = ifelse(dropoff_neighborhood == "John F. Kennedy International Airport",-73.78, ifelse(dropoff_neighborhood =="LaGuardia Airport", -73.87,
+                                 round(dropoff_longitude, dropoff_rounding_factor))))
+
+```
+
+####Filter Trips Extended with Airport
+
+```{r improved_distance}
+
+filter_trips_cosadj <- function(taxi_df, from_stop, to_stop, threshold, day_filter, hour_filter, cos_adjust){
+  filtered_trips <- taxi_df %>% 
+    filter(wday(pickup_datetime) %in% day_filter, hour(pickup_datetime) %in% hour_filter)
+  
+  if(from_stop == "John F. Kennedy International Airport" | from_stop == "LaGuardia Airport"){
+    filtered_trips <- filtered_trips %>% filter(pickup_neighborhood == from_stop)
+  }
+  else{
+    from_coords <- stations %>% filter(`GTFS Stop ID` == from_stop) %>% select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, lng = `GTFS Longitude`)
+    filtered_trips <- filtered_trips %>%
+      mutate(distance_source = 110.25 * sqrt(((from_coords[['lat']] - pickup_latitude)*cos_adjust)^2 + ((from_coords[['lng']] - pickup_longitude)*cos_adjust)^2)) %>%
+      filter(distance_source < threshold)
+  }
+  if(to_stop == "John F. Kennedy International Airport" | to_stop == "LaGuardia Airport"){
+    filtered_trips <- filtered_trips %>% filter(dropoff_neighborhood == to_stop)
+  }
+  else{
+    to_coords <- stations %>% filter(`GTFS Stop ID` == to_stop) %>% select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, lng = `GTFS Longitude`)
+    filtered_trips <- filtered_trips %>% 
+      mutate(distance_dest = 110.25 * sqrt(((to_coords[['lat']] - dropoff_latitude)*cos_adjust)^2 + ((to_coords[['lng']] - dropoff_longitude)*cos_adjust)^2)) %>%
+      filter(distance_dest < threshold)
+  }
+  return(filtered_trips)
+}
+
+```
+
+###Filtering Function (including airports)
+```{r }
+
+const_cos_adjust <- cos((median(rbind(taxi_clean_lite$pickup_latitude, taxi_clean_lite$dropoff_latitude)) * pi)/ 180)
+
+plot_data_reg <- filter_trips_cosadj(taxi_clean_lite, "123", "LaGuardia Airport", .33, 2:6, 7:22, const_cos_adjust) %>%
+  filter(trip_time_in_sec < (quantile(trip_time_in_sec, .75) + 1.5 * (quantile(trip_time_in_sec, .75) - quantile(trip_time_in_sec, .25))),
+         trip_time_in_sec > (quantile(trip_time_in_sec, .25) - 1.5 * (quantile(trip_time_in_sec, .75) - quantile(trip_time_in_sec, .25))))
+
+plot_data_reg %>% summarize(avg = mean(trip_time_in_sec), std = sd(trip_time_in_sec), vari = var(trip_time_in_sec), num = n())
+
+plot_data_reg %>%
+  ggplot() +
+  geom_histogram(aes(x = trip_time_in_sec))
+
+```
+
+#### 96th to 14th
+```{r different_trips}
+
+plot_data_west <- filter_trips_cosadj(taxi_clean_lite, "120", "132", .33, 2:6, 7:22, const_cos_adjust) %>%
+  filter(trip_time_in_sec < (quantile(trip_time_in_sec, .75) + 1.5 * (quantile(trip_time_in_sec, .75) - quantile(trip_time_in_sec, .25))),
+         trip_time_in_sec > (quantile(trip_time_in_sec, .25) - 1.5 * (quantile(trip_time_in_sec, .75) - quantile(trip_time_in_sec, .25)))) %>%
+  mutate(location = "west")
+
+plot_data_east <- filter_trips_cosadj(taxi_clean_lite, "625", "635", .33, 2:6, 7:22, const_cos_adjust) %>%
+  filter(trip_time_in_sec < (quantile(trip_time_in_sec, .75) + 1.5 * (quantile(trip_time_in_sec, .75) - quantile(trip_time_in_sec, .25))),
+         trip_time_in_sec > (quantile(trip_time_in_sec, .25) - 1.5 * (quantile(trip_time_in_sec, .75) - quantile(trip_time_in_sec, .25)))) %>%
+  mutate(location = "east")
+
+rbind(plot_data_east, plot_data_west) %>%
+  ggplot() +
+  geom_histogram(aes(trip_time_in_sec, fill = location), position = "dodge")
+
+```
+
+#### 96th to 42nd
+```{r different_trips}
+
+plot_data_west <- filter_trips_cosadj(taxi_clean_lite, "120", "132", .33, 2:6, 7:22, const_cos_adjust) %>%
+  filter(trip_time_in_sec < (quantile(trip_time_in_sec, .75) + 1.5 * (quantile(trip_time_in_sec, .75) - quantile(trip_time_in_sec, .25))),
+         trip_time_in_sec > (quantile(trip_time_in_sec, .25) - 1.5 * (quantile(trip_time_in_sec, .75) - quantile(trip_time_in_sec, .25)))) %>%
+  mutate(location = "west")
+
+plot_data_east <- filter_trips_cosadj(taxi_clean_lite, "625", "635", .33, 2:6, 7:22, const_cos_adjust) %>%
+  filter(trip_time_in_sec < (quantile(trip_time_in_sec, .75) + 1.5 * (quantile(trip_time_in_sec, .75) - quantile(trip_time_in_sec, .25))),
+         trip_time_in_sec > (quantile(trip_time_in_sec, .25) - 1.5 * (quantile(trip_time_in_sec, .75) - quantile(trip_time_in_sec, .25)))) %>%
+  mutate(location = "east")
+
+rbind(plot_data_east, plot_data_west) %>%
+  ggplot() +
+  geom_histogram(aes(trip_time_in_sec, fill = location), position = "dodge")
+
+```
