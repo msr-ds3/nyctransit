@@ -1,11 +1,10 @@
 library(igraph)
 library(tidyverse)
 
-shortest_name_path <- function(graph, src, dest){
+shortest_path <- function(graph, src, dest){
   path <- suppressWarnings(get.shortest.paths(graph, src, dest, mode = 'out', output = 'vpath'))
   path <- names(path$vpath[[1]])
-  if (length(path)==1) return(NULL)
-  path
+  if (length(path)==1) NULL else path
 }
 
 add_path_attributes <- function(graph, id, path){
@@ -27,9 +26,9 @@ combine_paths_to_tibble <- function(graph, paths){
     reduce(rbind)
 }
 
-path_distance <- function(graph, path) sum(E(graph, path=path)$weight)
+path_weight <- function(graph, path) sum(E(graph, path=path)$weight)
 
-sort_path <- function(graph,paths) paths[paths %>% sapply(path_distance, graph=graph) %>% order]
+sort_paths <- function(graph,paths) paths[paths %>% sapply(path_weight, graph=graph) %>% order]
 
 find_edges_to_delete <- function(A, C,i,rootPath){
   edgesToDelete <- list()
@@ -53,12 +52,11 @@ check_for_double_transfer <- function(graph, path){
   F
 }
 
-
 k_shortest_yen <- function(graph, src, dest, k){
   if (src == dest) stop('src and dest can not be the same (currently)')
 
   #accepted paths
-  A <- list(shortest_name_path(graph, src, dest))
+  A <- list(shortest_path(graph, src, dest))
   if (k == 1) return (A)
   #potential paths
   B <- list()
@@ -76,7 +74,7 @@ k_shortest_yen <- function(graph, src, dest, k){
       t_g <- graph
       for (edge in edgesToDelete) t_g <- delete.edges(t_g, edge)
 
-      spurPath <- shortest_name_path(t_g,spurNode, dest)
+      spurPath <- shortest_path(t_g,spurNode, dest)
 
       if (!is.null(spurPath)){
         total_path <- list(c(rootPath[-i], spurPath))
@@ -90,7 +88,7 @@ k_shortest_yen <- function(graph, src, dest, k){
       }
     }
     if (length(B) == 0) break
-    B <- sort_path(graph, B)
+    B <- sort_paths(graph, B)
     A[k_i] <- B[1]
     B <- B[-1]
   }
@@ -252,7 +250,7 @@ get_itinerary_raw <- function(shortest_paths_df, stops) {
 }
 
 get_itinerary <- function(graph, stops, src,dest, k){
- path_tibble <- k_shortest_yen(graph, src, dest, k) %>% combine_paths_to_tibble(graph = graph) 
+  path_tibble <- k_shortest_yen(graph, src, dest, k) %>% combine_paths_to_tibble(graph = graph) 
  
  if (is.null(path_tibble)) {
    warning(paste('No path between', src, dest))

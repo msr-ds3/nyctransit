@@ -5,7 +5,7 @@ load('../../data/igraph_edges.rdata')
 stops <- read_csv('../../data/taxi_cleaned/stops.csv')
 graph <- graph.data.frame(igraph_edges)
 
-from <- 'A27'
+from <- '128'
 to <- 'F18'
 to2 <- '123'
 
@@ -22,8 +22,8 @@ to2 <- '123'
 # 
 # path_sorted <- sort_path(graph, path)
 
-# vertices <- V(graph)$name
-# vertices <- vertices[vertices != from]
-for (i in vertices) k_shortest_yen(graph, from, i, 3)
-
+vertices <- V(graph)$name
+vertices <- vertices[vertices != from]
+for (i in vertices) 
+  get_itinerary(graph,stops, from, i, 3)
 #get_itinerary(graph, stops, 'A27','132',10)
