@@ -8,15 +8,11 @@ shortest_path <- function(graph, src, dest){
 }
 
 add_path_attributes <- function(graph, id, path){
+  path <- path[2:(length(path)-1)]
   edges <- E(graph, path = path)
-
-  direction <- edges$direction_id
-  direction <- c(direction, direction[length(direction)])
-
-  line <- c(edges$route_ids,'end')
+  line <- c(edges$route_id,'end')
   weight <- c(edges$weight, 'end')
-  tibble(itinerary_id = id, station = path, line, direction, weight)
-
+  tibble(itinerary_id = id, station = path, line, weight)
 }
 
 combine_paths_to_tibble <- function(graph, paths){
@@ -44,10 +40,12 @@ find_edges_to_delete <- function(A, C,i,rootPath){
 
 check_for_double_transfer <- function(graph, path){
   edges <- E(graph, path = path)
-  directions <- edges$direction_id
-  for (i in 1:(length(directions)-1))
+  route_ids <- edges$route_id
+  for (i in 1:(length(route_ids)-1))
   {
-    if (directions[i] == 'T' && directions[i+1] == 'T') return (T)
+    if (route_ids[i] == 'T' && route_ids[i+1] == 'T'){
+      return(T)
+    }
   }
   F
 }
@@ -75,10 +73,9 @@ k_shortest_yen <- function(graph, src, dest, k){
       for (edge in edgesToDelete) t_g <- delete.edges(t_g, edge)
 
       spurPath <- shortest_path(t_g,spurNode, dest)
-
       if (!is.null(spurPath)){
         total_path <- list(c(rootPath[-i], spurPath))
-        #check for double transfer
+        # check for double transfer
         if (check_for_double_transfer(graph, total_path[[1]])){
           C[length(C)+1] <- total_path
         }else{
@@ -108,6 +105,7 @@ greedy <- function(shortest_paths_df, num_itineraries){
     # keep track of how many prev_line_ids to append
     r = 0
     prev_line_ids <-  str_split(df$line[i], "_")[[1]]
+    prev_line_ids <- ifelse(prev_line_ids == "T", "", prev_line_ids)
     
     for (j in 1:nrow(df)) {
       
@@ -151,7 +149,7 @@ get_itinerary_raw <- function(shortest_paths_df, stops) {
   
   # new df for the formatted itineraries
   itinerary <- setNames(data.frame(matrix(ncol = 8, nrow = 0)),
-                        c("itinerary_id", "station", "line", "direction", "leg",
+                        c("itinerary_id", "station", "line", "leg",
                           "event", "event_id", "weight"))
   
   # get correct lines with greedy function
@@ -163,7 +161,7 @@ get_itinerary_raw <- function(shortest_paths_df, stops) {
       filter(itinerary_id == i)
     
     first_row <- NULL
-    if(df$direction[1] == 'T'){
+    if(df$line[1] == ""){
       first_row <- df[1:1,]
       first_row$leg <- 0
       first_row$event <- "transfer"
@@ -185,17 +183,17 @@ get_itinerary_raw <- function(shortest_paths_df, stops) {
       # next index
       j = k+1
       
-      if (df$direction[k] == "T" & k == 1) {
-        df$direction[k] <- "T"
-      }
+      #if (df$direction[k] == "T" & k == 1) {
+      #  df$direction[k] <- "T"
+      #}
       
       # identify transfers
-      else if (df$station[k] != df$station[j] & df$line[k] != df$line[j]) {
+      if (df$station[k] != df$station[j] & df$line[k] != df$line[j]) {
         
         # identify an 'implicit transfer (e.g. transfer 120->120 from 1 to 2/3)
         if (df$line[j] != "") {
           df <- df %>% add_row(itinerary_id = df$itinerary_id[j], station = df$station[j],
-                               line = df$line[k], direction = df$direction[k], leg = l, weight = 0, .after = k)
+                               line = df$line[k], leg = l, weight = 0, .after = k)
         }
         
         # identify an 'explicit' transfer (e.g. transfer R11->629 from N/R to 4)
@@ -208,8 +206,6 @@ get_itinerary_raw <- function(shortest_paths_df, stops) {
         df$event[j] <- "start_transfer"
         df$event[j+1] <- "end_transfer"
         
-        # start_transfer direction gets inherited from previous station
-        df$direction[j] <- df$direction[k]
         
         # skip newly added row
         k = k+1
@@ -249,14 +245,20 @@ get_itinerary_raw <- function(shortest_paths_df, stops) {
   return(itinerary)
 }
 
+
 get_itinerary <- function(graph, stops, src,dest, k){
+  #add edges to directed stops
+  graph <- graph + vertex(src) + vertex(dest) + 
+    edge(src, paste0(src,'S'), weight = 0, route_id ='start') + edge(src, paste0(src,'N'), weight = 0, route_id ='start') +
+    edge(paste0(dest,'S'), dest, weight = 0, route_id = 'end') + edge(paste0(dest,'N'),dest, weight = 0, route_id ='end')
+  
   path_tibble <- k_shortest_yen(graph, src, dest, k) %>% combine_paths_to_tibble(graph = graph) 
- 
- if (is.null(path_tibble)) {
-   warning(paste('No path between', src, dest))
-   return(NULL)
-   }
- else {
-   return(greedy(path_tibble,k) %>% get_itinerary_raw(stops))
-   }
+
+  if (is.null(path_tibble)) {
+     warning(paste('No path between', src, dest))
+     return(NULL)
+    }
+   else {
+     return(greedy(path_tibble,k) %>% get_itinerary_raw(stops))
+     }
 }
