@@ -1,8 +1,8 @@
 library(igraph)
-setwd('~/projects/ds3/nyctransit/src/demo')
+# setwd('~/projects/ds3/nyctransit/src/demo')
 source('../path_finding.R')
 load('../../data/igraph_edges.rdata')
-stops <- read_csv('../../data/taxi_cleaned/stops.csv')
+stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
 graph <- graph.data.frame(igraph_edges)
 
 from <- 'A27'
@@ -43,3 +43,9 @@ write.csv(generated, file = "itineraries-Akbar-train.csv", row.names = F)
 
 generated <- get_itinerary(graph, stops, 'M14', 'D18', 10)
 write.csv(generated, file = "itineraries-M-train.csv", row.names = F)
+
+generated <- get_itinerary(graph, stops, '120', '130', 10)
+write.csv(generated, file = "itineraries-Red-Line-96-23-train.csv", row.names = F)
+
+generated <- get_itinerary(graph, stops, 'A19', 'A30', 10)
+write.csv(generated, file = "itineraries-Orange-Line-96-23-train.csv", row.names = F)
