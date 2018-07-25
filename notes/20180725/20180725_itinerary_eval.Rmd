@@ -140,22 +140,6 @@ get_itinerary_times <- function(itinerary) {
   # print(length(trains))
   stops_data <- curr_itin %>% select(leg, stop_station) %>% split(.$leg)
   stop_station <- vector("list", len_trains)
-  
-  
-  
-  train_labels <- curr_itin %>% .$line %>% rle %>% .$values
-  station_labels <- curr_itin %>% .$stop_name %>% rle %>% .$values
-  combined_labels <- character(length(station_labels))
-  
-  for (i in 1:length(train_labels)) {
-    combined_labels[i] <- sprintf("%s @ %s", train_labels[i], station_labels[i])
-  }
-  
-  combined_labels[length(combined_labels)] <- last(station_labels)
-  
-  
-  
-  label <- paste(combined_labels, collapse = " => ")
 
 
   # populate our stop_station list
@@ -290,7 +274,6 @@ get_itinerary_times <- function(itinerary) {
   units(output_df$time_diff) <- "mins"
   # output_df$given_start_time <- as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC")
 
-  output_df$label <- label
 
   # filter out the beginning ti
 
@@ -353,15 +336,82 @@ plot_densities <- function(all_itin_df) {
 }
 ```
 
-```{r Data Input}
+```{r Data Input 1}
 # TEST DATA for itinerary
 
 # test_data <- read_csv('../../data/sample_itinerary.csv')
 # test_data <- read_csv('../20180723/20180723_edge_case_sample_itinerary.csv')
-# test_data <- read_csv('../../data/itineraries-1-train.csv')
+# test_data <- read_csv('../../data/itineraries-1-train.csv') 
 
-test_data <- read_csv('../../data/itineraries-Red-Line-96-23-train.csv')
-test_data_org <- read_csv('../../data/itineraries-Orange-Line-96-23-train.csv')
+test_data_1 <- read_csv('../../data/itineraries-Red-Line-96-23-train.csv')
+
+# filter out event and adding direction to station id
+test_train_1 <- test_data_1 %>%
+  filter(event != "travel", itinerary_id < 4) %>%
+  mutate(stop_station = paste(station, direction, sep=''))
+
+# TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
+itin_max_1 <- max(test_train_1$itinerary_id)
+result_1 <- vector ("list", length = itin_max)
+# test_stops <- list()
+
+for (i in 1:itin_max_1) {
+  itin <- test_train_1 %>% filter(itinerary_id == i)
+  result_1[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id= i, group= 'red')
+}
+
+all_itin_df.1 <- bind_rows(result_1)
+
+# plot_data.1 <- all_itin_df.1 %>% 
+#   mutate(day_of_week = weekdays(leg1_start_time),hour = hour(leg1_start_time)) %>%
+#   filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
+#   group_by(itin_id) %>%
+#   mutate(avg= mean(time_diff), stdv= sd(time_diff))
+# 
+# plot_data.1 %>% select(itin_id, avg, stdv) %>% distinct()
+# 
+# all_itin_df <- rbind(plot_data.1, plot_data.2)
+
+# remove any unused rows
+# test_itin <- test_train %>% filter(itinerary_id == 2)
+# test_df <- get_itinerary_times(test_itin) # , start_time = "2018-01-22 09:30:00")
+```
+```{r Data Input 2}
+# TEST DATA for itinerary
+
+# test_data <- read_csv('../../data/sample_itinerary.csv')
+# test_data <- read_csv('../20180723/20180723_edge_case_sample_itinerary.csv')
+# test_data <- read_csv('../../data/itineraries-1-train.csv') 
+# test_data <- read_csv('../../data/itineraries-Red-Line-96-23-train.csv')
+test_data_2 <- read_csv('../../data/itineraries-Orange-Line-96-23-train.csv')
+
+
+# filter out event and adding direction to station id
+test_train_2 <- test_data_2 %>%
+  filter(event != "travel", itinerary_id < 4) %>%
+  mutate(stop_station = paste(station, direction, sep=''))
+
+# TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
+itin_max_2 <- max(test_train_2$itinerary_id)
+
+result_2 <- vector ("list", length = itin_max)
+# test_stops <- list()
+
+for (i in 1:itin_max_2) {
+  itin <- test_train_2 %>% filter(itinerary_id == i)
+  result_2[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id=i, group= 'orange')
+}
+
+all_itin_df.2 <- bind_rows(result_2)
+all_itin_df <- bind_rows(all_itin_df.1, all_itin_df.2)
+
+plot_data <- all_itin_df %>% 
+  mutate(day_of_week = weekdays(leg1_start_time),hour = hour(leg1_start_time)) %>%
+  filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
+  group_by(group,itin_id) %>%
+  mutate(avg= mean(time_diff), stdv= sd(time_diff))
+
+plot_data %>% select(itin_id, avg, stdv, group) %>% distinct()
 
 # clean data to create plots
 test_train <- test_data %>%
@@ -371,6 +421,23 @@ test_train <- test_data %>%
 
 all_itin_df <- compute_all_itins(test_train)
 plot_densities(all_itin_df)
+```
+
+```{r test time taken}
+# NOTE: DEBUG CODE
+# start.time <- Sys.time()
+# new_test_df <- get_itinerary_times(test_itin)
+# end.time <- Sys.time()
+# time.taken <- end.time - start.time
+# time.taken
+
+# save(test_df, file = "test_df_with_orig_method.RData")
+
+# start.time <- Sys.time()
+# test_leg_data <- get_leg_data("A", "A27S", "A31S")
+# end.time <- Sys.time()
+# time.taken <- end.time - start.time
+# time.taken
 ```
 
 #### Plots for Debugging
@@ -414,25 +481,27 @@ plot_densities(all_itin_df)
 ```{r frontier-plot}
 # given a df with historical time_diffs for many initineraries
 # will return a plot that maps avg time_diff vs variance
-plot_frontier <- function(itins_df) {
 
-  plot_data <- itins_df %>%
-    mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
-    # filter out weekends, and only get hour_start, hour_end
-    filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
-    group_by(itin_id) %>%
-    mutate(avg = mean(time_diff), stdv = sd(time_diff))
+plot_frontier <- function(plot_data) {
+
+  # plot_data <- itins_df %>%
+  #   mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
+  #   # filter out weekends, and only get hour_start, hour_end
+  #   filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
+  #   group_by(itin_id) %>%
+  #   mutate(avg = mean(time_diff), stdv = sd(time_diff))
 
   plot <- plot_data %>% ggplot(aes(x = stdv, y = avg)) +
     geom_point() +
     xlab('Standard Deviation of Trip Time') +
     ylab('Average Trip Time') +
-    geom_text(aes(label = itin_id), hjust = 1, vjust = 1)
+    geom_text(aes(label = paste0(itin_id, group, sep='')), hjust = 0.5, vjust = 2)+
+    ylim(c(10, 30))
 
   return(plot)
 }
 
-plot_frontier(all_itin_df)
+plot_frontier(plot_data)
 ```
 
 #### AUC Plots
@@ -441,8 +510,6 @@ plot_frontier(all_itin_df)
 # pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
 # or  with the pROC package: as.numeric(auc(response = actual, predictor = predicted))
 # itinerary is the actual value, trip time is the predicted value
-
-# TODO: Refactor auc_function to require less stuff up_front
 
 # Choosing pairs of itinerary for comparison
 first_itin <- 1
