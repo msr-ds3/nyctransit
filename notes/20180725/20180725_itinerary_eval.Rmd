@@ -399,14 +399,28 @@ time.taken
 
 #### Frontier Plots
 
-```{r Frontier plot}
-#Frontier plot
+```{r frontier-plot}
+# given a df with historical time_diffs for many initineraries
+# will return a plot that maps avg time_diff vs variance
+plot_frontier <- function(itins_df) {
+  
+  plot_data <- itins_df %>%
+    mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
+    # filter out weekends, and only get hour_start, hour_end
+    filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
+    group_by(itin_id) %>%
+    mutate(avg = mean(time_diff), stdv = sd(time_diff))
+  
+  plot <- plot_data %>% ggplot(aes(x = stdv, y = avg)) +
+    geom_point() +
+    xlab('Standard Deviation of Trip Time') +
+    ylab('Average Trip Time') +
+    geom_text(aes(label = itin_id), hjust = 1, vjust = 1)
+  
+  return(plot)
+}
 
-plot_data %>% ggplot(aes(x= stdv, y= avg)) + 
-  geom_point() +
-  xlab('Standard Deviation of trip time')+
-  ylab('Average of trip time')+
-  geom_text(aes(label=itin_id),hjust=1, vjust=1)
+plot_frontier(all_itin_df)
 ```
 
 #### AUC Plots
