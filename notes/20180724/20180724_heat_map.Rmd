@@ -1,0 +1,111 @@
+---
+title: "Heat Map"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(igraph)
+library(leaflet.extras)
+library(RColorBrewer)
+library(data.table)
+```
+
+```{r load data}
+load('../../data/reverse_mta_igraph.RData')
+stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
+stops <- stops %>% select(stop_id, stop_lat, stop_lon, stop_name)
+source('../../src/path_finding.R')
+```
+
+#### distance function
+```{r}
+distance <- function(graph, path) sum(E(graph, path=path)$weight)
+```
+
+```{r}
+distances <- get.all.shortest.paths(mta_igraph, "H11", mode = "out")
+
+distances <- distances$res %>% lapply(function(x)data.frame(stop_id = names(x)[length(x)], distance <- distance(mta_igraph, x), path = paste0(names(x), collapse = '>'))) %>%
+  reduce(rbind) 
+distances <- distances %>% left_join(stops)
+names(distances) <- c("stop_id", "distance", "path", "stop_lat", "stop_lon", "stop_name")
+```
+
+```{r}
+distances_lats <- seq(min(distances$stop_lat), max(distances$stop_lat), by=0.01)
+distances_lons <- seq(min(distances$stop_lon), max(distances$stop_lon), by=0.01)
+grid <- expand.grid(distances_lats, distances_lons) %>%
+ select(lat = Var1, lon = Var2)
+```
+
+```{r}
+Distance <- function(LatA, LonA, LatB, LonB){
+  scaling_factor <- 110.25
+  x <- LatA - LatB
+  y <- (LonA - LonB) * cos(40.75 * (pi)/180)
+
+  return (scaling_factor*sqrt(x * x + y * y))
+
+}
+```
+
+```{r}
+total_time = list()
+walking_time = list(0)
+for(i in 1:nrow(grid)){
+ result<- distances %>% mutate(walking_time = 720*Distance(grid$lat[i], grid$lon[i], stop_lat, stop_lon))
+ result <- mutate(result, total_time = (walking_time + distance))#[, "total_time"]
+ #total_time[i] <- min(result)
+ index <- which.min(result$total_time)
+ total_time[i] <- result[index, "total_time"]
+ walking_time[i] <- result[index, "walking_time"]
+}
+grid$walking_time <- unlist(walking_time)
+grid$time <- unlist(total_time)
+grid <- grid %>% filter(walking_time < 1200)
+```
+
+#### 
+```{r}
+clrs <- brewer.pal(10, "RdYlGn")
+
+pal <- colorNumeric(
+ palette = clrs,
+ domain = grid$time,
+ reverse = TRUE)
+
+
+leaflet() %>%
+ addTiles() %>%
+ setView(-74.00, 40.71, zoom = 12) %>%
+ addProviderTiles("CartoDB.Positron") %>%
+ #addCircleMarkers(data = distances, ~stop_lon, ~stop_lat,
+ #                   popup = paste("<b>", distances$stop_name, "</b>", 
+#                                  "<br/>", (distances$distance/60), "mins"),
+ #                   radius = 5,
+#                  color = ~pal(distance)) %>%
+  addCircleMarkers(data = grid, ~lon, ~lat, radius = 15, stroke = FALSE,
+                   fillOpacity = .4, fillColor = ~pal(time))
+  #addHeatmap(data = grid, ~lon, ~lat, intensity = ~time, max = max(grid$time), radius = 10,  cellSize = 1)
+```
+
+#### K-shortest paths
+```{r}
+#start_time= Sys.time()
+#vertices <- names(V(mta_igraph))
+#vertices <- vertices[vertices != 128]
+#result <- setNames(data.frame(matrix(ncol = 5, nrow = 0)),
+#          c("itinerary_id", "station", "line", "direction"))
+#routes <- list()
+#for(i in 1:length(vertices)){
+#  paths<- get_itinerary(mta_igraph, stops, 128, vertices[i], 3)
+#  routes[i] <- paths
+#  result <- rbind(result, paths)
+#}
+
+#df <- rbindlist(routes)
+#print(Sys.time - start_time)
+```
+

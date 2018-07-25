@@ -1,7 +1,7 @@
 ---
-title: "20180724_mta_triptime_distribution"
+title: "20180725_mta_triptime_distribution"
 author: "Phoebe Nguyen, Akbar Mirza"
-date: "July 24, 2018"
+date: "July 25, 2018"
 output: html_document
 ---
 
@@ -50,6 +50,38 @@ stations <- edges %>% left_join(station_data, by = c("stop_id"="stop_id")) %>% s
 
 ### Multi-leg trip itinerary evaluation
 
+Evaluating Trip Itineraries With Multiple Legs.
+
+#### PSUEDOCODE
+
+```
+list of start_times
+for (x in counter_list) {
+ add start_time_column to list of start times
+ add end_time_column to list of end times
+ add train_id column to list of train ids
+}
+
+data is a list of dataframes, where data[i] corresponds to the ith train in the itinerary
+
+while (i < nrow(leg_1_data)) {
+  record when train i leaves
+  record when train i arrives
+  store for train i
+
+  for ii in range(2, len(counter_list)+1) {
+      while data[ii][counter_list[ii]] < start_time!!!! {
+          counter_list[ii] += 1
+      }
+
+      record when train ii leaves
+      record when train ii arrives
+      record when train ii departs
+  }
+
+}
+```
+
 ```{r test-chunk}
 
 # given day of week as a string
@@ -61,7 +93,6 @@ isWeekend <- function(day_of_week) {
 # given lines (as a string), a start station, and stop station
 # returns historical train data for those lines and those stops
 get_leg_data <- function(lines, start, end) {
-  
   lines_list <- first(strsplit(lines, split = "_"))
   leg_data <- subway_data.2 %>%
     filter(stop_mta_id == start | stop_mta_id == end,
@@ -82,33 +113,6 @@ get_leg_data <- function(lines, start, end) {
 
 # given one specific itinerary dataframe
 # returns a dataframe of what those itineraries looked like in historical data
-# PSUEDOCODE
-# list of start_times 
-# for (x in counter_list) {
-#  add start_time_column to list of start times
-#  add end_time_column to list of end times
-#  add train_id column to list of train ids
-# }
-# 
-# data is a list of dataframes, where data[i] corresponds to the ith train in the itinerary
-# 
-# while (i < nrow(leg_1_data)) {
-#   record when train i leaves
-#   record when train i arrives
-#   store for train i
-#   
-#   for ii in range(2, len(counter_list)+1) {
-#       while data[ii][counter_list[ii]] < start_time!!!! {
-#           counter_list[ii] += 1
-#       }
-#       
-#       record when train ii leaves
-#       record when train ii arrives
-#       record when train ii departs
-#   }
-#       
-# }
-
 get_itinerary_times <- function(itinerary) {
   
   # handle the initial transfer special case
@@ -298,7 +302,6 @@ plot_distribution_for_itinerary <- function(itin_time_df) {
 # test_data <- read_csv('../20180723/20180723_edge_case_sample_itinerary.csv')
 test_data <- read_csv('../../data/itineraries-1-train.csv') 
 
-
 # filter out event and adding direction to station id  
 test_train <- test_data %>% 
   filter(event != "travel", itinerary_id < 4) %>%
@@ -313,8 +316,6 @@ for (i in 1:itin_max) {
   itin <- test_train %>% filter(itinerary_id == i)
   result[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id=i)
 }
-
-
 
 # remove any unused rows
 test_itin <- test_train %>% filter(itinerary_id == 2)
@@ -358,6 +359,13 @@ time.taken
 # end.time <- Sys.time()
 # time.taken <- end.time - start.time
 # time.taken
+```
+
+#### Plots for Debugging
+
+```{r debugging_plots}
+
+# TODO: Write A Function To Show Trains On Plot
 
 # NOTE: DEBUG PLOT - show all trains individually on plot
 
@@ -370,6 +378,8 @@ time.taken
 #   ggplot(aes(color = route_mta_id)) +
 #   geom_segment(aes(x = start_time, xend = departure_time, y = itin, yend = itin)) +
 #   geom_text(aes(label = realtime_trip_id, x = start_time, y = itin))
+
+# TODO: Write A Function To Show Itineraries On Plot
 
 # ITINERARY PLOT
 # filtered_test_df %>% mutate(itin = row_number()) %>%
@@ -387,6 +397,8 @@ time.taken
 #   geom_histogram(aes(x = time_diff))
 ```
 
+#### Frontier Plots
+
 ```{r Frontier plot}
 #Frontier plot
 
@@ -396,6 +408,8 @@ plot_data %>% ggplot(aes(x= stdv, y= avg)) +
   ylab('Average of trip time')+
   geom_text(aes(label=itin_id),hjust=1, vjust=1)
 ```
+
+#### AUC Plots
 
 ```{r AUC}
 # pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]

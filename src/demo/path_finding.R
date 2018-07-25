@@ -27,3 +27,19 @@ vertices <- vertices[vertices != from]
 for (i in vertices) 
   get_itinerary(graph,stops, from, i, 3)
 #get_itinerary(graph, stops, 'A27','132',10)
+generated <- get_itinerary(graph, stops, '120', '131', 10)
+write.csv(generated, file = "itineraries-1-train.csv", row.names = F)
+generated <- get_itinerary(graph, stops, '227', '131', 10)
+write.csv(generated, file = "itineraries-Sid-train.csv", row.names = F)
+
+generated <- get_itinerary(graph, stops, '712', 'D18', 10)
+write.csv(generated, file = "itineraries-Phoebe-train.csv", row.names = F)
+
+generated <- get_itinerary(graph, stops, '210', '131', 10)
+write.csv(generated, file = "itineraries-Amanda-train.csv", row.names = F)
+
+generated <- get_itinerary(graph, stops, '401', '132', 10)
+write.csv(generated, file = "itineraries-Akbar-train.csv", row.names = F)
+
+generated <- get_itinerary(graph, stops, 'M14', 'D18', 10)
+write.csv(generated, file = "itineraries-M-train.csv", row.names = F)
