@@ -331,7 +331,7 @@ filtered$itin_id <- as.factor(filtered$itin_id)
 
 filtered %>%
   ggplot(aes(x = time_diff, group=itin_id, col=itin_id, fill=itin_id)) +
-           geom_density(alpha = 0.5)
+  geom_density(alpha = 0.5)
   # geom_histogram(), position = "identity", alpha = 0.5)
 
 
