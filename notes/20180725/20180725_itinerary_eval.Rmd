@@ -138,10 +138,22 @@ get_itinerary_times <- function(itinerary) {
   # print(length(trains))
   stops_data <- curr_itin %>% select(leg, stop_station) %>% split(.$leg)
   stop_station <- vector("list", len_trains)
-
-  station_label <- curr_itin %>% .$line %>% rle %>% .$values %>% paste(collapse = " => ")
-  trains_label <- curr_itin %>% .$stop_name %>% rle %>% .$values %>% paste(collapse = " => ")
-  label <- sprintf("%s @ %s", station_label, trains_label)
+  
+  
+  
+  train_labels <- curr_itin %>% .$line %>% rle %>% .$values
+  station_labels <- curr_itin %>% .$stop_name %>% rle %>% .$values
+  combined_labels <- character(length(station_labels))
+  
+  for (i in 1:length(train_labels)) {
+    combined_labels[i] <- sprintf("%s @ %s", train_labels[i], station_labels[i])
+  }
+  
+  combined_labels[length(combined_labels)] <- last(station_labels)
+  
+  
+  
+  label <- paste(combined_labels, collapse = " => ")
 
 
   # populate our stop_station list
@@ -317,10 +329,8 @@ test_train <- test_data %>%
   filter(event != "travel", itinerary_id < 4) %>%
   mutate(stop_station = paste(station, direction, sep=''))
 
-# TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
 itin_max <- max(test_train$itinerary_id)
 result <- vector ("list", length = itin_max)
-# test_stops <- list()
 
 for (i in 1:itin_max) {
   itin <- test_train %>% filter(itinerary_id == i)
@@ -335,51 +345,23 @@ plot_data <- all_itin_df %>%
   mutate(avg= mean(time_diff), stdv= sd(time_diff))
 
 plot_data %>% select(itin_id, avg, stdv) %>% distinct()
-# remove any unused rows
-# test_itin <- test_train %>% filter(itinerary_id == 2)
-# test_df <- get_itinerary_times(test_itin) # , start_time = "2018-01-22 09:30:00")
 ```
 
-```{r density plot}
+```{r density-plot}
 
 filtered <- all_itin_df %>%
   mutate(day_of_week = weekdays(leg1_start_time),
          hour = hour(leg1_start_time)) %>%
   filter(isWeekend(day_of_week) == F,
          hour >= 7 & hour < 10)
-# filtered$itin_id <- as.factor(filtered$itin_id)
 
-legend <- test_data %>%
-  group_by(itinerary_id) %>%
-  filter(event != 'travel') %>%
-  mutate(legend_id = paste(paste(rle(line)[[2]],paste(unique(stop_name)), collapse = '->', sep = " @ "))) %>%
-#  mutate(legend_id = paste('itin',itinerary_id[1], paste(rle(line)[[2]],collapse = '->'), sep=":"))
-  select(itinerary_id, legend_id) %>%
-  distinct()
-legend$itinerary_id <- as.factor(legend$itinerary_id)
-
-filtered %>% left_join(legend, by = c('itin_id'='itinerary_id')) %>%
-  ggplot(aes(x = time_diff, group=legend_id, col=legend_id, fill=legend_id)) +
-  geom_density(alpha = 0.5)
-  # geom_histogram(), position = "identity", alpha = 0.5)
-
+filtered %>%
+  ggplot(aes(x = time_diff, group=itin_id, col=itin_id, fill=itin_id)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_discrete(guide = guide_legend()) +
+  theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines'))
 
 # plot_distribution_for_itinerary(test_df)
-
-# NOTE: DEBUG CODE
-# start.time <- Sys.time()
-# new_test_df <- get_itinerary_times(test_itin)
-# end.time <- Sys.time()
-# time.taken <- end.time - start.time
-# time.taken
-
-# save(test_df, file = "test_df_with_orig_method.RData")
-
-# start.time <- Sys.time()
-# test_leg_data <- get_leg_data("A", "A27S", "A31S")
-# end.time <- Sys.time()
-# time.taken <- end.time - start.time
-# time.taken
 ```
 
 #### Plots for Debugging
@@ -483,11 +465,11 @@ mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
   mutate(stop_station = paste(station, direction, sep = ''))
 
 # TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
-itin_max <- max(test_train$itinerary_id)
+itin_max <- max(mj_data$itinerary_id)
 result <- vector ("list", length = itin_max)
 
 for (i in 1:itin_max) {
-  itin <- test_train %>% filter(itinerary_id == i)
+  itin <- mj_data %>% filter(itinerary_id == i)
   result[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id=sprintf("%s: %s", i, label))
 }
 
@@ -505,7 +487,45 @@ filtered %>%
   ggplot(aes(x = time_diff, group=itin_id, col=itin_id, fill=itin_id)) +
   geom_density(alpha = 0.5) +
   scale_fill_discrete(guide = guide_legend()) +
-  theme(legend.position = "bottom", legend.direction = "vertical", legend.key = element_rect(size = 5), legend.key.size = unit(1.5, 'lines'))
+  theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines'))
+  # geom_histogram(), position = "identity", alpha = 0.5)
+
+```
+
+#### Atlantic to Fulton (Morning)
+
+```{r atlantic-fulton-plots}
+
+# load midtown-jamaica data, and clean for our uses
+#   - filter out event and add direction to station id
+mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
+  filter(event != "travel", itinerary_id < 4) %>%
+  mutate(stop_station = paste(station, direction, sep = ''))
+
+# TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
+itin_max <- max(mj_data$itinerary_id)
+result <- vector ("list", length = itin_max)
+
+for (i in 1:itin_max) {
+  itin <- mj_data %>% filter(itinerary_id == i)
+  result[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id=sprintf("%s: %s", i, label))
+}
+
+all_itin_df <- bind_rows(result)
+
+# TODO: Refactor This into plot_densities function
+filtered <- all_itin_df %>%
+  mutate(day_of_week = weekdays(leg1_start_time),
+         hour = hour(leg1_start_time)) %>%
+  filter(isWeekend(day_of_week) == F,
+         hour >= 7 & hour < 10)
+filtered$itin_id <- as.factor(filtered$itin_id)
+
+filtered %>%
+  ggplot(aes(x = time_diff, group=itin_id, col=itin_id, fill=itin_id)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_discrete(guide = guide_legend()) +
+  theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines'))
   # geom_histogram(), position = "identity", alpha = 0.5)
 
 ```
