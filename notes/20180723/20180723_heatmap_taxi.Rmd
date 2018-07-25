@@ -1,0 +1,34 @@
+---
+title: "heatmap"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(igraph)
+library(leaflet)
+source('../../src/k_shortest.R')
+load('../../data/igraph_edges.rdata')
+load('../../data/taxi_cleaned/taxi_cleaned.rdata')
+```
+```{r}
+igraph_edges.reversed <- igraph_edges[, c(2,1,3,4,5)]
+mta_igraph.reversed <- graph.data.frame(igraph_edges.reversed)
+
+compute_path_tibble <- function(graph, path){
+  pathNames <- names(path)
+  data.frame(dest_stop_id = pathNames[length(path)], distance = distance(graph, path), path = paste0(pathNames, collapse = '>'))
+}
+
+single_source_mult_dest <- function(graph, from, to = V(graph)){
+  get.all.shortest.paths(graph, from,to, mode = 'out')$res %>% 
+    lapply(compute_path_tibble, graph = graph) %>%
+    reduce(rbind)
+} 
+
+single_source_mult_dest(mta_igraph.reversed, '123') %>% View
+```

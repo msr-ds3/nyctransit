@@ -5,7 +5,7 @@ load('../../data/igraph_edges.rdata')
 stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
 graph <- graph.data.frame(igraph_edges)
 
-from <- 'A27'
+from <- '128'
 to <- 'F18'
 to2 <- '123'
 
@@ -22,10 +22,10 @@ to2 <- '123'
 # 
 # path_sorted <- sort_path(graph, path)
 
-# vertices <- V(graph)$name
-# vertices <- vertices[vertices != from]
-for (i in vertices) k_shortest_yen(graph, from, i, 3)
-
+vertices <- V(graph)$name
+vertices <- vertices[vertices != from]
+for (i in vertices) 
+  get_itinerary(graph,stops, from, i, 3)
 #get_itinerary(graph, stops, 'A27','132',10)
 generated <- get_itinerary(graph, stops, '120', '131', 10)
 write.csv(generated, file = "itineraries-1-train.csv", row.names = F)
