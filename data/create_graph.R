@@ -1,5 +1,7 @@
 source('../src/time.R')
-load('./edges.rdata')
+
+#make sure to run create_edge_data.r before running this
+#load('./edges.rdata')
 
 compute_edge_popularity <- function(edges) {edges %>%
   group_by(route_id, stop_id, nxt_stop_id) %>% 
@@ -21,6 +23,7 @@ filter_edges <- function(scheduled_edges, include_day_of_week = NULL, time_range
 weight_summary <- function(duration, quantiles){
   info <- list()
   info['mean'] <- mean(duration)
+  info['sd'] <- sd(duration)
   quantiles <- quantile(duration, quantiles)
   info[names(quantiles)] <- quantiles
   info
@@ -30,12 +33,24 @@ add_weights <- function(edges, realtime_edges, quantiles) {
   filtered_realtime <- left_join(edges, realtime_edges, by = c('route_id','stop_id', 'nxt_stop_id'))
   #ignore na for now
   filtered_realtime <- filtered_realtime %>% filter(!is.na(duration))
-  
-  as.data.table(filtered_realtime)[, weight_summary(duration, quantiles), by = c('route_id', 'stop_id', 'nxt_stop_id')] %>% as.data.frame()
+  filtered_realtime <- filtered_realtime %>% group_by(stop_id, nxt_stop_id) %>% mutate(route_id = paste0(unique(route_id), collapse = '_'))
+  as.data.table(filtered_realtime)[, weight_summary(duration, quantiles), by = c('stop_id', 'nxt_stop_id','route_id')] %>% as.data.frame()
+}
+
+add_transfer <- function(edges, transfer){
+  c_names <- names(edges)[c(-(1:3),-5)]
+  transfer[,c_names] <- transfer[,'duration']
+  transfer <- transfer %>% mutate(sd =0)
+  transfer <- select(transfer, -duration)
+  bind_rows(edges, transfer)
 }
 
 #demo
-igraph_edges <- scheduled_edges %>% 
-   filter_edges(cutoff = 5, relative_cutoff = .1) %>%
-   add_weights(realtime_edges, c(.1,.25,.5,.75,.9))
+#filter edges
+igraph_edges <- scheduled_edges %>% filter_edges(cutoff = 5, relative_cutoff = .1) 
+#add weights
+igraph_edges <- igraph_edges %>% add_weights(realtime_edges, c(.1,.25,.5,.75,.9))
+#add transfer edges 
+igraph_edges <- igraph_edges %>% add_transfer(transfer_edges)
+#save igraph edges
 save(file = 'igraph_edges.rdata', igraph_edges)
