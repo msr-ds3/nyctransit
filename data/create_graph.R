@@ -2,9 +2,9 @@ library(data.table)
 source('../src/time.R')
 
 compute_edge_popularity <- function(edges) {edges %>%
-  group_by(route_id, stop_id, nxt_stop_id) %>% 
-  mutate(c = n())%>% group_by(route_id) %>%
-  mutate(average = mean(c), relative = c/average)
+    group_by(route_id, stop_id, nxt_stop_id) %>% 
+    mutate(c = n())%>% group_by(route_id) %>%
+    mutate(average = mean(c), relative = c/average)
 }
 
 weight_summary <- function(duration, quantiles){
@@ -17,8 +17,8 @@ weight_summary <- function(duration, quantiles){
 }
 
 create_edges <- function (scheduled_edges, realtime_edges, transfer_edges, quantiles = c(.1,.5,.9),
-             include_day_of_week = NULL, time_range = NULL, cutoff = NULL, relative_cutoff = NULL,
-             exclude_routes = NULL){
+                          include_day_of_week = NULL, time_range = NULL, cutoff = NULL, relative_cutoff = NULL,
+                          exclude_routes = NULL){
   scheduled_edges <- compute_edge_popularity(scheduled_edges)
   
   if (!is.null(relative_cutoff)) scheduled_edges <- filter(scheduled_edges, relative >=relative_cutoff)
@@ -60,6 +60,23 @@ realtime_edges <- realtime_edges %>% mutate(start_trip_time = as.numeric(start_t
 igraph_edges <- create_edges(scheduled_edges, realtime_edges, transfer_edges, 
                              cutoff = 5, relative_cutoff = .1, time_range = c('7:00:00','9:00:00'), 
                              include_day_of_week = 'Weekday') 
+
+#add airtrains
+airtrain_edges <- list(c("702N", "LGA", "AT", 6, 0, 6, 6, 6),
+                       c("702S", "LGA", "AT", 6, 0, 6, 6, 6),
+                       c("H03N", "JFK", "AT", 10, 1, 8, 10, 12),
+                       c("H03S", "JFK", "AT", 10, 1, 8, 10, 12),
+                       c("G06N", "JFK", "AT", 8, 1.2, 7, 8, 10),
+                       c("G06S", "JFK", "AT", 8, 1.2, 7, 8, 10),
+                       c("LGA", "702N", "AT", 6, 0, 6, 6, 6),
+                       c("LGA", "702S", "AT", 6, 0, 6, 6, 6),
+                       c("JFK", "H03N", "AT", 10, 1, 8, 10, 12),
+                       c("JFK", "H03S", "AT", 10, 1, 8, 10, 12),
+                       c("JFK", "G06N", "AT", 8, 1.2, 7, 8, 10),
+                       c("JFK", "G06S", "AT", 8, 1.2, 7, 8, 10)) %>%
+  reduce(rbind) %>% as.data.frame()
+names(airtrain_edges) <- names(igraph_edges)
+
+igraph_edges <- rbind(igraph_edges, airtrain_edges)
 #save igraph edges
 save(file = 'igraph_edges.rdata', igraph_edges)
-
