@@ -352,7 +352,7 @@ test_train_1 <- test_data_1 %>%
 
 # TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
 itin_max_1 <- max(test_train_1$itinerary_id)
-result_1 <- vector ("list", length = itin_max)
+result_1 <- vector ("list", length = itin_max_1)
 # test_stops <- list()
 
 for (i in 1:itin_max_1) {
@@ -394,7 +394,7 @@ test_train_2 <- test_data_2 %>%
 # TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
 itin_max_2 <- max(test_train_2$itinerary_id)
 
-result_2 <- vector ("list", length = itin_max)
+result_2 <- vector ("list", length = itin_max_2)
 # test_stops <- list()
 
 for (i in 1:itin_max_2) {
@@ -403,6 +403,8 @@ for (i in 1:itin_max_2) {
 }
 
 all_itin_df.2 <- bind_rows(result_2)
+
+#### 
 all_itin_df <- bind_rows(all_itin_df.1, all_itin_df.2)
 
 plot_data <- all_itin_df %>% 
@@ -421,6 +423,7 @@ test_train <- test_data %>%
 
 all_itin_df <- compute_all_itins(test_train)
 plot_densities(all_itin_df)
+
 ```
 
 ```{r test time taken}
@@ -495,7 +498,7 @@ plot_frontier <- function(plot_data) {
     geom_point() +
     xlab('Standard Deviation of Trip Time') +
     ylab('Average Trip Time') +
-    geom_text(aes(label = paste0(itin_id, group, sep='')), hjust = 0.5, vjust = 2)+
+    geom_text(aes(label = paste0(group, itin_id,sep='')), hjust = 0.5, vjust = 2)+
     ylim(c(10, 30))
 
   return(plot)
@@ -520,11 +523,11 @@ auc_function <- function(auc_df) {
 pred <- prediction(as.numeric(auc_df$time_diff, units = "mins"), as.factor(auc_df$itin_id))
 perf_nb <- performance(pred, 'auc')@y.values[[1]]
 perf <- performance(pred, 'auc')
-return(perf)
+return(perf_nb)
 }
 auc_function(auc_df)
 
-paste0("taking random trips from itinerary ", first_itin , " and itinerary ", sec_itin, ', ',perf_nb*100 ,"% of the time trip time of itin ", first_itin, " will be shorter than trip time of itin ", sec_itin) %>% print
+paste0("taking random trips from itinerary ", first_itin , " and itinerary ", sec_itin, ', ', auc_function(auc_df)*100 ,"% of the time trip time of itin ", first_itin, " will be shorter than trip time of itin ", sec_itin) %>% print
 ```
 taking random trips from itinerary 1 and itinerary 3, 75% of the time trip time of itin 1 will be shorter than trip time of itin 3.
 
