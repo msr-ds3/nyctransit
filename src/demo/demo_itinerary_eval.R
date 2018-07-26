@@ -1,4 +1,4 @@
-source('../path_finding.R')
+source('../itinerary_evaluation.R')
 load(file = "../../data/todd_subway_realtime.RData")
 
 example_data <- read_csv('../../data/itineraries-1-train.csv') %>% 
