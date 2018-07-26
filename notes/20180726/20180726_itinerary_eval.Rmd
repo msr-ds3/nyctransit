@@ -175,14 +175,12 @@ auc_function <- function(auc_df) {
 pred <- prediction(as.numeric(auc_df$time_diff, units = "mins"), as.factor(auc_df$itin_line))
 perf_nb <- performance(pred, 'auc')@y.values[[1]]
 perf <- performance(pred, 'auc')
-return(perf)
+ifelse( perf_nb < 0.5, return(1 - perf_nb), return(perf))
 }
 
 auc_function(auc_df)
 
-# plot(auc_function(auc_df))
 
-#paste0("taking random trips from itinerary ", first_itin , " and itinerary ", sec_itin, ', ', auc_function(auc_df)*100 ,"% of the time trip time of itin ", first_itin, " will be shorter than trip time of itin ", sec_itin) %>% print
 ```
 ## Interesting Examples
 
@@ -192,12 +190,14 @@ auc_function(auc_df)
 
 # load midtown-jamaica data, and clean for our uses
 #   - filter out event and add direction to station id
-mj_data <- # read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
-  read_csv('../../data/itineraries-1-train.csv') %>% 
-  filter(event != "travel", itinerary_id < 5)
+mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
+  filter(event != "travel", itinerary_id < 2)
 
 all_itin_df <- compute_all_itins(mj_data, subway_data)
-plot_densities(all_itin_df)
+
+all_itin_df_clean <- all_itin_df %>% filter(time_diff > 0)
+
+plot_densities(all_itin_df_clean)
 
 ```
 
@@ -207,6 +207,8 @@ plot_densities(all_itin_df)
 
 # load midtown-jamaica data, and clean for our uses
 #   - filter out event and add direction to station id
+# compare 2-3 train with the 5 train
+
 mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
   filter(event != "travel", itinerary_id < 4)
 
