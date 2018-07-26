@@ -1,8 +1,10 @@
 library(igraph)
-# setwd('~/projects/ds3/nyctransit/src/demo')
-source('../path_finding.R')
-load('../../data/igraph_edges.rdata')
-stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
+library(here)
+
+source(here("src", "path_finding.R"))
+load(here("data", "igraph_edges.rdata"))
+stops <- read_csv(here("data", "google_transit_subway_static", "stops.txt"))
+igraph_edges <- igraph_edges %>% mutate(weight = as.numeric(mean))
 graph <- graph.data.frame(igraph_edges)
 
 from <- '128'
@@ -27,29 +29,29 @@ vertices <- vertices[vertices != from]
 for (i in vertices) 
   get_itinerary(graph,stops, from, i, 3)
 #get_itinerary(graph, stops, 'A27','132',10)
-generated <- get_itinerary(graph, stops, '120', '131', 10)
-write.csv(generated, file = "itineraries-1-train.csv", row.names = F)
-generated <- get_itinerary(graph, stops, '227', '131', 10)
-write.csv(generated, file = "itineraries-Sid-train.csv", row.names = F)
+generated <- get_itinerary(graph, '120', '131', 10)
+write.csv(generated, file = here("data", "itineraries-1-train.csv"), row.names = F)
+generated <- get_itinerary(graph, '227', '131', 10)
+write.csv(generated, file = here("data", "itineraries-Sid-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, stops, '712', 'D18', 10)
-write.csv(generated, file = "itineraries-Phoebe-train.csv", row.names = F)
+generated <- get_itinerary(graph, '712', 'D18', 10)
+write.csv(generated, file = here("data", "itineraries-Phoebe-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, stops, '210', '131', 10)
-write.csv(generated, file = "itineraries-Amanda-train.csv", row.names = F)
+generated <- get_itinerary(graph, '210', '131', 10)
+write.csv(generated, file = here("data", "itineraries-Amanda-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, stops, '401', '132', 10)
-write.csv(generated, file = "itineraries-Akbar-train.csv", row.names = F)
+generated <- get_itinerary(graph, '401', '132', 10)
+write.csv(generated, file = here("data", "itineraries-Akbar-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, stops, 'M14', 'D18', 10)
-write.csv(generated, file = "itineraries-M-train.csv", row.names = F)
+generated <- get_itinerary(graph, 'M14', 'D18', 10)
+write.csv(generated, file = here("data", "itineraries-M-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, stops, '120', '130', 10)
-write.csv(generated, file = "itineraries-Red-Line-96-23-train.csv", row.names = F)
+generated <- get_itinerary(graph, '120', '130', 10)
+write.csv(generated, file = here("data", "itineraries-Red-Line-96-23-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, stops, 'A19', 'D19', 10)
-write.csv(generated, file = "itineraries-Orange-Line-96-23-train.csv", row.names = F)
+generated <- get_itinerary(graph, 'A19', 'D19', 10)
+write.csv(generated, file = here("data", "itineraries-Orange-Line-96-23-train.csv"), row.names = F)
 
 # Shortest Paths from Midtown to Jamaica (i.e. 5 Av/53 St (F12) => JFK Airport (G06))
-generated <- get_itinerary(graph, stops, 'F12', 'G06', 10)
-write.csv(generated, file = "itineraries-Midtown-Jamaica.csv", row.names = F)
+generated <- get_itinerary(graph, 'F12', 'G06', 10)
+write.csv(generated, file = here("data", "itineraries-Midtown-Jamaica.csv"), row.names = F)
