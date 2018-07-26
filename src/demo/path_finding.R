@@ -29,29 +29,29 @@ vertices <- vertices[vertices != from]
 for (i in vertices) 
   get_itinerary(graph,stops, from, i, 3)
 #get_itinerary(graph, stops, 'A27','132',10)
-generated <- get_itinerary(graph, '120', '131', 10)
+generated <- get_itinerary(graph, '120', '131', 10, stops)
 write.csv(generated, file = here("data", "itineraries-1-train.csv"), row.names = F)
-generated <- get_itinerary(graph, '227', '131', 10)
+generated <- get_itinerary(graph, '227', '131', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Sid-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, '712', 'D18', 10)
+generated <- get_itinerary(graph, '712', 'D18', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Phoebe-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, '210', '131', 10)
+generated <- get_itinerary(graph, '210, stops', '131', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Amanda-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, '401', '132', 10)
+generated <- get_itinerary(graph, '401', '132', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Akbar-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, 'M14', 'D18', 10)
+generated <- get_itinerary(graph, 'M14', 'D18', 10, stops)
 write.csv(generated, file = here("data", "itineraries-M-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, '120', '130', 10)
+generated <- get_itinerary(graph, '120', '130', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Red-Line-96-23-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, 'A19', 'D19', 10)
+generated <- get_itinerary(graph, 'A19', 'D19', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Orange-Line-96-23-train.csv"), row.names = F)
 
 # Shortest Paths from Midtown to Jamaica (i.e. 5 Av/53 St (F12) => JFK Airport (G06))
-generated <- get_itinerary(graph, 'F12', 'G06', 10)
+generated <- get_itinerary(graph, 'F12', 'G06', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Midtown-Jamaica.csv"), row.names = F)
