@@ -1,5 +1,7 @@
 library(data.table)
-source('../src/time.R')
+wd <- getwd()
+setwd(here::here())
+source('src/time.R')
 
 compute_edge_popularity <- function(edges) {edges %>%
   group_by(route_id, stop_id, nxt_stop_id) %>% 
@@ -34,26 +36,25 @@ create_edges <- function (scheduled_edges, realtime_edges, transfer_edges, quant
     scheduled_edges <- filter(scheduled_edges, within.timeRange(start_trip_time, time_start, time_end))
     realtime_edges <- filter(realtime_edges, within.timeRange(start_trip_time, time_start, time_end))
   }
-  edges <- scheduled_edges %>% select(route_id, stop_id, nxt_stop_id) %>% distinct
+  scheduled_edges <- scheduled_edges %>% select(route_id, stop_id, nxt_stop_id) %>% distinct
   
-  filtered_realtime <- left_join(edges, realtime_edges, by = c('route_id','stop_id', 'nxt_stop_id'))
+  filtered_realtime <- left_join(scheduled_edges, realtime_edges, by = c('route_id','stop_id', 'nxt_stop_id'))
   filtered_realtime <- filtered_realtime %>% filter(!is.na(duration))
   filtered_realtime <- filtered_realtime %>% group_by(stop_id, nxt_stop_id) %>% mutate(route_id = paste0(unique(route_id), collapse = '_'))
-  filtered_realtime %>% View
+
   edges <- as.data.table(filtered_realtime)[, weight_summary(duration, quantiles), by = c('stop_id', 'nxt_stop_id','route_id')] %>%
-    as.data.frame()
+  as.data.frame()
   
   c_names <- names(edges)[c(-(1:3),-5)]
   transfer_edges[,c_names] <- transfer_edges[,'duration']
   transfer_edges <- transfer_edges %>% mutate(sd =0)
   transfer_edges <- select(transfer_edges, -duration)
   bind_rows(edges, transfer_edges)
-  
 }
 
 #demo
 #make sure to run create_edge_data.r before running this
-load('./edges.rdata')
+load('data/edges.rdata')
 realtime_edges <- realtime_edges %>% mutate(start_trip_time = as.numeric(start_trip_time) %% secondsIn24Hours)
 
 #filter edges
@@ -61,5 +62,6 @@ igraph_edges <- create_edges(scheduled_edges, realtime_edges, transfer_edges,
                              cutoff = 5, relative_cutoff = .1, time_range = c('7:00:00','9:00:00'), 
                              include_day_of_week = 'Weekday') 
 #save igraph edges
-save(file = 'igraph_edges.rdata', igraph_edges)
+save(file = 'data/igraph_edges.rdata', igraph_edges)
+setwd(wd)
 
