@@ -141,7 +141,21 @@ get_itinerary_times <- function(itinerary) {
   stops_data <- curr_itin %>% select(leg, stop_station) %>% split(.$leg)
   stop_station <- vector("list", len_trains)
 
-
+  train_labels <- curr_itin %>% .$line %>% rle %>% .$values
+  station_labels <- curr_itin %>% .$stop_name %>% rle %>% .$values
+  combined_labels <- character(length(station_labels))
+  
+  for (i in 1:length(train_labels)) {
+    combined_labels[i] <- sprintf("%s @ %s", train_labels[i], station_labels[i])
+  }
+  
+  combined_labels[length(combined_labels)] <- last(station_labels)
+  
+  
+  
+  label <- paste(combined_labels, collapse = " => ")
+  
+  
   # populate our stop_station list
   for (i in 1:len_trains) {
     stop_station[[i]] <- c(stops_data[[i]]$stop_station[1], stops_data[[i]]$stop_station[2])
@@ -274,7 +288,8 @@ get_itinerary_times <- function(itinerary) {
   units(output_df$time_diff) <- "mins"
   # output_df$given_start_time <- as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC")
 
-
+  output_df$label <- label
+  
   # filter out the beginning ti
 
   return(output_df)
@@ -545,8 +560,6 @@ mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
 
 all_itin_df <- compute_all_itins(mj_data)
 plot_densities(all_itin_df)
-
-
 
 ```
 
