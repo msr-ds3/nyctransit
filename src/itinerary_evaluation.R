@@ -13,7 +13,7 @@ isWeekend <- function(day_of_week) {
 
 # given lines (as a string), a start station, and stop station
 # returns historical train data for those lines and those stops
-get_leg_data <- function(lines, start, end, subway_data) {
+get_leg_data <- function(lines, start, end, subway_data, hour_start = 7, hour_end = 10) {
   lines_list <- first(strsplit(lines, split = "_"))
   leg_data <- subway_data %>%
     filter(stop_mta_id == start | stop_mta_id == end,
@@ -21,7 +21,7 @@ get_leg_data <- function(lines, start, end, subway_data) {
     # departure_time > start_time) %>%
     mutate(day_of_week = weekdays((departure_time)),
            hour = hour(departure_time)) %>%
-    filter(isWeekend(day_of_week) == F, hour >= 7, hour < 10) %>%
+    filter(isWeekend(day_of_week) == F, hour >= hour_start, hour < hour_end) %>%
     # group_by trip_id's to ensure all our trips start and end at appropriate stations
     group_by(realtime_trip_id) %>%
     mutate(start_time = min(departure_time), count = n()) %>%
