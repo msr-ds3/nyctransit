@@ -1,8 +1,9 @@
 library(igraph)
-# setwd('~/projects/ds3/nyctransit/src/demo')
+library(tidyverse)
 source('../path_finding.R')
 load('../../data/igraph_edges.rdata')
 stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
+stations <- read_csv('http://web.mta.info/developers/data/nyct/subway/Stations.csv')
 
 igraph_edges <- mutate(igraph_edges, 'weight'=`50%`)
 
@@ -10,10 +11,22 @@ graph <- graph.data.frame(igraph_edges)
 
 from <- 'R28'
 to <- '132'
-to2 <- '123'
 
-x <- get_itinerary(graph, stops, from, to,3) 
+# #use this when from, to does not have direction
+x <- get_itinerary(graph, from, to, 5, stops)
 
+
+
+# 
+# #use get_itinerary_directed when the from, to have directions
+# y <- get_itinerary_directed(graph, 'R28S', '132S', 10, stops)
+
+x %>% group_by(itinerary_id) %>% summarize(path = paste(station, collapse = '->'), route_id = paste(line, collapse = '->'),
+                                           sum(as.numeric(weight[1:(length(weight)-1)])))
+# y %>% group_by(itinerary_id) %>% summarize(path = paste(station, collapse = '->'), route_id = paste(line, collapse = '->'), 
+#                                            sum(as.numeric(weight[1:(length(weight)-1)]))) 
+#use get_itinerary_complex when the from, to are complex ids
+z <- get_itinerary_complex(graph, 617,628,3,stations, stops)
 
 # path <- list()
 # path[[1]] <- shortest_name_path(graph, from, to)

@@ -8,14 +8,13 @@ shortest_path <- function(graph, src, dest){
 }
 
 add_path_attributes <- function(graph, id, path){
-  path <- path[2:(length(path)-1)]
   edges <- E(graph, path = path)
   line <- c(edges$route_id,'end')
   weight <- c(edges$weight, 'end')
   tibble(itinerary_id = id, station = path, line, weight)
 }
 
-combine_paths_to_tibble <- function(graph, paths){
+combine_paths_to_tibble <- function(paths, graph){
   if (is.null(paths[[1]])) return (NULL)
   1:length(paths) %>%
     lapply(function(i) add_path_attributes(graph,i, paths[[i]])) %>%
@@ -38,16 +37,16 @@ find_edges_to_delete <- function(A, C,i,rootPath){
   unique(edgesToDelete)
 }
 
-check_for_double_transfer <- function(graph, path){
-  edges <- E(graph, path = path)
+is_significant_deviation <- function(graph, sourcePath, deviationPath){
+  edges <- E(graph, path = deviationPath)
   route_ids <- edges$route_id
-  for (i in 1:(length(route_ids)-1))
-  {
-    if (route_ids[i] == 'T' && route_ids[i+1] == 'T'){
-      return(T)
+  loop <- length(deviationPath) -2
+  for (i in 1:loop){
+    if (route_ids[i] == 'T' && are.connected(graph, deviationPath[i], deviationPath[i+2])){
+      return(F)
     }
   }
-  F
+  T
 }
 
 k_shortest_yen <- function(graph, src, dest, k){
@@ -75,11 +74,11 @@ k_shortest_yen <- function(graph, src, dest, k){
       spurPath <- shortest_path(t_g,spurNode, dest)
       if (!is.null(spurPath)){
         total_path <- list(c(rootPath[-i], spurPath))
-        # check for double transfer
-        if (check_for_double_transfer(graph, total_path[[1]])){
-          C[length(C)+1] <- total_path
-        }else{
+
+        if (is_significant_deviation(graph, prev_path, total_path[[1]])){
           if (!total_path %in% B) B[length(B)+1] <- total_path
+        }else{
+          C[length(C)+1] <- total_path
         }
         
       }
@@ -92,7 +91,7 @@ k_shortest_yen <- function(graph, src, dest, k){
   A
 }
 
-greedy <- function(shortest_paths_df, num_itineraries){
+greedy <- function(shortest_paths_df){
   all_lines <- vector(mode = "character")
   
   for(i in 1:max(shortest_paths_df$itinerary_id)){
@@ -145,7 +144,7 @@ greedy <- function(shortest_paths_df, num_itineraries){
   
 }
 
-get_itinerary_raw <- function(shortest_paths_df, stops) {
+format_itinerary_raw <- function(shortest_paths_df) {
   
   # new df for the formatted itineraries
   itinerary <- setNames(data.frame(matrix(ncol = 8, nrow = 0)),
@@ -239,26 +238,86 @@ get_itinerary_raw <- function(shortest_paths_df, stops) {
     itinerary <- rbind(itinerary, df)
     
   }
-  itinerary <- itinerary %>%
-    left_join((stops %>% select(stop_id, stop_name)), by=c("station" = "stop_id"))
-  
+  # itinerary <- itinerary %>%
+  #   left_join((stops %>% select(stop_id, stop_name)), by=c("station" = "stop_id"))
+  # 
   return(itinerary)
 }
 
 
-get_itinerary <- function(graph, stops, src,dest, k){
-  #add edges to directed stops
-  graph <- graph + vertex(src) + vertex(dest) + 
-    edge(src, paste0(src,'S'), weight = 0, route_id ='start') + edge(src, paste0(src,'N'), weight = 0, route_id ='start') +
-    edge(paste0(dest,'S'), dest, weight = 0, route_id = 'end') + edge(paste0(dest,'N'),dest, weight = 0, route_id ='end')
-  
-  path_tibble <- k_shortest_yen(graph, src, dest, k) %>% combine_paths_to_tibble(graph = graph) 
-
+format_itinerary <- function(paths, graph, src, dest, stops = NULL){
+  path_tibble <- combine_paths_to_tibble(paths,graph)
   if (is.null(path_tibble)) {
-     warning(paste('No path between', src, dest))
-     return(NULL)
-    }
-   else {
-     return(greedy(path_tibble,k) %>% get_itinerary_raw(stops))
-     }
+    warning(paste('No path between', src, dest))
+    return(NULL)
+  }
+  result <- format_itinerary_raw(greedy(path_tibble))
+  if (is.null(stops)) result else left_join(result, stops[,c('stop_id','stop_name')], by = c('station' ='stop_id'))
+}
+
+get_itinerary_directed <- function(graph, src, dest, k, stops = NULL){
+  k_shortest_yen(graph, src, dest,k) %>%
+  format_itinerary(graph, src, dest, stops)
+}
+
+get_itinerary <- function(graph, src,dest, k, stops = NULL){
+  old_graph <- graph
+  src_children <- paste0(src, c('N','S'))
+  dest_children <- paste0(dest, c('N','S'))
+  graph <- mergeVertex(graph, src, src_children)
+  graph <- mergeVertex_in(graph, dest, dest_children)
+  paths <- k_shortest_yen(graph, src, dest, k) 
+  
+  paths <- lapply(paths,function(path){
+    path_len <- length(path)
+    if (are.connected(old_graph, src_children[1], path[2])) path[1] <- src_children[1]
+    else path[1] <- src_children[2]
+    if (are.connected(old_graph, path[path_len-1], dest_children[1])) path[path_len] <- dest_children[1]
+    else path[path_len] <- dest_children[2]
+    path
+  });
+  paths %>% format_itinerary(old_graph, src, dest, stops)
+}
+
+mergeVertex_in <- function(graph, parent, children){
+  graph <- add_vertices(graph, nv =1, name = parent)
+  neighbor_list <- NULL
+  for (child in children){
+    neighbor <- neighbors(graph, child, 'in')$name
+    neighbor <- neighbor[! neighbor %in% neighbor_list]
+    neighbor_list <- c(neighbor_list, neighbor)
+    neighbor_edges <- E(graph,c(reduce(neighbor, function(prev,cur) c(prev, child, cur)),child))
+    new_edge_vertices <- c(reduce(neighbor, function(prev,cur) c(prev, parent, cur)), parent)
+    graph <- add_edges(graph, new_edge_vertices, weight = neighbor_edges$weight, route_id = neighbor_edges$route_id)
+  }
+  delete.vertices(graph, children)
+}
+
+mergeVertex <- function(graph, parent, children){
+  graph <- add_vertices(graph, nv =1, name = parent)
+  neighbor_list <- NULL
+  for (child in children){
+    neighbor <- neighbors(graph, child)$name
+    neighbor <- neighbor[! neighbor %in% neighbor_list]
+    neighbor_list <- c(neighbor_list, neighbor)
+    neighbor_edges <- E(graph,c(child,reduce(neighbor, function(prev,cur) c(prev, child, cur))))
+    new_edge_vertices <- c(parent,reduce(neighbor, function(prev,cur) c(prev, parent, cur)))
+    graph <- add_edges(graph, new_edge_vertices, weight = neighbor_edges$weight, route_id = neighbor_edges$route_id)
+  }
+  delete.vertices(graph, children)
+}
+
+get_itinerary_complex <- function(graph, src, dest, k, stations, stops = NULL){
+  src_children <- stations[stations[,'Complex ID'] == src,'GTFS Stop ID'][[1]]
+  dest_children <- stations[stations[,'Complex ID'] == dest,'GTFS Stop ID'][[1]]
+  for (child in src_children) graph <- mergeVertex(graph, child, paste0(child,c('N','S')))
+  for (child in dest_children) graph <- mergeVertex_in(graph, child, paste0(child,c('N','S')))
+  
+  src_name <- paste0('CID', src)
+  dest_name <- paste0('CID', dest)
+  
+  graph <- mergeVertex(graph, src_name, src_children)
+  graph <- mergeVertex_in(graph, dest_name, dest_children)
+  
+  k_shortest_yen(graph, src_name,dest_name,k) %>% format_itinerary(graph, src,dest,stops)
 }
