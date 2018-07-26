@@ -94,9 +94,9 @@ isWeekend <- function(day_of_week) {
 
 # given lines (as a string), a start station, and stop station
 # returns historical train data for those lines and those stops
-get_leg_data <- function(lines, start, end) {
+get_leg_data <- function(lines, start, end, subway_data) {
   lines_list <- first(strsplit(lines, split = "_"))
-  leg_data <- subway_data.2 %>%
+  leg_data <- subway_data %>%
     filter(stop_mta_id == start | stop_mta_id == end,
            route_mta_id %in% lines_list) %>%
     # departure_time > start_time) %>%
@@ -108,7 +108,7 @@ get_leg_data <- function(lines, start, end) {
     mutate(start_time = min(departure_time), count = n()) %>%
     ungroup() %>%
     filter(count >= 2, stop_mta_id == end) %>%
-    arrange(arrival_time)
+    arrange(departure_time)
 
   return(leg_data)
 }
@@ -116,6 +116,7 @@ get_leg_data <- function(lines, start, end) {
 # given one specific itinerary dataframe
 # returns a dataframe of what those itineraries looked like in historical data
 get_itinerary_times <- function(itinerary) {
+get_itinerary_times <- function(itinerary, subway_data) {
 
   # handle the initial transfer special case
   transfer_special_case <- itinerary %>% filter(leg == 0)
@@ -171,6 +172,7 @@ get_itinerary_times <- function(itinerary) {
     lines <- trains[i]
 
     leg_data <- get_leg_data(lines, start, end)
+    leg_data <- get_leg_data(lines, start, end, subway_data)
 
     # NOTE: DEBUG CODE
     # print(nrow(leg_data))
@@ -313,7 +315,7 @@ plot_distribution_for_itinerary <- function(itin_time_df) {
 }
 
 # given cleaned shortest path itin data, return dataframe with all historical itins
-compute_all_itins <- function(cleaned_data) {
+compute_all_itins <- function(cleaned_data, subway_data) {
   
   num_itins <- cleaned_data$itinerary_id %>% unique() %>% length()
   result <- vector("list", length = num_itins)
@@ -321,7 +323,7 @@ compute_all_itins <- function(cleaned_data) {
   # iterate through all itineraries
   for (i in 1:num_itins) {
     itin <- cleaned_data %>% filter(itinerary_id == i)
-    result[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id = i, itin_label=sprintf("%s: %s", i, label))
+    result[[i]] <- get_itinerary_times(itin, subway_data) %>% mutate(itin_id = i, itin_label=sprintf("%s: %s", i, label))
   }
   
   all_itin_df <- bind_rows(result)
@@ -368,12 +370,17 @@ test_train_1 <- test_data_1 %>%
 # TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
 itin_max_1 <- max(test_train_1$itinerary_id)
 result_1 <- vector ("list", length = itin_max_1)
+
+
+
 # test_stops <- list()
 
 for (i in 1:itin_max_1) {
   itin <- test_train_1 %>% filter(itinerary_id == i)
-  result_1[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id= i, group= 'red')
+  result_1[[i]] <- get_itinerary_times(itin, subway_data.2) %>% mutate(itin_id= i, group= 'red')
 }
+
+plot_distribution_for_itinerary(result_1[[1]])
 
 all_itin_df.1 <- bind_rows(result_1)
 
@@ -396,7 +403,7 @@ all_itin_df.1 <- bind_rows(result_1)
 
 # test_data <- read_csv('../../data/sample_itinerary.csv')
 # test_data <- read_csv('../20180723/20180723_edge_case_sample_itinerary.csv')
-# test_data <- read_csv('../../data/itineraries-1-train.csv') 
+test_data <- read_csv('../../data/itineraries-1-train.csv') 
 # test_data <- read_csv('../../data/itineraries-Red-Line-96-23-train.csv')
 test_data_2 <- read_csv('../../data/itineraries-Orange-Line-96-23-train.csv')
 
@@ -414,7 +421,7 @@ result_2 <- vector ("list", length = itin_max_2)
 
 for (i in 1:itin_max_2) {
   itin <- test_train_2 %>% filter(itinerary_id == i)
-  result_2[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id=i, group= 'orange')
+  result_2[[i]] <- get_itinerary_times(itin, subway_data.2) %>% mutate(itin_id=i, group= 'orange')
 }
 
 all_itin_df.2 <- bind_rows(result_2)
@@ -581,7 +588,7 @@ result <- vector ("list", length = itin_max)
 
 for (i in 1:itin_max) {
   itin <- mj_data %>% filter(itinerary_id == i)
-  result[[i]] <- get_itinerary_times(itin) %>% mutate(itin_id=sprintf("%s: %s", i, label))
+  result[[i]] <- get_itinerary_times(itin, subway_data.2) %>% mutate(itin_id=sprintf("%s: %s", i, label))
 }
 
 all_itin_df <- bind_rows(result)
