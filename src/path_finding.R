@@ -287,6 +287,7 @@ merge_vertex <- function(graph, parent, children, mode){
     neighbor <- neighbors(graph, child, mode)$name
     neighbor <- neighbor[! neighbor %in% neighbor_list]
     neighbor_list <- c(neighbor_list, neighbor)
+    if (length(neighbor) == 0) next
     neighbor_edges <- E(graph, get_multiple_edges(child, neighbor,mode))
     new_edge_vertices <- get_multiple_edges(parent, neighbor, mode)
     graph <- add_edges(graph, new_edge_vertices, weight = neighbor_edges$weight, route_id = neighbor_edges$route_id)
@@ -295,17 +296,31 @@ merge_vertex <- function(graph, parent, children, mode){
 }
 
 get_itinerary_complex <- function(graph, src, dest, k, stations, stops = NULL){
-  src_children <- stations[stations[,'Complex ID'] == src,'GTFS Stop ID'][[1]]
-  dest_children <- stations[stations[,'Complex ID'] == dest,'GTFS Stop ID'][[1]]
-  
-  for (child in src_children) graph <- merge_vertex(graph, child, paste0(child,c('N','S')), mode = 'out')
-  for (child in dest_children) graph <- merge_vertex(graph, child, paste0(child,c('N','S')), mode = 'in')
-  
+  old_graph <- graph
+  src_children <- stations[stations[,'Complex ID'] == src,'GTFS Stop ID'][[1]] %>% sapply(paste0, c('N','S')) %>% reduce(c)
+  dest_children <- stations[stations[,'Complex ID'] == dest,'GTFS Stop ID'][[1]] %>% sapply(paste0, c('N','S')) %>% reduce(c)
+
   src_name <- paste0('CID', src)
   dest_name <- paste0('CID', dest)
-  
   graph <- merge_vertex(graph, src_name, src_children, 'out')
   graph <- merge_vertex(graph, dest_name, dest_children, 'in')
   
-  k_shortest_yen(graph, src_name,dest_name,k) #%>% format_itinerary(graph, src,dest,stops)
+  paths <- k_shortest_yen(graph, src_name,dest_name,k) 
+  paths <- lapply(paths,function(path){
+      path_len <- length(path)
+      for (src_child in src_children){
+        if (are.connected(old_graph, src_child, path[2])){
+          path[1] <- src_child
+          break
+        }
+      }
+      for (dest_child in dest_children){
+        if (are.connected(old_graph, path[path_len-1], dest_child)){
+          path[path_len] <- dest_child
+          break
+        }
+      }
+      path
+    })
+  paths %>% format_itinerary(old_graph, src, dest, stops)
 }

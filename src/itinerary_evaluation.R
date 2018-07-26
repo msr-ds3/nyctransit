@@ -42,7 +42,7 @@ get_itinerary_times <- function(itinerary, subway_data) {
   # transfer_time <- ifelse(nrow(transfer_special_case) == 0, 0, as.integer(transfer_special_case$weight))
   
   # handle final transfer special case
-  end_transfer_special_case <- itinerary %>% filter(event == "end_trip", direction == "T")
+  end_transfer_special_case <- itinerary %>% filter(event == "end_trip", line == "")
   
   curr_itin <- itinerary %>% anti_join(transfer_special_case) %>% anti_join(end_transfer_special_case)
   print(nrow(curr_itin))
@@ -57,7 +57,7 @@ get_itinerary_times <- function(itinerary, subway_data) {
   trains <- curr_itin %>% .$line %>% rle %>% .$values
   len_trains <- length(trains)
   # print(length(trains))
-  stops_data <- curr_itin %>% select(leg, stop_station) %>% split(.$leg)
+  stops_data <- curr_itin %>% select(leg, station) %>% split(.$leg)
   stop_station <- vector("list", len_trains)
   
   train_labels <- curr_itin %>% .$line %>% rle %>% .$values
@@ -77,7 +77,7 @@ get_itinerary_times <- function(itinerary, subway_data) {
   
   # populate our stop_station list
   for (i in 1:len_trains) {
-    stop_station[[i]] <- c(stops_data[[i]]$stop_station[1], stops_data[[i]]$stop_station[2])
+    stop_station[[i]] <- c(stops_data[[i]]$station[1], stops_data[[i]]$station[2])
   }
   print(stop_station)
   
