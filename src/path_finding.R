@@ -41,8 +41,6 @@ is_significant_deviation <- function(graph, sourcePath, deviationPath){
   edges <- E(graph, path = deviationPath)
   route_ids <- edges$route_id
   loop <- length(deviationPath) -2
-  if (route_ids[1] == 'T' && sourcePath[2] != deviationPath[2] &&sourcePath[3] == deviationPath[3]) return(F)
-  
   for (i in 1:loop){
     if (route_ids[i] == 'T' && are.connected(graph, deviationPath[i], deviationPath[i+2])){
       return(F)
@@ -50,6 +48,7 @@ is_significant_deviation <- function(graph, sourcePath, deviationPath){
   }
   T
 }
+
 k_shortest_yen <- function(graph, src, dest, k){
   if (src == dest) stop('src and dest can not be the same (currently)')
 
@@ -75,12 +74,7 @@ k_shortest_yen <- function(graph, src, dest, k){
       spurPath <- shortest_path(t_g,spurNode, dest)
       if (!is.null(spurPath)){
         total_path <- list(c(rootPath[-i], spurPath))
-        # check for double transfer
-        # if (check_for_double_transfer(graph, total_path[[1]])){
-        #   C[length(C)+1] <- total_path
-        # }else{
-        #   if (!total_path %in% B) B[length(B)+1] <- total_path
-        # }
+
         if (is_significant_deviation(graph, prev_path, total_path[[1]])){
           if (!total_path %in% B) B[length(B)+1] <- total_path
         }else{
