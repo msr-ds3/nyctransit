@@ -428,7 +428,7 @@ all_itin_df.2 <- bind_rows(result_2)
 all_itin_df <- bind_rows(all_itin_df.1, all_itin_df.2)
 
 plot_data <- all_itin_df %>% 
-  mutate(day_of_week = weekdays(leg1_start_time),hour = hour(leg1_start_time)) %>%
+  mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
   filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
   group_by(group,itin_id) %>%
   mutate(avg= mean(time_diff), stdv= sd(time_diff))
@@ -441,7 +441,7 @@ test_train <- test_data %>%
   filter(event != "travel", itinerary_id < 4) %>%
   mutate(stop_station = paste(station, direction, sep=''))
 
-all_itin_df <- compute_all_itins(test_train)
+all_itin_df <- compute_all_itins(test_train, subway_data.2)
 plot_densities(all_itin_df)
 
 ```
@@ -560,10 +560,11 @@ taking random trips from itinerary 1 and itinerary 3, 75% of the time trip time 
 # load midtown-jamaica data, and clean for our uses
 #   - filter out event and add direction to station id
 mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
+  read_csv('../../data/itineraries-1-train.csv') %>% 
   filter(event != "travel", itinerary_id < 2) %>%
   mutate(stop_station = paste(station, direction, sep = ''))
 
-all_itin_df <- compute_all_itins(mj_data)
+all_itin_df <- compute_all_itins(mj_data, subway_data.2)
 plot_densities(all_itin_df)
 
 ```
