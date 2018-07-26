@@ -37,7 +37,7 @@ find_edges_to_delete <- function(A, C,i,rootPath){
   unique(edgesToDelete)
 }
 
-is_significant_deviation <- function(graph, sourcePath, deviationPath){
+is_significant_deviation <- function(graph, deviationPath){
   edges <- E(graph, path = deviationPath)
   route_ids <- edges$route_id
   loop <- length(deviationPath) -2
@@ -75,7 +75,7 @@ k_shortest_yen <- function(graph, src, dest, k){
       if (!is.null(spurPath)){
         total_path <- list(c(rootPath[-i], spurPath))
 
-        if (is_significant_deviation(graph, prev_path, total_path[[1]])){
+        if (is_significant_deviation(graph, total_path[[1]])){
           if (!total_path %in% B) B[length(B)+1] <- total_path
         }else{
           C[length(C)+1] <- total_path
@@ -244,7 +244,6 @@ format_itinerary_raw <- function(shortest_paths_df) {
   return(itinerary)
 }
 
-
 format_itinerary <- function(paths, graph, src, dest, stops = NULL){
   path_tibble <- combine_paths_to_tibble(paths,graph)
   if (is.null(path_tibble)) {
@@ -256,68 +255,72 @@ format_itinerary <- function(paths, graph, src, dest, stops = NULL){
 }
 
 get_itinerary_directed <- function(graph, src, dest, k, stops = NULL){
-  k_shortest_yen(graph, src, dest,k) %>%
-  format_itinerary(graph, src, dest, stops)
+  k_shortest_yen(graph, src, dest,k) %>% format_itinerary(graph, src, dest, stops)
 }
 
 get_itinerary <- function(graph, src,dest, k, stops = NULL){
   old_graph <- graph
   src_children <- paste0(src, c('N','S'))
   dest_children <- paste0(dest, c('N','S'))
-  graph <- mergeVertex(graph, src, src_children)
-  graph <- mergeVertex_in(graph, dest, dest_children)
+  graph <- merge_vertex(graph, src, src_children, 'out')
+  graph <- merge_vertex(graph, dest, dest_children, 'in')
   paths <- k_shortest_yen(graph, src, dest, k) 
   
   paths <- lapply(paths,function(path){
     path_len <- length(path)
-    if (are.connected(old_graph, src_children[1], path[2])) path[1] <- src_children[1]
-    else path[1] <- src_children[2]
-    if (are.connected(old_graph, path[path_len-1], dest_children[1])) path[path_len] <- dest_children[1]
-    else path[path_len] <- dest_children[2]
+    path[1] <- if(are.connected(old_graph, src_children[1], path[2])) src_children[1] else src_children[2]
+    path[path_len] <- if(are.connected(old_graph, path[path_len -1], dest_children[1])) dest_children[1] else dest_children[2]
     path
   });
   paths %>% format_itinerary(old_graph, src, dest, stops)
 }
 
-mergeVertex_in <- function(graph, parent, children){
-  graph <- add_vertices(graph, nv =1, name = parent)
-  neighbor_list <- NULL
-  for (child in children){
-    neighbor <- neighbors(graph, child, 'in')$name
-    neighbor <- neighbor[! neighbor %in% neighbor_list]
-    neighbor_list <- c(neighbor_list, neighbor)
-    neighbor_edges <- E(graph,c(reduce(neighbor, function(prev,cur) c(prev, child, cur)),child))
-    new_edge_vertices <- c(reduce(neighbor, function(prev,cur) c(prev, parent, cur)), parent)
-    graph <- add_edges(graph, new_edge_vertices, weight = neighbor_edges$weight, route_id = neighbor_edges$route_id)
-  }
-  delete.vertices(graph, children)
+get_multiple_edges <- function(source,neighbors, mode){
+  edges <- reduce(neighbors, function(prev, cur) c(prev, source, cur))
+  if (mode == 'out') c(source, edges) else c(edges, source)
 }
 
-mergeVertex <- function(graph, parent, children){
-  graph <- add_vertices(graph, nv =1, name = parent)
+merge_vertex <- function(graph, parent, children, mode){
+  graph <- add_vertices(graph, nv = 1, name = parent)
   neighbor_list <- NULL
   for (child in children){
-    neighbor <- neighbors(graph, child)$name
+    neighbor <- neighbors(graph, child, mode)$name
     neighbor <- neighbor[! neighbor %in% neighbor_list]
     neighbor_list <- c(neighbor_list, neighbor)
-    neighbor_edges <- E(graph,c(child,reduce(neighbor, function(prev,cur) c(prev, child, cur))))
-    new_edge_vertices <- c(parent,reduce(neighbor, function(prev,cur) c(prev, parent, cur)))
+    if (length(neighbor) == 0) next
+    neighbor_edges <- E(graph, get_multiple_edges(child, neighbor,mode))
+    new_edge_vertices <- get_multiple_edges(parent, neighbor, mode)
     graph <- add_edges(graph, new_edge_vertices, weight = neighbor_edges$weight, route_id = neighbor_edges$route_id)
   }
   delete.vertices(graph, children)
 }
 
 get_itinerary_complex <- function(graph, src, dest, k, stations, stops = NULL){
-  src_children <- stations[stations[,'Complex ID'] == src,'GTFS Stop ID'][[1]]
-  dest_children <- stations[stations[,'Complex ID'] == dest,'GTFS Stop ID'][[1]]
-  for (child in src_children) graph <- mergeVertex(graph, child, paste0(child,c('N','S')))
-  for (child in dest_children) graph <- mergeVertex_in(graph, child, paste0(child,c('N','S')))
-  
+  old_graph <- graph
+  src_children <- stations[stations[,'Complex ID'] == src,'GTFS Stop ID'][[1]] %>% sapply(paste0, c('N','S')) %>% reduce(c)
+  dest_children <- stations[stations[,'Complex ID'] == dest,'GTFS Stop ID'][[1]] %>% sapply(paste0, c('N','S')) %>% reduce(c)
+
   src_name <- paste0('CID', src)
   dest_name <- paste0('CID', dest)
+  graph <- merge_vertex(graph, src_name, src_children, 'out')
+  graph <- merge_vertex(graph, dest_name, dest_children, 'in')
   
-  graph <- mergeVertex(graph, src_name, src_children)
-  graph <- mergeVertex_in(graph, dest_name, dest_children)
-  
-  k_shortest_yen(graph, src_name,dest_name,k) %>% format_itinerary(graph, src,dest,stops)
+  paths <- k_shortest_yen(graph, src_name,dest_name,k) 
+  paths <- lapply(paths,function(path){
+      path_len <- length(path)
+      for (src_child in src_children){
+        if (are.connected(old_graph, src_child, path[2])){
+          path[1] <- src_child
+          break
+        }
+      }
+      for (dest_child in dest_children){
+        if (are.connected(old_graph, path[path_len-1], dest_child)){
+          path[path_len] <- dest_child
+          break
+        }
+      }
+      path
+    })
+  paths %>% format_itinerary(old_graph, src, dest, stops)
 }
