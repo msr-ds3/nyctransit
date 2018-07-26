@@ -65,3 +65,22 @@ igraph_edges <- create_edges(scheduled_edges, realtime_edges, transfer_edges,
 save(file = 'data/igraph_edges.rdata', igraph_edges)
 setwd(wd)
 
+#add airtrains
+airtrain_edges <- list(c("702N", "LGA", "AT", 6, 0, 6, 6, 6),
+                       c("702S", "LGA", "AT", 6, 0, 6, 6, 6),
+                       c("H03N", "JFK", "AT", 10, 1, 8, 10, 12),
+                       c("H03S", "JFK", "AT", 10, 1, 8, 10, 12),
+                       c("G06N", "JFK", "AT", 8, 1.2, 7, 8, 10),
+                       c("G06S", "JFK", "AT", 8, 1.2, 7, 8, 10),
+                       c("LGA", "702N", "AT", 6, 0, 6, 6, 6),
+                       c("LGA", "702S", "AT", 6, 0, 6, 6, 6),
+                       c("JFK", "H03N", "AT", 10, 1, 8, 10, 12),
+                       c("JFK", "H03S", "AT", 10, 1, 8, 10, 12),
+                       c("JFK", "G06N", "AT", 8, 1.2, 7, 8, 10),
+                       c("JFK", "G06S", "AT", 8, 1.2, 7, 8, 10)) %>%
+  reduce(rbind) %>% as.data.frame()
+names(airtrain_edges) <- names(igraph_edges)
+
+igraph_edges <- rbind(igraph_edges, airtrain_edges)
+#save igraph edges
+save(file = 'igraph_edges.rdata', igraph_edges)
