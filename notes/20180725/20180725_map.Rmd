@@ -1,0 +1,286 @@
+---
+title: "Map"
+author: "Sasha, Ayliana, Taxi"
+date: "July 25, 2018"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#### Load libraries
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(igraph)
+library(leaflet)
+library(RColorBrewer)
+library(geosphere)
+```
+
+#### Load data
+```{r load data}
+load('../../data/reverse_mta_igraph_rush_hour.RData')
+stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
+stops <- stops %>% select(stop_id, stop_lat, stop_lon, stop_name)
+source('../../src/path_finding.R')
+```
+
+#### distance function
+```{r}
+distance <- function(graph, path) sum(E(graph, path=path)$weight)
+```
+
+#### geodistance (in km)
+```{r}
+Distance <- function(LatA, LonA, LatB, LonB){
+  scaling_factor <- 110.25
+  x <- LatA - LatB
+  y <- (LonA - LonB) * cos(40.75 * (pi)/180)
+
+  return (scaling_factor*sqrt(x * x + y * y))
+
+}
+```
+
+#### Find shortest paths from 96 St
+```{r regular}
+map_data <- get.all.shortest.paths(mta_igraph, "120", mode = "out")
+
+map_data <- map_data$res %>% lapply(function(x)data.frame(stop_id = names(x)[length(x)], distance <- distance(mta_igraph, x), path = paste0(names(x), collapse = '>'))) %>%
+  reduce(rbind) 
+map_data <- map_data %>% left_join(stops)
+names(map_data) <- c("stop_id", "distance", "path", "stop_lat", "stop_lon", "stop_name")
+```
+
+#### Create a grid of points
+```{r make-grid}
+map_data_lats <- seq(min(map_data$stop_lat), max(map_data$stop_lat), by=0.008)
+map_data_lons <- seq(min(map_data$stop_lon), max(map_data$stop_lon), by=0.008)
+grid <- expand.grid(map_data_lats, map_data_lons) %>%
+ select(lat = Var1, lon = Var2)
+```
+
+#### Get subway travel time, walking time, total time
+##### Filter for points reachable within 20 mins of walking
+```{r get-times}
+total_time = vector()
+walking = vector()
+station = vector()
+for(i in 1:nrow(grid)){
+ result<- map_data %>% mutate(walking_time = 720*Distance(grid$lat[i], grid$lon[i], stop_lat, stop_lon), 
+                              total_time = (walking_time + distance))
+ idx <- which.min(result$total_time)
+
+ total_time[i] <- result[idx, "total_time"]
+ walking[i] <- result[idx, "walking_time"]
+ station[i] <- result[idx, "stop_name"]
+ # print(walking[i])
+}
+grid$time <- total_time
+grid$walking <- walking
+grid$nearest_stop <- station
+grid <- grid %>% mutate(total_time_mins = time%/%60, walking_mins = walking%/%60, subway_mins = total_time_mins - walking_mins)
+
+filtered_grid <- grid %>%
+  filter(walking_mins <= 20) %>%
+  mutate(bin = findInterval(total_time_mins, seq(min(total_time_mins),
+                                                 max(total_time_mins),by=10)))
+```
+
+
+#### Set color palette
+```{r colors}
+
+clrs <- brewer.pal(11, "RdYlGn")
+
+# pal <- colorNumeric(
+#   palette = clrs,
+#   domain = filtered_grid$time,
+#   reverse = TRUE)
+
+pal <- colorNumeric(
+  palette = clrs,
+  domain = filtered_grid$bin,
+  reverse = TRUE)
+
+```
+
+
+#### Map grid of points and stations
+```{r with-stations}
+
+leaflet() %>%
+  addTiles() %>%
+  setView(-74.00, 40.71, zoom = 12) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addCircleMarkers(data = filtered_grid, lng = ~lon, lat = ~lat,
+                   color = ~pal(bin), 
+                   popup = paste(round(filtered_grid$total_time_mins, 2), "mins", "<br/>", filtered_grid$nearest_stop), 
+                   radius = 20, stroke = FALSE, fillOpacity = 0.1) %>%
+addCircleMarkers(data = map_data, lng = ~stop_lon, lat = ~stop_lat,
+                   popup = paste("<b>", map_data$stop_name, map_data$stop_id, "</b>",
+                                 "<br/>", round(map_data$distance/60, 2), "mins"),
+                   radius = 4,
+                   color = "blue",
+                   fillOpacity = 0.3)
+```
+
+
+#### Limit grid to points within NYC
+```{r spatial-join}
+library(sp)
+library(maptools)
+library(broom)
+library(httr)
+library(rgdal)
+library(ggmap)
+# nyc_map <- get_map(location = c(lon = -74.00, lat = 40.71), maptype = "terrain", zoom = 11)
+
+r <- GET('http://data.beta.nyc//dataset/0ff93d2d-90ba-457c-9f7e-39e47bf2ac5f/resource/35dd04fb-81b3-479b-a074-a27a37888ce7/download/d085e2f8d0b54d4590b1e7d1f35594c1pediacitiesnycneighborhoods.geojson')
+nyc_neighborhoods <- readOGR(content(r,'text'), 'OGRGeoJSON', verbose = F)
+
+
+filtered_grid_spdf <- filtered_grid
+coordinates(filtered_grid_spdf) <- ~lon + lat
+proj4string(filtered_grid_spdf) <- proj4string(nyc_neighborhoods)
+matches <- over(filtered_grid_spdf, nyc_neighborhoods)
+filtered_grid <- cbind(filtered_grid, matches)
+filtered_grid <- filtered_grid %>%
+  filter(!is.na(neighborhood))
+
+leaflet(nyc_neighborhoods) %>%
+  addTiles() %>% 
+  addProviderTiles("CartoDB.Positron") %>%
+  setView(-73.98, 40.75, zoom = 12) %>%
+  addCircleMarkers(data = filtered_grid, lng = ~lon, lat = ~lat,
+                   color = ~pal(bin), 
+                   popup = paste("walking:", filtered_grid$walking_mins, "mins", "<br/>",
+                                 "subway:", filtered_grid$subway_mins, "mins", "<br/>",
+                                 "total:", filtered_grid$total_time_mins, "mins", "<br/>",
+                                 filtered_grid$nearest_stop), 
+                   radius = 10, stroke = FALSE, fillOpacity = 0.6)
+
+```
+
+
+#### Comparing our travel time with Phoebe & Akbar's results
+##### our map: 15 mins, their results: 13 mins, google maps: 12 mins
+```{r compare-with-realtime}
+hours <- seq(7,8)
+orange <- read_csv('../../data/itineraries-Orange-Line-96-23-train.csv')
+load('../../data/96th-14th-1-v-2.RData')
+
+combined %>% 
+  group_by(realtime_trip_id) %>% mutate(count = n()) %>% 
+  filter(count == 2) %>% ungroup() %>% filter(stop_mta_id == "132S") %>% 
+  select(realtime_trip_id, stop_mta_id, stop_name, route_mta_id, direction, departure_time, hour, arrival_time, diff, group) %>% 
+  filter(group == "express", hour >= 7, hour <= 8) %>%
+  summarize(avg = mean(diff), med = median(diff)) %>% head
+
+
+# google maps: https://www.google.com/maps/dir/14+Street+Station,+New+York,+NY/96+St,+New+York,+NY+10025/@40.7612367,-74.0241911,13z/am=t/data=!4m14!4m13!1m5!1m1!1s0x89c259bd62913e4d:0x5cd8ad4fb7b27907!2m2!1d-73.996692!2d40.7371991!1m5!1m1!1s0x89c2f6281136b9a7:0x741d221bf6dc4ca5!2m2!1d-73.9721368!2d40.7941912!3e3
+```
+
+#### Tried using some guy's heatmap function but :/
+```{r failed-heatmap}
+addHeatMap <- function(data, lon, lat, intensity, ...) {
+  df <- data.table::as.data.table(data)
+  df_expanded <- dplyr::slice(df, rep(1:dplyr::n(), times = !! enquo(intensity)))
+
+  lon_var <- dplyr::pull(df_expanded, !! enquo(lon))
+  lat_var <- dplyr::pull(df_expanded, !! enquo(lat))
+
+  lon_bw <- MASS::bandwidth.nrd(lon_var)
+  lat_bw <- MASS::bandwidth.nrd(lat_var)
+
+  lon_lat_df <- dplyr::select(df_expanded, !! enquo(lon), !! enquo(lat))
+
+  kde <- KernSmooth::bkde2D(lon_lat_df, bandwidth = c(lon_bw, lat_bw))
+  CL <- contourLines(kde$x1 , kde$x2 , kde$fhat)
+  LEVS <- as.factor(sapply(CL, `[[`, "level"))
+  NLEV <- nlevels(LEVS)
+  pgons <- lapply(1:length(CL), function(i)
+  sp::Polygons(list(sp::Polygon(cbind(CL[[i]]$x, CL[[i]]$y))), ID = i))
+  spgons <- sp::SpatialPolygons(pgons)
+
+  leaflet::addPolygons(data = spgons, color = heat.colors(NLEV, NULL)[LEVS], stroke = FALSE, ...)
+}
+
+
+leaflet(nyc_neighborhoods) %>%
+  addTiles() %>% 
+  addProviderTiles("CartoDB.Positron") %>%
+  setView(-73.98, 40.75, zoom = 12) %>%
+  addHeatMap(data = filtered_grid, lon = lon, lat = lat, intensity = bin)
+
+```
+
+
+#### Remove the L train
+```{r no-l}
+igraph_without_l <- delete.edges(mta_igraph, which(E(mta_igraph)$route_ids == "L"))
+l_map_data <- get.all.shortest.paths(igraph_without_l, "120", mode = "out")
+
+l_map_data <- l_map_data$res %>% lapply(function(x)data.frame(stop_id = names(x)[length(x)], distance <- distance(igraph_without_l, x), path = paste0(names(x), collapse = '>'))) %>%
+  reduce(rbind) 
+l_map_data <- l_map_data %>% left_join(stops)
+names(l_map_data) <- c("stop_id", "distance", "path", "stop_lat", "stop_lon", "stop_name")
+
+l_map_data_lats <- seq(min(l_map_data$stop_lat), max(l_map_data$stop_lat), by=0.008)
+l_map_data_lons <- seq(min(l_map_data$stop_lon), max(l_map_data$stop_lon), by=0.008)
+grid <- expand.grid(map_data_lats, map_data_lons) %>%
+ select(lat = Var1, lon = Var2)
+
+total_time = vector()
+walking = vector()
+station = vector()
+for(i in 1:nrow(grid)){
+ result<- l_map_data %>% mutate(subway_mins = distance/60,
+                              walking_time = 720*Distance(grid$lat[i], grid$lon[i], stop_lat, stop_lon), 
+                              total_time = (walking_time + distance))
+ idx <- which.min(result$total_time)
+
+ total_time[i] <- result[idx, "total_time"]
+ walking[i] <- result[idx, "walking_time"]
+ station[i] <- result[idx, "stop_name"]
+ # print(walking[i])
+}
+grid$time <- total_time
+grid$walking <- walking
+grid$nearest_stop <- station
+grid <- grid %>% mutate(total_time_mins = time%/%60, walking_mins = walking%/%60, subway_mins = total_time_mins - walking_mins)
+
+l_filtered_grid <- grid %>%
+  filter(walking_mins <= 40) %>%
+  mutate(bin = findInterval(total_time_mins, seq(min(total_time_mins),
+                                                 max(total_time_mins),by=10)))
+```
+
+#### Map when the L train is missing
+```{r no-l-map}
+l_filtered_grid_spdf <- l_filtered_grid
+coordinates(l_filtered_grid_spdf) <- ~lon + lat
+proj4string(l_filtered_grid_spdf) <- proj4string(nyc_neighborhoods)
+matches <- over(l_filtered_grid_spdf, nyc_neighborhoods)
+l_filtered_grid <- cbind(l_filtered_grid, matches)
+l_filtered_grid <- l_filtered_grid %>%
+  filter(!is.na(neighborhood))
+
+
+leaflet(nyc_neighborhoods) %>%
+  addTiles() %>% 
+  addProviderTiles("CartoDB.Positron") %>%
+  setView(-73.98, 40.75, zoom = 12) %>%
+  addCircleMarkers(data = l_filtered_grid, lng = ~lon, lat = ~lat,
+                   color = ~pal(bin), 
+                   popup = paste("walking:", l_filtered_grid$walking_mins, "mins", "<br/>",
+                                 "subway:", l_filtered_grid$subway_mins, "mins", "<br/>",
+                                 "total:", l_filtered_grid$total_time_mins, "mins", "<br/>",
+                                 l_filtered_grid$nearest_stop), 
+                   radius = 10, stroke = FALSE, fillOpacity = 0.5)
+```
+
+
