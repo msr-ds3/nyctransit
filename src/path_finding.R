@@ -7,14 +7,14 @@ shortest_path <- function(graph, src, dest){
   if (length(path)==1) NULL else path
 }
 
-add_path_attributes <- function(graph, id, path){
-  edges <- E(graph, path = path)
-  line <- c(edges$route_id,'end')
-  weight <- c(edges$weight, 'end')
-  tibble(itinerary_id = id, station = path, line, weight)
-}
+# add_path_attributes <- function(graph, id, path){
+#   edges <- E(graph, path = path)
+#   line <- c(edges$route_id,'end')
+#   weight <- c(edges$weight, 'end')
+#   tibble(itinerary_id = id, station = path, line, weight)
+# }
 
-combine_paths_to_tibble <- function(paths, graph, colNames){
+combine_paths_to_tibble <- function(paths, graph, attributeNames){
   if (is.null(paths[[1]])) return (NULL)
   r <- NULL
   for(i in 1:length(paths)){
@@ -25,7 +25,7 @@ combine_paths_to_tibble <- function(paths, graph, colNames){
     weight <- c(attrs[['weight']], 'end')
     t <-tibble(itinerary_id = i, station = path, line, weight)
    
-    for (name in colNames){
+    for (name in attributeNames){
       t[,name] <- c(attrs[[name]],'end')
     }
     r <- rbind(r, t)
@@ -260,8 +260,8 @@ format_itinerary_raw <- function(shortest_paths_df) {
   return(itinerary)
 }
 
-format_itinerary <- function(paths, graph, src, dest, stops = NULL, colNames){
-  path_tibble <- combine_paths_to_tibble(paths,graph, colNames)
+format_itinerary <- function(paths, graph, src, dest, stops = NULL, attributeNames){
+  path_tibble <- combine_paths_to_tibble(paths,graph, attributeNames)
   if (is.null(path_tibble)) {
     warning(paste('No path between', src, dest))
     return(NULL)
@@ -274,7 +274,7 @@ get_itinerary_directed <- function(graph, src, dest, k, stops = NULL){
   k_shortest_yen(graph, src, dest,k) %>% format_itinerary(graph, src, dest, stops)
 }
 
-get_itinerary <- function(graph, src,dest, k, stops = NULL, colNames = NULL){
+get_itinerary <- function(graph, src,dest, k, stops = NULL, attributeNames = NULL){
   old_graph <- graph
   src_children <- paste0(src, c('N','S'))
   dest_children <- paste0(dest, c('N','S'))
@@ -288,7 +288,7 @@ get_itinerary <- function(graph, src,dest, k, stops = NULL, colNames = NULL){
     path[path_len] <- if(are.connected(old_graph, path[path_len -1], dest_children[1])) dest_children[1] else dest_children[2]
     path
   });
-  paths %>% format_itinerary(old_graph, src, dest, stops, colNames)
+  paths %>% format_itinerary(old_graph, src, dest, stops, attributeNames)
 }
 
 get_multiple_edges <- function(source,neighbors, mode){
