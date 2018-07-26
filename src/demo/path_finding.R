@@ -55,3 +55,7 @@ write.csv(generated, file = here("data", "itineraries-Orange-Line-96-23-train.cs
 # Shortest Paths from Midtown to Jamaica (i.e. 5 Av/53 St (F12) => JFK Airport (G06))
 generated <- get_itinerary(graph, 'F12', 'G06', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Midtown-Jamaica.csv"), row.names = F)
+
+
+
+
