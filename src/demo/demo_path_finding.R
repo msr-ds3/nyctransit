@@ -13,13 +13,8 @@ from <- 'R28'
 to <- '132'
 
 # #use this when from, to does not have direction
-x <- get_itinerary(graph, from, to, 5, stops)
+x <- get_itinerary(graph, 'R28', '132', 5)
 
-
-
-# 
-# #use get_itinerary_directed when the from, to have directions
-# y <- get_itinerary_directed(graph, 'R28S', '132S', 10, stops)
 
 x %>% group_by(itinerary_id) %>% summarize(path = paste(station, collapse = '->'), route_id = paste(line, collapse = '->'),
                                            sum(as.numeric(weight[1:(length(weight)-1)])))
@@ -28,9 +23,6 @@ x %>% group_by(itinerary_id) %>% summarize(path = paste(station, collapse = '->'
 #use get_itinerary_complex when the from, to are complex ids
 z <- get_itinerary_complex(graph, 617,628,3,stations, stops)
 
-# path <- list()
-# path[[1]] <- shortest_name_path(graph, from, to)
-# path[[2]] <- shortest_name_path(graph, from, to2)
 # 
 # path_with_attributes <- add_path_attributes(graph, 1, path[[1]])
 # 
