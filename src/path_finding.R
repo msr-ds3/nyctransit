@@ -267,7 +267,6 @@ get_itinerary <- function(graph, src,dest, k, stops = NULL){
   graph <- mergeVertex(graph, src, src_children)
   graph <- mergeVertex_in(graph, dest, dest_children)
   paths <- k_shortest_yen(graph, src, dest, k) 
-  
   paths <- lapply(paths,function(path){
     path_len <- length(path)
     if (are.connected(old_graph, src_children[1], path[2])) path[1] <- src_children[1]

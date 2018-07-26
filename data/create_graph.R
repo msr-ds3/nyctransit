@@ -1,8 +1,6 @@
 library(data.table)
 source('../src/time.R')
 
-
-
 compute_edge_popularity <- function(edges) {edges %>%
   group_by(route_id, stop_id, nxt_stop_id) %>% 
   mutate(c = n())%>% group_by(route_id) %>%
@@ -17,7 +15,6 @@ weight_summary <- function(duration, quantiles){
   info[names(quantiles)] <- quantiles
   info
 }
-
 
 create_edges <- function (scheduled_edges, realtime_edges, transfer_edges, quantiles = c(.1,.5,.9),
              include_day_of_week = NULL, time_range = NULL, cutoff = NULL, relative_cutoff = NULL,
@@ -53,37 +50,6 @@ create_edges <- function (scheduled_edges, realtime_edges, transfer_edges, quant
   bind_rows(edges, transfer_edges)
   
 }
-# add_weights <- function(edges, realtime_edges, quantiles) {
-#   filtered_realtime <- left_join(edges, realtime_edges, by = c('route_id','stop_id', 'nxt_stop_id'))
-#   #ignore na for now
-#   filtered_realtime <- filtered_realtime %>% filter(!is.na(duration))
-#   filtered_realtime <- filtered_realtime %>% group_by(stop_id, nxt_stop_id) %>% mutate(route_id = paste0(unique(route_id), collapse = '_'))
-#   as.data.table(filtered_realtime)[, weight_summary(duration, quantiles), by = c('stop_id', 'nxt_stop_id','route_id')] %>% as.data.frame()
-# }
-
-# filter_edges <- function(scheduled_edges, realtime_edges, quantiles = c(.1,.5,.9), include_day_of_week = NULL, time_range= NULL, cutoff = NULL, relative_cutoff = NULL, exclude_routes = NULL){
-#   scheduled_edges <- compute_edge_popularity(scheduled_edges)
-# 
-#    if (!is.null(relative_cutoff)) scheduled_edges <- filter(scheduled_edges, relative >=relative_cutoff)
-#    if (!is.null(cutoff)) scheduled_edges <- filter(scheduled_edges, c >= cutoff)
-#    if (!is.null(include_day_of_week)) {
-#      scheduled_edges <- filter(scheduled_edges, day_of_week %in% include_day_of_week)
-#      realtime_edges <- 
-#    }
-#    if (!is.null(exclude_routes)) scheduled_edges <- filter(scheduled_edges, !route_id %in% exclude_routes)
-#    if (!is.null(time_range)) scheduled_edges <- filter(scheduled_edges, within.timeRange(start_trip_time, time_range[1], time_range[2]))
-#    scheduled_edges %>% select(route_id, stop_id, nxt_stop_id) %>% distinct
-# }
-
-
-
-add_transfer <- function(edges, transfer){
-  c_names <- names(edges)[c(-(1:3),-5)]
-  transfer[,c_names] <- transfer[,'duration']
-  transfer <- transfer %>% mutate(sd =0)
-  transfer <- select(transfer, -duration)
-  bind_rows(edges, transfer)
-}
 
 #demo
 #make sure to run create_edge_data.r before running this
@@ -91,7 +57,9 @@ load('./edges.rdata')
 realtime_edges <- realtime_edges %>% mutate(start_trip_time = as.numeric(start_trip_time) %% secondsIn24Hours)
 
 #filter edges
-igraph_edges <- create_edges(scheduled_edges, realtime_edges, transfer_edges, cutoff = 5, relative_cutoff = .1, time_range = c('9:00:00','10:00:00')) 
+igraph_edges <- create_edges(scheduled_edges, realtime_edges, transfer_edges, 
+                             cutoff = 5, relative_cutoff = .1, time_range = c('7:00:00','9:00:00'), 
+                             include_day_of_week = 'Weekday') 
 #save igraph edges
 save(file = 'igraph_edges.rdata', igraph_edges)
 
