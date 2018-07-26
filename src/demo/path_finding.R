@@ -56,6 +56,9 @@ write.csv(generated, file = here("data", "itineraries-Orange-Line-96-23-train.cs
 generated <- get_itinerary(graph, 'F12', 'G06', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Midtown-Jamaica.csv"), row.names = F)
 
+generated <- get_itinerary(graph, 'G06', 'F12', 10, stops)
+write.csv(generated, file = here("data", "itineraries-Midtown-Jamaica.csv"), row.names = F)
+
 
 
 
