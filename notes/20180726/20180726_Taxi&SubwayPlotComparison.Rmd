@@ -1,0 +1,457 @@
+---
+author: "Peter Farquharson"
+title: "20180725_Taxi_Six_Month"
+output: html_document
+---
+
+```{r setup, ""}
+
+
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+install.packages("ggthemes")
+library(ggthemes)
+
+install.packages("pdist")
+library(pdist)
+load("taxi_data_2015_01-06-lite_clean.Rdata")
+stop_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
+#load(file="../../data/todd_subway_realtime.RData")
+#todd_data <- realtime
+
+
+```
+
+```{r , }
+pickup_rounding_factor <- .002
+dropoff_rounding_factor <- .002
+ 
+ taxi_clean_lite %>% 
+  mutate(rounded_pickup_lat = ifelse(pickup_neighborhood == "John F. Kennedy International Airport",40.641, ifelse(pickup_neighborhood =="LaGuardia Airport",
+                                                                                 40.773,round(pickup_latitude/pickup_rounding_factor)*pickup_rounding_factor)),
+ rounded_pickup_lng = ifelse(pickup_neighborhood == "John F. Kennedy International Airport" ,-73.777, ifelse(pickup_neighborhood =="LaGuardia Airport",-73.872,
+round(pickup_longitude/pickup_rounding_factor)*pickup_rounding_factor)),
+ 
+rounded_dropoff_lat = ifelse(dropoff_neighborhood == "John F. Kennedy International Airport", 40.64, ifelse(dropoff_neighborhood =="LaGuardia Airport",40.77,
+          round(dropoff_latitude, dropoff_rounding_factor))),
+rounded_dropoff_lng = ifelse(dropoff_neighborhood == "John F. Kennedy International Airport" ,-73.78, ifelse(dropoff_neighborhood =="LaGuardia Airport", -73.87,round(dropoff_longitude, dropoff_rounding_factor))))
+ 
+
+
+
+```
+
+
+```{r ,"Distance formula function"}
+
+#result in kilometers
+Distance <- function(LatA, LonA, LatB, LonB){
+  scaling_factor <- 110.25
+  x <- LatA - LatB
+  y <- (LonA - LonB) * cos(LatB * (pi)/180)
+  
+  return (scaling_factor*sqrt(x * x + y * y))
+  
+}
+#Test function
+#Distance(40.75467,-73.98675, 40.74104,-73.99787)
+
+```
+
+
+
+```{r, "function for statistics"  }
+
+#trip_time_in_secs
+
+statistics <- function(LatA, LonA, LatB, LonB){
+  
+   calc <- taxi_clean_lite  %>%  
+     mutate(dist = Distance(LatA, LonA, pickup_latitude, pickup_longitude), dist2 = Distance(LatB, LonB, dropoff_latitude, dropoff_longitude))
+  
+   
+   func_calc <- calc %>% 
+     filter(dist < 0.33 & dist2 < 0.33) %>% 
+     group_by(day_of_the_week) %>%
+  summarize(count = n(), 
+            median = median(trip_time_in_sec), 
+            upper_quartile = quantile(trip_time_in_sec, 0.9), 
+            lower_quartile = quantile(trip_time_in_sec, 0.1),
+            quart_quartile = quantile(trip_time_in_sec, .25), 
+            seventh_quartile = quantile(trip_time_in_sec, .75)) %>%
+    ggplot(aes(x = day_of_the_week, y = median, group = 1)) + geom_ribbon(aes(ymin = lower_quartile, ymax = upper_quartile), fill = "grey80")+ geom_ribbon(aes(ymin = quart_quartile, ymax = seventh_quartile), fill = "grey70") + geom_line()
+     
+  
+  
+   return(func_calc)
+  
+}
+
+```
+
+```{r , "Airport trips"}
+
+
+#53rd/5av to JFK
+statistics(40.76017, -73.97522,40.6438, -73.7823)
+
+
+#53rd/5av to Laguardia
+
+statistics(40.76017, -73.97522,40.7772, -73.8725)
+
+
+
+
+
+
+
+```
+
+```{r "function based on hour of day"}
+
+statistics2 <- function(LatA, LonA, LatB, LonB){
+  
+   calc <- taxi_clean_lite  %>%  
+     mutate(dist = Distance(LatA, LonA, pickup_latitude, pickup_longitude), dist2 = Distance(LatB, LonB, dropoff_latitude, dropoff_longitude))
+  
+   
+   func_calc <- calc %>% 
+     filter(dist <= 0.33 & dist2 <= 0.33) %>% 
+     group_by(pickup_hour) %>%
+  summarize(count = n(), 
+            median = median(trip_time_in_sec), 
+            upper_quartile = quantile(trip_time_in_sec, 0.9), 
+            lower_quartile = quantile(trip_time_in_sec, 0.1),
+            quart_quartile = quantile(trip_time_in_sec, .25), 
+            seventh_quartile = quantile(trip_time_in_sec, .75))#%>%
+    #ggplot(aes(x = pickup_hour, y = median, group = 1)) + geom_ribbon(aes(ymin = lower_quartile, ymax = upper_quartile), fill = "grey80")+ geom_ribbon(aes(ymin = quart_quartile, ymax = seventh_quartile), fill = "grey70")+ geom_line()
+     
+  
+  
+   return(func_calc)
+}
+
+
+#53rd to JFK
+statistics2(40.76017, -73.97522,40.6438, -73.7823)
+
+#53rd to Laguardia
+statistics(40.76017, -73.97522, 40.7772, -73.8725)
+```
+
+
+```{r }
+filter_trips_cosadj <- function(taxi_clean_lite, from_stop, to_stop, threshold, day_filter, hour_filter, cos_adjust){
+  
+  from_coords <- stop_data %>% filter(`GTFS Stop ID` == from_stop) %>% select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, lng = `GTFS Longitude`)
+  to_coords <- stop_data %>% filter(`GTFS Stop ID` == to_stop) %>% select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, lng = `GTFS Longitude`)
+  
+  filtered_trips <- taxi_clean_lite %>% 
+    filter(wday(pickup_datetime) %in% day_filter, hour(pickup_datetime) %in% hour_filter) %>%
+    mutate(distance_source = 110.25 * sqrt(((from_coords[['lat']] - pickup_latitude)*cos_adjust)^2 + ((from_coords[['lng']] - pickup_longitude)*cos_adjust)^2),
+           distance_dest = 110.25 * sqrt(((to_coords[['lat']] - dropoff_latitude)*cos_adjust)^2 + ((to_coords[['lng']] - dropoff_longitude)*cos_adjust)^2)) %>%
+    filter(distance_source < threshold & distance_dest < threshold)
+  
+
+  return(filtered_trips)
+ 
+}
+ 
+const_cos_adjust <- cos((median(rbind(taxi_clean_lite$pickup_latitude, taxi_clean_lite$dropoff_latitude)) * pi)/ 180)
+
+
+
+
+```
+
+
+```{r , "Calling the function" }
+
+
+
+
+#96th --> Times Sq 42nd Street
+#Monday to friday, 7am to 10pm
+filter_trips_cosadj(taxi_clean_lite, "120", "127", .33, 2:6, 7:22, const_cos_adjust)#
+
+ 
+#96 to 14th Street
+#Monday to Friday
+#7am to 10pm
+filter_trips_cosadj(taxi_clean_lite, "120", "132", .33, 2:6, 7:22, const_cos_adjust)
+
+#96 to chambers ST
+#morning rush, Sunday to Saturday
+filter_trips_cosadj(taxi_clean_lite, "120", "137", .33, 2:6, 7:10, const_cos_adjust)
+
+#Port authority to grand central
+#morning rush
+#Sunday to Saturday
+filter_trips_cosadj(taxi_clean_lite, "A27", "631", .33, 2:6, 7:10, const_cos_adjust)
+
+#96 to 18th St
+#Monday to Friday, 7am to 10pm(morning rush)
+filter_trips_cosadj(taxi_clean_lite, "120", "131", .33, 2:6, 7:22, const_cos_adjust) 
+
+
+```
+
+```{r, "Plotting distribution for the stops"}
+filter_trip_plots <- function(taxi_clean_lite, from_stop, to_stop, threshold, day_filter, hour_filter, cos_adjust){
+  
+  from_coords <- stop_data %>% filter(`GTFS Stop ID` == from_stop) %>% select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, lng = `GTFS Longitude`)
+  to_coords <- stop_data %>% filter(`GTFS Stop ID` == to_stop) %>% select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, lng = `GTFS Longitude`)
+  
+  filtered_trips <- taxi_clean_lite %>% 
+    filter(wday(pickup_datetime) %in% day_filter, hour(pickup_datetime) %in% hour_filter) %>%
+    mutate(distance_source = 110.25 * sqrt(((from_coords[['lat']] - pickup_latitude)*cos_adjust)^2 + ((from_coords[['lng']] - pickup_longitude)*cos_adjust)^2),
+           distance_dest = 110.25 * sqrt(((to_coords[['lat']] - dropoff_latitude)*cos_adjust)^2 + ((to_coords[['lng']] - dropoff_longitude)*cos_adjust)^2)) %>%
+    filter(distance_source < threshold & distance_dest < threshold)
+  
+
+  return(filtered_trips)
+}
+ 
+const_cos_adjust <- cos((median(rbind(taxi_clean_lite$pickup_latitude, taxi_clean_lite$dropoff_latitude)) * pi)/ 180)
+
+```
+
+```{r ,"Plot calls"}
+#West Side
+#96th --> Times Sq 42nd Street
+df1 <- filter_trip_plots(taxi_clean_lite, "120", "127", .33, 2:6, 7:22, const_cos_adjust)
+df1$trip <- "96-42"
+
+#East Side
+#96 --> Times Sq
+df1 <- filter_trip_plots(taxi_clean_lite, "625", "725", .33, 2:6, 7:22, const_cos_adjust)
+df1$trip <- "96-42"
+
+
+#West Side
+#96 to 14th Street
+df2<- filter_trip_plots(taxi_clean_lite, "120", "132", .33, 2:6, 7:22, const_cos_adjust) 
+df2$trip <- "96-14"
+
+#East Side
+#96 to 14th Street
+df2<- filter_trip_plots(taxi_clean_lite, "625", "635", .33, 2:6, 7:22, const_cos_adjust) 
+df2$trip <- "96-14"
+
+#West Side
+#96 to chambers ST
+#morning rush, Sunday to Saturday
+df3 <- filter_trip_plots(taxi_clean_lite, "120", "137", .33, 2:6, 7:22, const_cos_adjust) 
+df3$trip <- "96-Chambers"
+
+#East Side
+#96 to chambers ST
+#morning rush, Sunday to Saturday
+df3 <- filter_trip_plots(taxi_clean_lite, "625", "A36", .33, 2:6, 7:22, const_cos_adjust) 
+df3$trip <- "96-Chambers"
+
+
+#Port authority to grand central
+#morning rush
+#Sunday to Saturday
+df4<- filter_trip_plots(taxi_clean_lite, "A27", "631", .33, 2:6, 7:22, const_cos_adjust) 
+df4$trip <- "PortA-GrandC"
+
+#West Side
+#96 to 18th St
+#Monday to Friday, 7am to 10pm(morning rush)
+df5<- filter_trip_plots(taxi_clean_lite, "120", "131", .33, 2:6, 7:22, const_cos_adjust)
+df5$trip <- "96-18"
+
+#East SIde
+#96 to 18th St
+#Monday to Friday, 7am to 10pm(morning rush)
+df5<- filter_trip_plots(taxi_clean_lite, "625", "131", .33, 2:6, 7:22, const_cos_adjust)
+df5$trip <- "96-18"
+
+
+combined_df <- rbind(df1, df2,df3,df4,df5)
+
+ggplot(combined_df) + geom_histogram(aes(x = trip_time_in_sec, fill = trip), position = "dodge") + xlim(0, 3000) + facet_wrap(~trip,scales = "free_y")
+
+```
+
+```{r , "imported igraph taxi data from AKbar and Taxi"}
+
+#library(igraph)
+
+#install.packages("here")
+#library(here)
+
+#source(here("src", "path_finding.R"))
+#load(here("data", "igraph_edges.rdata"))
+#stops <- read_csv(here("data", "google_transit_subway_static", "stops.txt"))
+#igraph_edges <- igraph_edges %>% mutate(weight = as.numeric(mean))
+#graph <- graph.data.frame(igraph_edges)
+
+#from <- '128'
+#to <- 'F18'
+#to2 <- '123'
+
+# path <- list()
+# path[[1]] <- shortest_name_path(graph, from, to)
+# path[[2]] <- shortest_name_path(graph, from, to2)
+# 
+# path_with_attributes <- add_path_attributes(graph, 1, path[[1]])
+# 
+# paths_tibble <- combine_paths_to_tibble(graph, path)
+# 
+# path_distance(graph, path[[1]])
+# path_distance(graph, path[[2]])
+# 
+# path_sorted <- sort_path(graph, path)
+
+#vertices <- V(graph)$name
+#vertices <- vertices[vertices != from]
+#for (i in vertices) 
+ # get_itinerary(graph,stops, from, i, 3)
+#get_itinerary(graph, stops, 'A27','132',10)
+
+#96St to times sq 42
+#generated <- get_itinerary(graph, '120', '127', 10, stops)
+#write.csv(generated, file = here("data", "itineraries-1-train.csv"), row.names = F)
+
+
+
+
+```
+
+
+
+```{r , "combining taxi and subway"}
+
+library(plyr)
+
+
+df1 <- filter_trip_plots(taxi_clean_lite, "120", "127", .33, 2:6, 7:22, const_cos_adjust)
+df1$trip <- "Taxi"
+
+df1$trip_time_in_sec<- df1$trip_time_in_sec/60
+
+all_itin_df$trip <- "Subway"
+
+df1$label <- " Taxi"
+
+# df1: trip_time_in_sec, trip, label = ''
+# all_itin_df: time_diff, trip, label
+# select(time_diff = trip_time_in_sec, )
+colnames(df1)
+colnames(all_itin_df)
+
+plot_df1 <- df1 %>% 
+  select(trip_time_in_sec, trip, label)
+
+quantile(plot_df1$trip_time_in_sec, 0.95)
+plot_all_itin_df <- all_itin_df %>%
+  rename(c("time_diff" =  "trip_time_in_sec")) %>% 
+  select(trip_time_in_sec , trip, label)
+
+
+fused_df <-rbind(plot_df1, plot_all_itin_df)
+
+
+fused_df %>% ggplot() + geom_density(aes(x = trip_time_in_sec, fill = label, color = label),alpha = 0.2) + xlim(0, 1883.3/60) 
+
+#plot_densities(all_itin_df)
+
+
+
+
+
+
+
+
+
+
+```
+
+
+```{r , "Averages Jake were curious about" }
+df1 %>% group_by(yday(pickup_datetime)) %>% summarize(avg = mean(trip_time_in_sec)) %>% ungroup() %>% summarize(avg = mean(avg))
+
+df2 %>% group_by(yday(pickup_datetime)) %>% summarize(avg = mean(trip_time_in_sec)) %>% ungroup() %>% summarize(avg = mean(avg))
+
+df3%>% group_by(yday(pickup_datetime)) %>% summarize(avg = mean(trip_time_in_sec)) %>% ungroup() %>% summarize(avg = mean(avg))
+
+df4 %>% group_by(yday(pickup_datetime)) %>% summarize(avg = mean(trip_time_in_sec)) %>% ungroup() %>% summarize(avg = mean(avg))
+
+df5 %>% group_by(yday(pickup_datetime)) %>% summarize(avg = mean(trip_time_in_sec)) %>% ungroup() %>% summarize(avg = mean(avg))
+
+combined_df %>% group_by(yday(pickup_datetime)) %>% summarize(avg = mean(trip_time_in_sec)) %>% ungroup() %>% summarize(avg = mean(avg))
+#Let Jake know : wasn't really much difference from before
+
+
+
+
+
+
+```
+
+
+
+
+
+
+```{r , "Brian's airport function"}
+
+const_cos_adjust <- cos((median(rbind(taxi_clean_lite$pickup_latitude, taxi_clean_lite$dropoff_latitude)) * pi)/ 180)
+#plot_data_reg <- filter_trips_cosadj(taxi_clean_201506, "123", "132", .33, 2:6, 1:6, const_cos_adjust) %>% mutate(dummy = "reg")
+#plot_data_rush <- filter_trips_cosadj(taxi_clean_201506, "123", "132", .33, 2:6, 17:19, const_cos_adjust) %>% mutate(dummy = "rush")
+#plot_data <- rbind(plot_data_reg, plot_data_rush)
+
+
+
+filter_trips_latlng <- function(taxi_clean_lite, from_lat, from_lng, to_neighborhood, from_threshold, to_threshold, day_filter, hour_filter, cos_adjust){
+  
+  filtered_trips <- taxi_clean_lite %>% 
+    filter(wday(pickup_datetime) %in% day_filter, hour(pickup_datetime) %in% hour_filter, dropoff_neighborhood == to_neighborhood) %>%
+    mutate(distance_source = 110.25 * sqrt(((from_lat - pickup_latitude)*cos_adjust)^2 + ((from_lng - pickup_longitude)*cos_adjust)^2)) %>%
+    filter(distance_source <= from_threshold) %>%
+    mutate(travel_time = difftime(dropoff_datetime, pickup_datetime, units = "mins"))
+
+  return(filtered_trips)
+
+}
+
+plot_data_jfk <- filter_trips_latlng(taxi_clean_lite, 40.76017, -73.97522, "John F. Kennedy International Airport", .33, 0, 0:23, 1:7, const_cos_adjust) %>% 
+  filter(travel_time < (quantile(travel_time, .75) + 1.5 * (quantile(travel_time, .75) - quantile(travel_time, .25))),
+         travel_time > (quantile(travel_time, .25) - 1.5 * (quantile(travel_time, .75) - quantile(travel_time, .25)))) %>%
+  mutate(dest = "jfk")
+
+plot_data_lga <- filter_trips_latlng(taxi_clean_lite, 40.76017, -73.97522, "LaGuardia Airport", .33, 0, 0:23, 1:7, const_cos_adjust) %>%
+  filter(travel_time < (quantile(travel_time, .75) + 1.5 * (quantile(travel_time, .75) - quantile(travel_time, .25))),
+         travel_time > (quantile(travel_time, .25) - 1.5 * (quantile(travel_time, .75) - quantile(travel_time, .25)))) %>%
+  mutate(dest = "lga")
+
+airport_plot_data <- rbind(plot_data_jfk, plot_data_lga)
+
+airport_plot_data %>% 
+  group_by(dest) %>% 
+  summarize(avg = mean(travel_time), std = sd(travel_time), vari = var(travel_time), num = n())
+
+airport_plot_data %>%
+  ggplot() +
+  geom_histogram(aes(travel_time, fill = dest), position="dodge")
+
+
+
+
+
+
+
+```
+
+
+
+  
+
