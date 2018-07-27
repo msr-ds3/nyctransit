@@ -74,7 +74,8 @@ save_edges <- function(edges, name)
   map <- create_map(edges)
   deduplicate <- deduplicate(map)
   exceptions <- map %>% filter(count != 1, route_id != 'T')
-  map <- map %>% select(stop_id, stop_id_u, nxt_stop_id, nxt_stop_id_u)
+  map <- map%>% group_by(stop_id_u, nxt_stop_id_u) %>% mutate(x = stop_id == last(stop_id) & nxt_stop_id == last(nxt_stop_id)) %>%
+    filter(x == T) %>% select(stop_id, stop_id_u, nxt_stop_id, nxt_stop_id_u)
   
   file_name <- paste0('data/',name, '.rdata')
   map_name <- paste0(name, '_map')
@@ -100,33 +101,17 @@ edges <- create_edges(scheduled_edges, realtime_edges, transfer_edges,
                              cutoff = 5, relative_cutoff = .1, time_range = c('7:00:00','9:00:00'), 
                              include_day_of_week = 'Weekday')
 
+map <- create_map(edges)
 save_edges(edges, 'igraph_edges')
 
 #add airtrains
-airtrain_edges <- list(c("702N", "LGAN", "AT", 6, 0, 6, 6, 6),
-                       c("702S", "LGAN", "AT", 6, 0, 6, 6, 6),
-                       c("H03N", "JFKN", "AT", 10, 1, 8, 10, 12),
-                       c("H03S", "JFKN", "AT", 10, 1, 8, 10, 12),
-                       c("G06N", "JFKN", "AT", 8, 1.2, 7, 8, 10),
-                       c("G06S", "JFKN", "AT", 8, 1.2, 7, 8, 10),
-                       c("LGAN", "702N", "AT", 6, 0, 6, 6, 6),
-                       c("LGAN", "702S", "AT", 6, 0, 6, 6, 6),
-                       c("JFKN", "H03N", "AT", 10, 1, 8, 10, 12),
-                       c("JFKN", "H03S", "AT", 10, 1, 8, 10, 12),
-                       c("JFKN", "G06N", "AT", 8, 1.2, 7, 8, 10),
-                       c("JFKN", "G06S", "AT", 8, 1.2, 7, 8, 10),
-                       c("702N", "LGAS", "AT", 6, 0, 6, 6, 6),
-                       c("702S", "LGAS", "AT", 6, 0, 6, 6, 6),
-                       c("H03N", "JFKS", "AT", 10, 1, 8, 10, 12),
-                       c("H03S", "JFKS", "AT", 10, 1, 8, 10, 12),
-                       c("G06N", "JFKS", "AT", 8, 1.2, 7, 8, 10),
-                       c("G06S", "JFKS", "AT", 8, 1.2, 7, 8, 10),
-                       c("LGAS", "702N", "AT", 6, 0, 6, 6, 6),
-                       c("LGAS", "702S", "AT", 6, 0, 6, 6, 6),
-                       c("JFKS", "H03N", "AT", 10, 1, 8, 10, 12),
-                       c("JFKS", "H03S", "AT", 10, 1, 8, 10, 12),
-                       c("JFKS", "G06N", "AT", 8, 1.2, 7, 8, 10),
-                       c("JFKS", "G06S", "AT", 8, 1.2, 7, 8, 10))%>%
+airtrain_edges <- list(c("702N", "LGAN", "AT", 360, 0, 360, 360, 360),
+                       c("H03N", "JFKN", "AT", 600, 60, 480, 600, 720),
+                       c("G06N", "JFKN", "AT", 480, 72, 420, 480, 600),
+                       
+                       c("LGAS", "702S", "AT", 360, 0, 360, 360, 360),
+                       c("JFKS", "H03S", "AT", 600, 60, 480, 600, 720),
+                       c("JFKS", "G06S", "AT", 480, 72, 420, 480, 600))%>%
   reduce(rbind) %>% as.data.frame()
 names(airtrain_edges) <- names(edges)
 

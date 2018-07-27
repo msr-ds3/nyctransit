@@ -13,8 +13,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 #### Load libraries
 ```{r warning=FALSE, message=FALSE}
-library(data.table)
-library(tidyverse)
 library(igraph)
 library(leaflet)
 library(RColorBrewer)
@@ -29,6 +27,7 @@ library(KernSmooth)
 library(ggplot2)
 library(gstat)
 library(raster)
+library(tidyverse)
 ```
 
 #### Load data
@@ -63,11 +62,11 @@ map_data <- get.all.shortest.paths(mta_igraph, "120", mode = "out")
 map_data <- map_data$res %>% lapply(function(x)data.frame(stop_id = names(x)[length(x)], distance <- distance(mta_igraph, x), path = paste0(names(x), collapse = '>'))) %>%
   reduce(rbind) 
 map_data <- map_data %>% left_join(stops)
+names(map_data) <- c("stop_id", "distance", "path", "stop_lat", "stop_lon", "stop_name")
 map_data <- map_data %>%
   mutate(mins = distance%/%60,
          log_mins = log(mins),
          min_interval = cut(mins, seq(0, max(mins), by = 5), include.lowest = TRUE))
-names(map_data) <- c("stop_id", "distance", "path", "stop_lat", "stop_lon", "stop_name", "mins", "log_mins")
 ```
 
 #### Create a grid of points

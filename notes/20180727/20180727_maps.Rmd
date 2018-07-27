@@ -1,0 +1,264 @@
+---
+title: "Maps"
+author: "Sasha, Ayliana, Taxi"
+date: "July 27, 2018"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#### Load libraries
+```{r warning=FALSE, message=FALSE}
+library(igraph)
+library(leaflet)
+library(RColorBrewer)
+library(geosphere)
+library(sp)
+library(maptools)
+library(broom)
+library(httr)
+library(rgdal)
+library(ggmap)
+library(KernSmooth)
+library(ggplot2)
+library(gstat)
+library(raster)
+library(mapview)
+library(tidyverse)
+```
+
+#### Load data
+```{r load-data, message= FALSE}
+stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
+stops <- stops %>% select(stop_id, stop_lat, stop_lon, stop_name)
+
+routes <- read_csv('../../data/google_transit_subway_static/routes.txt')
+routes$route_color <- replace_na(routes$route_color, "000000") 
+routes <- routes %>%
+  mutate(route_color = sprintf("#%s", route_color))
+
+source('../../src/path_finding.R')
+load('../../igraph_edges.rdata')
+
+r <- GET('http://data.beta.nyc//dataset/0ff93d2d-90ba-457c-9f7e-39e47bf2ac5f/resource/35dd04fb-81b3-479b-a074-a27a37888ce7/download/d085e2f8d0b54d4590b1e7d1f35594c1pediacitiesnycneighborhoods.geojson')
+nyc_neighborhoods <- readOGR(content(r,'text'), 'OGRGeoJSON', verbose = F)
+```
+
+#### distance function
+```{r}
+distance <- function(graph, path) sum(E(graph, path=path)$weight)
+```
+
+#### geodistance (in km)
+```{r}
+Distance <- function(LatA, LonA, LatB, LonB){
+  scaling_factor <- 110.25
+  x <- LatA - LatB
+  y <- (LonA - LonB) * cos(40.75 * (pi)/180)
+
+  return (scaling_factor*sqrt(x * x + y * y))
+}
+```
+
+
+```{r}
+work <- "137S"
+lga <- "LGAN"
+jfk <- "JFKS"
+```
+
+### GET GRAPHS
+#### with 50%
+```{r}
+igraph_edges_50 <- mutate(igraph_edges, 'weight'=`50%`)
+igraph_edges_50$weight <- as.numeric(igraph_edges_50$weight)
+graph_50 <- graph.data.frame(igraph_edges_50)
+```
+
+#### with 90%
+```{r}
+igraph_edges_90 <- mutate(igraph_edges, 'weight'=`90%`)
+igraph_edges_90$weight <- as.numeric(igraph_edges_90$weight)
+graph_90 <- graph.data.frame(igraph_edges_90)
+```
+
+
+#### **need this for heatmap**
+#### make a grid of points over nyc
+```{r}
+grid_lats <- seq(min(stops$stop_lat), max(stops$stop_lat), by=0.002)
+grid_lons <- seq(min(stops$stop_lon), max(stops$stop_lon), by=0.002)
+grid <- expand.grid(grid_lats, grid_lons) %>%
+    select(lat = Var1, lon = Var2)
+```
+
+
+#### Functions for making commute heatmaps given 1 destination
+```{r regular}
+
+# get time from each subway station to "dest"
+get_heatmap_static_info <- function(dest, igraph) {
+  map_data <- get.all.shortest.paths(igraph, dest,  mode = "out")
+
+  map_data <- map_data$res %>% 
+    lapply(function(x)data.frame(stop_id = names(x)[length(x)],
+                                 distance <- distance(igraph, x), 
+                                 path = paste0(names(x), collapse = '>'))) %>%
+    reduce(rbind) 
+
+  map_data <- map_data %>% left_join(stops) 
+  names(map_data) <- c("stop_id", "distance", "path", "stop_lat", "stop_lon", "stop_name")
+  
+
+  map_data <- map_data %>%
+    mutate(subway_mins = distance%/%60)
+  
+  return(map_data)
+
+}
+
+# get time from each point on grid to "dest" 
+get_heatmap_grid_info <- function(map_data, grid) {
+  total_time = vector()
+  walking = vector()
+  station = vector()
+  for(i in 1:nrow(grid)){
+    result<- map_data %>% mutate(walking_time = 720*Distance(grid$lat[i], grid$lon[i], stop_lat, stop_lon), 
+                                 total_time = (walking_time + distance))
+    idx <- which.min(result$total_time)
+    
+    total_time[i] <- result[idx, "total_time"]
+    walking[i] <- result[idx, "walking_time"]
+    station[i] <- result[idx, "stop_name"]
+    # print(walking[i])
+  }
+  grid$time <- total_time
+  grid$walking <- walking
+  grid$nearest_stop <- station
+  grid <- grid %>% 
+    mutate(total_time_mins = time%/%60, walking_mins = walking%/%60, subway_mins = total_time_mins - walking_mins)
+ 
+  return(grid) 
+}
+
+# changes depending on variable being measured  
+get_palette <- function(grid) {
+  # filter for trips with 20 mins or less of walking
+  filtered_grid <- grid %>%
+    filter(walking_mins <= 20) %>%
+    mutate(min_interval = cut(total_time_mins, seq(0, max(total_time_mins), by = 5), include.lowest = TRUE),
+           bin = cut(total_time_mins, seq(0, max(total_time_mins), by = 5), include.lowest = TRUE, labels = FALSE))
+  
+  clrs <- brewer.pal(11, "RdYlGn")
+  
+  grid_pal <- colorNumeric(
+    palette = clrs,
+    domain = sqrt(filtered_grid$total_time_mins), #doesn't have to be sqrt()
+    reverse = TRUE,
+    na.color = "transparent")
+  
+  return(grid_pal)
+}
+
+ 
+
+ 
+get_commute_heatmap <- function(dest, map_data, grid, palette) {
+  
+  filtered_grid <- grid %>%
+    filter(walking_mins <= 20) %>%
+    mutate(min_interval = cut(total_time_mins, seq(0, max(total_time_mins), by = 5), include.lowest = TRUE),
+           bin = cut(total_time_mins, seq(0, max(total_time_mins), by = 5), include.lowest = TRUE, labels = FALSE))
+  
+  filtered_grid_spdf <- filtered_grid
+  coordinates(filtered_grid_spdf) <- ~lon + lat
+  proj4string(filtered_grid_spdf) <- proj4string(nyc_neighborhoods)
+  matches <- over(filtered_grid_spdf, nyc_neighborhoods)
+  filtered_grid <- cbind(filtered_grid, matches)
+  filtered_grid <- filtered_grid %>%
+    filter(!is.na(neighborhood))
+  
+  coords <- filtered_grid[c("lon", "lat")]
+  
+  gridded(filtered_grid_spdf) <- TRUE
+  
+  
+  #Interpolate surface and fix the output
+  idw <- idw(formula=sqrt(total_time_mins) ~ 1, locations=filtered_grid_spdf, newdata = filtered_grid_spdf)  
+  # apply idw model for the data
+  
+  residual_grid <- raster(idw, "var1.pred")
+  contourr <- rasterToContour(residual_grid)
+  
+  
+  rr <- mask(residual_grid, nyc_neighborhoods)
+  crs(rr) <- sp::CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+  
+  # clrs <- brewer.pal(11, "RdYlGn")
+  
+  # grid_pal <- colorNumeric(
+  #   palette = clrs,
+  #   domain = sqrt(filtered_grid$total_time_mins),
+  #   reverse = TRUE,
+  #   na.color = "transparent")
+  
+  
+  m <- leaflet(nyc_neighborhoods) %>% 
+    addTiles() %>% 
+    addProviderTiles("CartoDB.Positron") %>% 
+    setView(-73.98, 40.75, zoom = 14) %>%
+    # addPolylines(data = contourr, fillOpacity = 2, fillColor = rev(clrs),
+    #              color = rev(clrs), opacity=10, weight=1) %>%
+    # addCircleMarkers(data = filtered_grid, lng = ~lon, lat = ~lat, color = "transparent", radius = 15,
+    #                  popup = paste("walking:", filtered_grid$walking_mins, "mins", "<br/>",
+    #                                "subway:", filtered_grid$subway_mins, "mins", "<br/>",
+    #                                "total:", filtered_grid$total_time_mins, "mins", "<br/>",
+    #                                "interval:", filtered_grid$min_interval, "mins", "<br/>",
+    #                                filtered_grid$nearest_stop)) %>%
+    addCircleMarkers(data = map_data, lng = ~stop_lon, lat = ~stop_lat,
+                     color = ~palette(sqrt(subway_mins)),
+                     popup = paste("<b>", map_data$stop_name, "</b>", "<br/>",
+                                   "subway:", map_data$subway_mins, "mins", "<br/>"),
+                     radius = 4, stroke = FALSE, fillOpacity =0.9) %>%
+    addLegend("bottomright", pal = palette,
+              title = paste("commute time to", dest), value = sqrt(map_data$subway_mins),
+              labFormat = labelFormat(suffix = " mins", transform = function(x) x*x),
+              opacity = 1) %>% 
+    addRasterImage(rr, color=palette, opacity = 0.4)
+  
+  return(m)
+}
+
+commute_heatmap <- function(dest, igraph, grid) {
+  static_info <- get_heatmap_static_info(dest, igraph)
+  grid_info <- get_heatmap_grid_info(static_info, grid)
+  pal <- get_palette(grid_info)
+  map <- get_commute_heatmap(dest, static_info, grid_info, pal)
+  
+  return(map)
+}
+
+```
+
+
+#### Visualize 90th percentile & median commutes to 137S (Chambers Street)
+```{r}
+static_info_90 <- get_heatmap_static_info(work, graph_90)
+grid_info_90 <- get_heatmap_grid_info(static_info_90, grid)
+pal_90 <- get_palette(grid_info_90)
+map_90 <- get_commute_heatmap(work, static_info_90, grid_info_90, pal_90)
+
+# use the same color palette as above
+static_info_50 <- get_heatmap_static_info(work, graph_50)
+grid_info_50 <- get_heatmap_grid_info(static_info_50, grid)
+map_50 <- get_commute_heatmap(work, static_info_50, grid_info_50, pal_90)
+
+
+sync(map_90, map_50)
+
+```
+
