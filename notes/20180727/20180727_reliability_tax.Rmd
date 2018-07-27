@@ -1,8 +1,7 @@
 ---
-title: "20180727_airtrain_map"
+title: "20180726_reliability_tax"
 output: html_document
 ---
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(igraph)
@@ -27,29 +26,36 @@ stops <- stops %>% dplyr::select(stop_id, stop_lat, stop_lon, stop_name)
 routes_data <- read_csv('../../data/google_transit_subway_static/routes.txt')
 source('../../src/path_finding.R')
 
-load('../../data/at_igraph_edges.rdata')
-igraph_edges <- mutate(at_igraph_edges, weight = `90%`)
+load('../../data/igraph_edges.rdata')
+igraph_edges <- mutate(igraph_edges, weight = `50%`)
+igraph_edges <- igraph_edges %>% dplyr::select(stop_id, nxt_stop_id, weight, route_id, `90%`)
 igraph_edges$weight <- as.numeric(igraph_edges$weight)
+igraph_edges$`90%` <- as.numeric(igraph_edges$`90%`)
 mta_igraph <- graph_from_data_frame(igraph_edges)
 ```
 
 ```{r}
-to <- "LGA"
+to <- "R19"
 vertices <- names(V(mta_igraph))
 vertices <- vertices[vertices != to]
 station_list <- list()
-trip_time <- list()
+time_50 <- list()
+time_90 <- list()
 for(i in 1:length(vertices)){
-  path <- get_itinerary(mta_igraph, vertices[i], to, 1, stops = stops)
+  path <- get_itinerary(mta_igraph, vertices[i], to, 1, stops = stops,
+                                 attributeNames = '90%')
   station_list[i] <- vertices[i]
   path$weight <- as.numeric(path$weight)
-  trip_time[i] <- sum(path$weight, na.rm = TRUE)
+  time_50[i] <- sum(path$weight, na.rm = TRUE)
+  path$`90%` <- as.numeric(path$`90%`)
+  time_90[i] <- sum(path$`90%`, na.rm = TRUE)
 }
 
 map_data <- data.frame(station = unlist(station_list))
-map_data$trip_time <- unlist(trip_time)
+map_data$time_50 <- unlist(time_50)
+map_data$time_90 <- unlist(time_90)
 map_data <- map_data %>% left_join(stops, by = c("station" = "stop_id")) %>%
-  filter(! is.na(stop_lat)) %>% filter(trip_time != 0)
+  filter(! is.na(stop_lat))
 ```
 
 #### distance function
@@ -80,29 +86,35 @@ grid <- expand.grid(map_data_lats, map_data_lons) %>%
 #### Get subway travel time, walking time, total time
 ##### Filter for points reachable within 20 mins of walking
 ```{r get-times}
-trip_time = vector()
+time_50 = vector()
+time_90 = vector()
 station = vector()
 walking_time = vector()
 total_time = vector()
 for(i in 1:nrow(grid)){
- result<- map_data %>% mutate(walking_time = 720*Distance(grid$lat[i], grid$lon[i], stop_lat, stop_lon), total_time = (walking_time + trip_time)%/%60)
+ result<- map_data %>% mutate(walking_time = 720*Distance(grid$lat[i], grid$lon[i], stop_lat, stop_lon), total_time = (walking_time + time_50))
  idx <- which.min(result$total_time)
  
  
- trip_time[i] <- result[idx, "trip_time"]
+ time_50[i] <- result[idx, "time_50"]
+ time_90[i] <- result[idx, "time_90"]
  station[i] <- result[idx, "stop_name"]
  walking_time[i] <- result[idx, "walking_time"]
  total_time[i] <- result[idx, "total_time"]
 }
-grid$trip_time <- trip_time
+grid$time_50P <- time_50
+grid$time_90P<- time_90
 grid$nearest_stop <- station
 grid$walking_time <- walking_time
 grid$total_time <- total_time
-grid <- grid %>% mutate(walking_mins = (walking_time %/% 60))
-grid$log_mins <- log(grid$total_time)
+grid <- grid %>% mutate(time_diff = ((time_90P-time_50P) %/% 60), walking_mins = (walking_time %/% 60))
+grid$log_mins <- log(grid$time_diff)
 
 filtered_grid <- grid %>% 
-  filter(walking_mins <= 20)
+  filter(! is.na(time_diff)) %>%
+  filter(walking_mins <= 10) %>%
+  mutate(min_interval = cut(time_diff, seq(0, max(time_diff), by = 5), include.lowest = TRUE),
+         bin = cut(time_diff, seq(0, max(time_diff), by = 5), include.lowest = TRUE, labels = FALSE))
 ```
 
 #### Limit grid to points within NYC
@@ -112,8 +124,10 @@ r <- GET('http://data.beta.nyc//dataset/0ff93d2d-90ba-457c-9f7e-39e47bf2ac5f/res
 nyc_neighborhoods <- readOGR(content(r,'text'), 'OGRGeoJSON', verbose = F)
 
 filtered_grid <- grid %>%
-  filter(! is.na(total_time)) %>%
-  filter(walking_mins <= 20)
+  filter(! is.na(time_diff)) %>%
+  filter(walking_mins <= 20) %>%
+  mutate(min_interval = cut(time_diff, seq(0, max(time_diff), by = 5), include.lowest = TRUE),
+         bin = cut(time_diff, seq(0, max(time_diff), by = 5), include.lowest = TRUE, labels = FALSE))
 
 filtered_grid_spdf <- filtered_grid
 coordinates(filtered_grid_spdf) <- ~lon + lat
@@ -131,7 +145,7 @@ gridded(filtered_grid_spdf) <- TRUE
 ### **Heatmap with raster layer**
 ```{r}
 #Interpolate surface and fix the output
-idw <- idw(formula=total_time ~ 1, locations=filtered_grid_spdf, newdata = filtered_grid_spdf)  # apply idw model for the data
+idw <- idw(formula=time_diff ~ 1, locations=filtered_grid_spdf, newdata = filtered_grid_spdf)  # apply idw model for the data
 
 residual_grid <- raster(idw, "var1.pred")
 contourr <- rasterToContour(residual_grid)
@@ -144,7 +158,7 @@ clrs <- brewer.pal(11, "RdYlGn")
 
 grid_pal <- colorNumeric(
   palette = clrs,
-  domain = filtered_grid$total_time,
+  domain = filtered_grid$time_diff,
   reverse = TRUE,
   na.color = "transparent")
 
@@ -152,9 +166,9 @@ m <- leaflet(nyc_neighborhoods) %>%
   addTiles() %>% 
   addProviderTiles("CartoDB.Positron") %>% 
   setView(-73.98, 40.75, zoom = 14) %>%
-  addLegend("bottomright", pal = grid_pal, values = filtered_grid$total_time,
-    title = paste("Commute time to ", to),
-    labFormat = labelFormat(suffix = " min"),
+  addLegend("bottomright", pal = grid_pal, values = filtered_grid$time_diff,
+    title = "Commute time to 23 St",
+    labFormat = labelFormat(suffix = "min"),
     opacity = 1)
   
   addRasterImage(m, rr, color=grid_pal, opacity = 0.4)
