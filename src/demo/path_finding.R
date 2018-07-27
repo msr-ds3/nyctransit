@@ -12,7 +12,8 @@ graph <- graph.data.frame(igraph_edges)
 from <- '128'
 to <- 'F18'
 
-x <- get_itinerary_new(graph, '128','F18',2, map = igraph_edges_map, attributeNames = '90%')
+x <- get_itinerary(graph, '128','F18',2, map = igraph_edges_map, attributeNames = '90%')
+
 map <- igraph_edges_map[,c('stop_id','nxt_stop_id','nxt_stop_id_u', 'stop_id_u')]
 
 
