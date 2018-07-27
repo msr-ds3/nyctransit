@@ -34,7 +34,7 @@ get_leg_data <- function(lines, start, end, subway_data, hour_start = 7, hour_en
 
 # given one specific itinerary dataframe
 # returns a dataframe of what those itineraries looked like in historical data
-get_itinerary_times <- function(itinerary, subway_data) {
+get_itinerary_times <- function(itinerary, subway_data, hour_start = 7, hour_end = 10) {
   
   # handle the initial transfer special case
   transfer_special_case <- itinerary %>% filter(leg == 0)
@@ -89,7 +89,7 @@ get_itinerary_times <- function(itinerary, subway_data) {
     end <- stop_station[[i]][2]
     lines <- trains[i]
     
-    leg_data <- get_leg_data(lines, start, end, subway_data)
+    leg_data <- get_leg_data(lines, start, end, subway_data, hour_start, hour_end)
     
     # NOTE: DEBUG CODE
     # print(nrow(leg_data))
