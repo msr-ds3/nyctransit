@@ -19,10 +19,10 @@ source(file = "../../src/itinerary_evaluation.R")
 ## Plotting Functions
 
 ```{r function-definitions}
-# pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
-# or  with the pROC package: as.numeric(auc(response = actual, predictor = predicted))
-# itinerary is the actual value, trip time is the predicted value
 compute_auc <- function(itin_pair_df) {
+  # pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
+  # or  with the pROC package: as.numeric(auc(response = actual, predictor = predicted))
+  # itinerary is the actual value, trip time is the predicted value
   auc_df <- itin_pair_df %>%
     mutate(itin_line = as.factor(paste0(group, itin_id, sep=''))) %>%
     ungroup() %>%
@@ -36,14 +36,14 @@ compute_auc <- function(itin_pair_df) {
 
 # given a df with historical time_diffs for many initineraries
 # will return a plot that maps avg time_diff vs variance
-plot_frontier <- function(plot_data) {
+plot_frontier <- function(itins_df) {
 
-  # plot_data <- itins_df %>%
-  #   mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
-  #   # filter out weekends, and only get hour_start, hour_end
-  #   filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
-  #   group_by(itin_id) %>%
-  #   mutate(avg = mean(time_diff), stdv = sd(time_diff))
+  plot_data <- itins_df %>%
+    mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
+    # filter out weekends, and only get hour_start, hour_end
+    filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
+    group_by(itin_id, label) %>%
+    mutate(avg = mean(time_diff), stdv = sd(time_diff))
 
   plot <- plot_data %>% ggplot(aes(x = stdv, y = avg)) +
     geom_point() +
@@ -54,7 +54,6 @@ plot_frontier <- function(plot_data) {
   return(plot)
 }
 ```
-
 
 ## Evaluating Interesting Multi-Leg Trips
 
@@ -98,22 +97,13 @@ red_orange_df <- bind_rows(red_line_itins, orange_line_itins)
 #### Evaluating Differences Between Red & Orange Line & Plotting
 
 ```{r red-orange-comparison}
-plot_data <- red_orange_df %>% 
-  mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
-  filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
-  group_by(group,itin_id) %>%
-  mutate(avg= mean(time_diff), stdv= sd(time_diff))
-
-# NOTE: Debugging Code
-plot_data %>% select(itin_id, avg, stdv, group) %>% distinct()
-
 top_2_trips <- red_orange_df %>% group_by(group) %>% filter(itin_id == "1")
   
 # Plot Distribution as Densities
 plot_densities(top_2_trips)
 
 # Plot Frontiers
-plot_frontier(plot_data)
+plot_frontier(red_orange_df)
 
 # Plot AUC for Top 2 Trips
 compute_auc(top_2_trips)
@@ -130,7 +120,6 @@ mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
 
 all_itin_df <- compute_all_itins(mj_data, subway_data) %>% filter(time_diff != 0) # filtering out 0's from E train
 plot_densities(all_itin_df)
-
 
 # NOTE: DEBUG CODE
 subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
