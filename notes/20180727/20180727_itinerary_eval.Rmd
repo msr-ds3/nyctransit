@@ -14,9 +14,10 @@ library(lubridate)
 library(ggthemes)
 library(ROCR)
 library(here)
-
-load(file = here::here("data", "todd_subway_realtime.RData"))
-source(file = here::here("src", "itinerary_evaluation.R"))
+```
+```{r}
+load(file = here("data", "todd_subway_realtime.RData"))
+source(file = here("src", "itinerary_evaluation.R"))
 ```
 
 ## Plotting Functions
@@ -42,9 +43,9 @@ compute_auc <- function(itin_pair_df) {
 plot_frontier <- function(itins_df) {
 
   plot_data <- itins_df %>%
-    mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
+    #mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
     # filter out weekends, and only get hour_start, hour_end
-    filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
+    #filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
     group_by(itin_id, label) %>%
     mutate(avg = mean(time_diff), stdv = sd(time_diff))
 
@@ -112,7 +113,7 @@ plot_frontier(red_orange_df)
 compute_auc(top_2_trips)
 ```
 
-### Midtown to Jamaica (JFK)
+### Midtown to Jamaica (JFK) during afternoon rush hour (3pm-5pm)
 
 ```{r midtown-jamaica-plots}
 
@@ -121,22 +122,25 @@ compute_auc(top_2_trips)
 mj_data <- read_csv(here::here("data", "itineraries-Midtown-Jamaica.csv")) %>%
   filter(event != "travel", itinerary_id < 2)
 
-all_itin_df <- compute_all_itins(mj_data, subway_data) %>% filter(time_diff != 0) # filtering out 0's from E train
-plot_densities(all_itin_df)
+mj_df <- compute_all_itins(mj_data, subway_data, 15, 17) %>% 
+  filter(time_diff != 0) 
+
+# filtering out 0's from E train
+plot_densities(mj_df)
 
 # NOTE: DEBUG CODE
-subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
-  mutate(start_time = min(departure_time), count = n()) %>%
-  ungroup() %>% filter(realtime_trip_id %in% c(13391, 13404, 13457, 13495, 13517)) %>% View
+# subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
+#   mutate(start_time = min(departure_time), count = n()) %>%
+#   ungroup() %>% filter(realtime_trip_id %in% c(13391, 13404, 13457, 13495, 13517)) %>% View
 ```
-### Midtown to Mets Willets (LGA)
+### Midtown to Mets Willets (LGA) during afternoon rush hour (3pm-5pm)
 
 ```{r Bryant Park- Mets Willets}
 bm_data <- read_csv(here::here("data","itineraries-5ave-MetsWillets.csv")) %>%
   filter(event != "travel", itinerary_id < 2)
 
-all_itin_df.2 <- compute_all_itins(bm_data, subway_data) %>% filter(time_diff > 2) # filtering out 0's from E train
-plot_densities(all_itin_df.2)
+bm_df <- compute_all_itins(bm_data, subway_data, 15,17) %>% filter(time_diff > 2) # filtering out 0's from E train
+plot_densities(bm_df)
 
 
 ```
@@ -276,16 +280,16 @@ debug_itin_plot(green_line_itins, subway_data, 1)
 # TODO: Write A Function To Show Itineraries On Plot
 
 # ITINERARY PLOT
-# filtered_test_df %>% mutate(itin = row_number()) %>%
-#   filter(itin <= 5) %>%
-#   ggplot() +
-#     geom_segment(aes(x = leg1_start_time, xend = leg1_end_time, y = itin, yend = itin), color = 'red') +
-#     geom_segment(aes(x = leg2_start_time, xend = leg2_end_time, y = itin, yend = itin), color = 'blue') +
-#     geom_segment(aes(x = leg3_start_time, xend = leg3_end_time, y = itin, yend = itin), color = 'green') +
-#     geom_text(aes(label = leg1_trip_id, x = leg1_start_time, y = itin), color = "red") +
-#     geom_text(aes(label = leg2_trip_id, x = leg2_start_time, y = itin), color = "blue") +
-#     geom_text(aes(label = leg3_trip_id, x = leg3_start_time, y = itin), color = "green") +
-#     ylim(c(0, 10))
+ red_green_top_pair %>% mutate(itin = row_number()) %>%
+   filter(itin <= 5) %>%
+   ggplot() +
+     geom_segment(aes(x = leg1_start_time, xend = leg1_end_time, y = itin, yend = itin), color = 'red') +
+     geom_segment(aes(x = leg2_start_time, xend = leg2_end_time, y = itin, yend = itin), color = 'blue') +
+     geom_segment(aes(x = leg3_start_time, xend = leg3_end_time, y = itin, yend = itin), color = 'green') +
+     geom_text(aes(label = leg1_trip_id, x = leg1_start_time, y = itin), color = "red") +
+     geom_text(aes(label = leg2_trip_id, x = leg2_start_time, y = itin), color = "blue") +
+     geom_text(aes(label = leg3_trip_id, x = leg3_start_time, y = itin), color = "green") +
+     ylim(c(0, 10))
 
 # filtered_test_df %>% ggplot() +
 #   geom_histogram(aes(x = time_diff))

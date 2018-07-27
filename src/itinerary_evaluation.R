@@ -13,7 +13,7 @@ isWeekend <- function(day_of_week) {
 
 # given lines (as a string), a start station, and stop station
 # returns historical train data for those lines and those stops
-get_leg_data <- function(lines, start, end, subway_data, hour_start = 7, hour_end = 10) {
+get_leg_data <- function(lines, start, end, subway_data, start_hour = 15, end_hour = 17) {
   lines_list <- first(strsplit(lines, split = "_"))
   leg_data <- subway_data %>%
     filter(stop_mta_id == start | stop_mta_id == end,
@@ -21,7 +21,7 @@ get_leg_data <- function(lines, start, end, subway_data, hour_start = 7, hour_en
     # departure_time > start_time) %>%
     mutate(day_of_week = weekdays((departure_time)),
            hour = hour(departure_time)) %>%
-    filter(isWeekend(day_of_week) == F, hour >= hour_start, hour < hour_end) %>%
+    filter(isWeekend(day_of_week) == F, hour >= start_hour, hour < end_hour) %>%
     # group_by trip_id's to ensure all our trips start and end at appropriate stations
     group_by(realtime_trip_id) %>%
     mutate(start_time = min(departure_time), count = n()) %>%
@@ -34,7 +34,7 @@ get_leg_data <- function(lines, start, end, subway_data, hour_start = 7, hour_en
 
 # given one specific itinerary dataframe
 # returns a dataframe of what those itineraries looked like in historical data
-get_itinerary_times <- function(itinerary, subway_data, hour_start = 7, hour_end = 10) {
+get_itinerary_times <- function(itinerary, subway_data, hour_start = 15, hour_end = 17) {
   
   # handle the initial transfer special case
   transfer_special_case <- itinerary %>% filter(leg == 0)
@@ -216,13 +216,13 @@ get_itinerary_times <- function(itinerary, subway_data, hour_start = 7, hour_end
 
 # given a table for one itinerary with time_diff column, will plot the
 # distribution of difftimes for a given itinerary time dataframe
-plot_distribution_for_itinerary <- function(itin_time_df) {
+plot_distribution_for_itinerary <- function(itin_time_df, start_hour = 15, end_hour = 17) {
   # filter itin_time_df to only include certain data
   filtered <- itin_time_df %>%
     mutate(day_of_week = weekdays(leg1_start_time),
            hour = hour(leg1_start_time)) %>%
     filter(isWeekend(day_of_week) == F,
-           hour >= 7 & hour < 10)
+           hour >= start_hour & hour < end_hour)
   
   plot <- filtered %>%
     ggplot() +
@@ -232,7 +232,7 @@ plot_distribution_for_itinerary <- function(itin_time_df) {
 }
 
 # given cleaned shortest path itin data, return dataframe with all historical itins
-compute_all_itins <- function(cleaned_data, subway_data, start_hour = 7, end_hour = 10) {
+compute_all_itins <- function(cleaned_data, subway_data, start_hour = 15, end_hour = 17) {
   
   num_itins <- cleaned_data$itinerary_id %>% unique() %>% length()
   result <- vector("list", length = num_itins)
@@ -250,12 +250,12 @@ compute_all_itins <- function(cleaned_data, subway_data, start_hour = 7, end_hou
 
 # given a dataframe with multiple itins
 # returns density plot / histogram of time_diffs
-plot_densities <- function(all_itin_df) {
+plot_densities <- function(all_itin_df, start_hour=15 , end_hour = 17) {
   plot_data <- all_itin_df %>%
     mutate(day_of_week = weekdays(leg1_start_time),
            hour = hour(leg1_start_time)) %>%
     filter(isWeekend(day_of_week) == F,
-           hour >= 7 & hour < 10)
+           hour >= start_hour & hour < end_hour)
   
   plot_data$itin_id <- as.factor(plot_data$itin_id)
   
