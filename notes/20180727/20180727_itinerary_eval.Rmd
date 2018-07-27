@@ -16,82 +16,135 @@ load(file = "../../data/todd_subway_realtime.RData")
 source(file = "../../src/itinerary_evaluation.R")
 ```
 
-### Multi-leg trip itinerary evaluation
+## Plotting Functions
+
+```{r function-definitions}
+# pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
+# or  with the pROC package: as.numeric(auc(response = actual, predictor = predicted))
+# itinerary is the actual value, trip time is the predicted value
+compute_auc <- function(itin_pair_df) {
+  auc_df <- itin_pair_df %>%
+    mutate(itin_line = as.factor(paste0(group, itin_id, sep=''))) %>%
+    ungroup() %>%
+    select(itin_line, time_diff)
+  
+  pred <- prediction(as.numeric(auc_df$time_diff, units = "mins"), as.factor(auc_df$itin_line))
+  perf_nb <- performance(pred, 'auc')@y.values[[1]]
+  perf <- performance(pred, 'auc')
+  return(perf_nb)
+}
+
+# given a df with historical time_diffs for many initineraries
+# will return a plot that maps avg time_diff vs variance
+plot_frontier <- function(plot_data) {
+
+  # plot_data <- itins_df %>%
+  #   mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
+  #   # filter out weekends, and only get hour_start, hour_end
+  #   filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
+  #   group_by(itin_id) %>%
+  #   mutate(avg = mean(time_diff), stdv = sd(time_diff))
+
+  plot <- plot_data %>% ggplot(aes(x = stdv, y = avg)) +
+    geom_point() +
+    xlab('Standard Deviation of Trip Time') +
+    ylab('Average Trip Time') +
+    geom_text(aes(label = paste0(group, itin_id,sep='')), hjust = 0.5, vjust = 2)
+
+  return(plot)
+}
+```
+
+
+## Evaluating Interesting Multi-Leg Trips
 
 Evaluating Trip Itineraries With Multiple Legs.
 
-#### Function Definition
+### Red Line vs Orange Line
 
-```{r Data Input 1}
-# TEST DATA for itinerary
+Looking at trip time distributions between 96 St and 23 St on the Red Line (1, 2, 3) versus the Orange Line (B, D) 
 
-test_data_1 <- read_csv('../../data/itineraries-Red-Line-96-23-train.csv')
+#### Gather Red Line Data
+
+```{r red-line-data}
+red_line_data <- read_csv('../../data/itineraries-Red-Line-96-23-train.csv')
 
 # filter out event and adding direction to station id
-test_train_1 <- test_data_1 %>%
+red_line_cleaned <- red_line_data %>%
   filter(event != "travel", itinerary_id < 4)
 
 #output for first data input
-all_itin_df.1 <- compute_all_itins(test_train_1)%>%
+red_line_itins <- compute_all_itins(red_line_cleaned, subway_data)%>%
   mutate(group='red')
-
 ```
 
-```{r Data Input 2}
-# TEST DATA for itinerary
-test_data_2 <- read_csv('../../data/itineraries-Orange-Line-96-23-train.csv')
+#### Gather Orange Line Data
 
+```{r orange-line-data}
+orange_line_data <- read_csv('../../data/itineraries-Orange-Line-96-23-train.csv')
 
 # filter out event and adding direction to station id
-test_train_2 <- test_data_2 %>%
+orange_line_cleaned <- orange_line_data %>%
   filter(event != "travel", itinerary_id < 4)
 
 #output for first data input
-all_itin_df.2 <- compute_all_itins(test_train_2) %>%
+orange_line_itins <- compute_all_itins(orange_line_cleaned, subway_data) %>%
   mutate(group='orange')
 
 #combine first line df with second line df
-all_itin_df <- bind_rows(all_itin_df.1, all_itin_df.2)
+red_orange_df <- bind_rows(red_line_itins, orange_line_itins)
+```
 
-###### 
-#Overall Evaluation
+#### Evaluating Differences Between Red & Orange Line & Plotting
 
-plot_data <- all_itin_df %>% 
+```{r red-orange-comparison}
+plot_data <- red_orange_df %>% 
   mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
   filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
   group_by(group,itin_id) %>%
   mutate(avg= mean(time_diff), stdv= sd(time_diff))
 
+# NOTE: Debugging Code
 plot_data %>% select(itin_id, avg, stdv, group) %>% distinct()
 
-```
-```{r density evaluation}
-
-top_2_trips <- all_itin_df %>% group_by(group) %>% filter(itin_id == "1")
+top_2_trips <- red_orange_df %>% group_by(group) %>% filter(itin_id == "1")
   
+# Plot Distribution as Densities
 plot_densities(top_2_trips)
 
-###
+# Plot Frontiers
+plot_frontier(plot_data)
+
+# Plot AUC for Top 2 Trips
+compute_auc(top_2_trips)
 ```
 
-```{r test time taken}
+### Midtown to Jamaica
+
+```{r midtown-jamaica-plots}
+
+# load midtown-jamaica data, and clean for our uses
+#   - filter out event and add direction to station id
+mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
+  filter(event != "travel", itinerary_id < 2)
+
+all_itin_df <- compute_all_itins(mj_data, subway_data) %>% filter(time_diff != 0) # filtering out 0's from E train
+plot_densities(all_itin_df)
+
+
 # NOTE: DEBUG CODE
-# start.time <- Sys.time()
-# new_test_df <- get_itinerary_times(test_itin)
-# end.time <- Sys.time()
-# time.taken <- end.time - start.time
-# time.taken
-
-# save(test_df, file = "test_df_with_orig_method.RData")
-
-# start.time <- Sys.time()
-# test_leg_data <- get_leg_data("A", "A27S", "A31S")
-# end.time <- Sys.time()
-# time.taken <- end.time - start.time
-# time.taken
+subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
+  mutate(start_time = min(departure_time), count = n()) %>%
+  ungroup() %>% filter(realtime_trip_id %in% c(13391, 13404, 13457, 13495, 13517)) %>% View
 ```
 
-#### Plots for Debugging
+### Atlantic to Fulton (Morning)
+
+```{r atlantic-fulton-plots}
+
+```
+
+## Plots for Debugging
 
 ```{r debugging_plots}
 
@@ -125,90 +178,4 @@ plot_densities(top_2_trips)
 
 # filtered_test_df %>% ggplot() +
 #   geom_histogram(aes(x = time_diff))
-```
-
-#### Frontier Plots
-
-```{r frontier-plot}
-# given a df with historical time_diffs for many initineraries
-# will return a plot that maps avg time_diff vs variance
-
-plot_frontier <- function(plot_data) {
-
-  # plot_data <- itins_df %>%
-  #   mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
-  #   # filter out weekends, and only get hour_start, hour_end
-  #   filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
-  #   group_by(itin_id) %>%
-  #   mutate(avg = mean(time_diff), stdv = sd(time_diff))
-
-  plot <- plot_data %>% ggplot(aes(x = stdv, y = avg)) +
-    geom_point() +
-    xlab('Standard Deviation of Trip Time') +
-    ylab('Average Trip Time') +
-    geom_text(aes(label = paste0(group, itin_id,sep='')), hjust = 0.5, vjust = 2)+
-    ylim(c(10, 30))
-
-  return(plot)
-}
-
-plot_frontier(plot_data)
-```
-
-#### AUC Plots
-
-```{r AUC}
-# pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
-# or  with the pROC package: as.numeric(auc(response = actual, predictor = predicted))
-# itinerary is the actual value, trip time is the predicted value
-
-# Choosing pairs of itinerary for comparison
-#first_itin <- '1'
-#sec_itin <- '3'
-# auc_df <- all_itin_df.1%>%
-#   filter(itin_id == first_itin | itin_id == sec_itin) %>%
-#   select(itin_id, time_diff)
-
-auc_df <- top_2_trips %>% mutate(itin_line = as.factor(paste0(group,itin_id, sep=''))) %>% ungroup() %>% select(itin_line, time_diff)
-  
-auc_function <- function(auc_df) {
-pred <- prediction(as.numeric(auc_df$time_diff, units = "mins"), as.factor(auc_df$itin_line))
-perf_nb <- performance(pred, 'auc')@y.values[[1]]
-perf <- performance(pred, 'auc')
-return(perf)
-}
-
-auc_function(auc_df)
-
-# plot(auc_function(auc_df))
-
-#paste0("taking random trips from itinerary ", first_itin , " and itinerary ", sec_itin, ', ', auc_function(auc_df)*100 ,"% of the time trip time of itin ", first_itin, " will be shorter than trip time of itin ", sec_itin) %>% print
-```
-## Interesting Examples
-
-#### Midtown to Jamaica
-
-```{r midtown-jamaica-plots}
-
-# load midtown-jamaica data, and clean for our uses
-#   - filter out event and add direction to station id
-mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
-  filter(event != "travel", itinerary_id < 2)
-
-all_itin_df <- compute_all_itins(mj_data, subway_data) %>% filter(time_diff != 0) # filtering out 0's from E train
-plot_densities(all_itin_df)
-
-
-# NOTE: DEBUG CODE
-subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
-  mutate(start_time = min(departure_time), count = n()) %>%
-  ungroup() %>% filter(realtime_trip_id %in% c(13391, 13404, 13457, 13495, 13517)) %>% View
-
-# TODO: filter out 0's
-```
-
-#### Atlantic to Fulton (Morning)
-
-```{r atlantic-fulton-plots}
-
 ```
