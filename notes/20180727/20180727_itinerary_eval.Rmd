@@ -128,10 +128,49 @@ subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_
   ungroup() %>% filter(realtime_trip_id %in% c(13391, 13404, 13457, 13495, 13517)) %>% View
 ```
 
-### Atlantic to Fulton (Morning)
+### Red/Green to Fulton
 
-```{r atlantic-fulton-plots}
+#### Gathering Red Line Data from 96 - Fulton
+```{r red-96-fulton-data}
+red_line_data <- read_csv(here("data", "itineraries-96-Fulton-red.csv"))
 
+# filter out event and adding direction to station id
+red_line_cleaned <- red_line_data %>%
+  filter(event != "travel", itinerary_id < 4)
+
+#output for first data input
+red_line_itins <- compute_all_itins(red_line_cleaned, subway_data) %>%
+  mutate(group='red')
+```
+
+#### Gathering Green Line Data from 96 - Fulton
+```{r green-96-fulton-data}
+green_line_data <- read_csv(here("data", "itineraries-96-Fulton-green.csv"))
+
+# filter out event and adding direction to station id
+green_line_cleaned <- green_line_data %>%
+  filter(event != "travel", itinerary_id < 4)
+
+#output for first data input
+green_line_itins <- compute_all_itins(green_line_cleaned, subway_data) %>%
+  mutate(group='green')
+```
+
+#### Comparison of Red v. Green Data from 96 - Fulton
+```{r red-green-96-fulton-comparison}
+#combine first line df with second line df
+red_green_df <- bind_rows(red_line_itins, green_line_itins)
+
+red_green_top_pair <- red_green_df %>% group_by(group) %>% filter(itin_id == "1")
+  
+# Plot Distribution as Densities
+plot_densities(red_green_top_pair)
+
+# Plot Frontiers
+plot_frontier(red_green_df)
+
+# Plot AUC for Top 2 Trips
+compute_auc(red_green_top_pair)
 ```
 
 ## Plots for Debugging

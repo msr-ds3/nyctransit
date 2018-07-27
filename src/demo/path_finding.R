@@ -59,7 +59,7 @@ generated <- get_itinerary(graph, 'F12', 'G06', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Midtown-Jamaica.csv"), row.names = F)
 
 # Shortest Paths from 96th to Fulton - Red Line (i.e. 96 St (235) => Fulton St (229))
-generated <- get_itinerary(graph, '235', '229', 10, stops)
+generated <- get_itinerary(graph, '120', '229', 10, stops)
 write.csv(generated, file = here("data", "itineraries-96-Fulton-red.csv"), row.names = F)
 
 # Shortest Paths from 96th to Fulton - Red Line (i.e. 96 St (235) => Fulton St (229))
