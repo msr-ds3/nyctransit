@@ -52,18 +52,55 @@ create_edges <- function (scheduled_edges, realtime_edges, transfer_edges, quant
   bind_rows(edges, transfer_edges)
 }
 
+create_map <- function(edges_directed) {
+  edges_directed %>%
+  mutate(stop_id_u = substr(stop_id, 1, nchar(stop_id)-1), nxt_stop_id_u = substr(nxt_stop_id, 1, nchar(nxt_stop_id)-1))  %>% group_by(stop_id_u, nxt_stop_id_u) %>% 
+  mutate(count = n()) %>% ungroup() %>% mutate( stop_id_u = ifelse(count == 1 | route_id == 'T', stop_id_u,stop_id),
+                                                nxt_stop_id_u = ifelse(count == 1 | route_id == 'T', nxt_stop_id_u,nxt_stop_id)) 
+}
+
+deduplicate <- function(edge_map){
+  column_length <- ncol(edge_map)
+  nxt_stop_id_u_index <- column_length-1
+  stop_id_u_index <- nxt_stop_id_u_index-1
+  indices <- c(stop_id_u_index, nxt_stop_id_u_index, 3:(stop_id_u_index-1))
+  igraph_edges <- edge_map[indices] %>% rename(stop_id = stop_id_u, nxt_stop_id = nxt_stop_id_u) %>% distinct
+}
 #demo
+
+
+save_edges <- function(edges, name)
+{
+  map <- create_map(edges)
+  deduplicate <- deduplicate(map)
+  exceptions <- map %>% filter(count != 1, route_id != 'T')
+  map <- map %>% select(stop_id, stop_id_u, nxt_stop_id, nxt_stop_id_u)
+  
+  file_name <- paste0('data/',name, '.rdata')
+  map_name <- paste0(name, '_map')
+  exceptions_name <- paste0(name, '_exceptions')
+  directed_name <- paste0(name, '_directed')
+  
+  assign(map_name,map)
+  assign(exceptions_name, exceptions)
+  assign(name, deduplicate)
+  assign(directed_name, edges)
+  
+  
+  save(file = file_name, list = c(map_name, exceptions_name, directed_name, name))
+}
+
+
 #make sure to run create_edge_data.r before running this
 load('data/edges.rdata')
 realtime_edges <- realtime_edges %>% mutate(start_trip_time = as.numeric(start_trip_time) %% secondsIn24Hours)
 
-#filter edges
-igraph_edges <- create_edges(scheduled_edges, realtime_edges, transfer_edges, 
+#create edges
+edges <- create_edges(scheduled_edges, realtime_edges, transfer_edges, 
                              cutoff = 5, relative_cutoff = .1, time_range = c('7:00:00','9:00:00'), 
-                             include_day_of_week = 'Weekday') 
-#save igraph edges
-save(file = 'data/igraph_edges.rdata', igraph_edges)
-setwd(wd)
+                             include_day_of_week = 'Weekday')
+
+save_edges(edges, 'igraph_edges')
 
 #add airtrains
 airtrain_edges <- list(c("702N", "LGAN", "AT", 6, 0, 6, 6, 6),
@@ -91,8 +128,8 @@ airtrain_edges <- list(c("702N", "LGAN", "AT", 6, 0, 6, 6, 6),
                        c("JFKS", "G06N", "AT", 8, 1.2, 7, 8, 10),
                        c("JFKS", "G06S", "AT", 8, 1.2, 7, 8, 10))%>%
   reduce(rbind) %>% as.data.frame()
-names(airtrain_edges) <- names(igraph_edges)
+names(airtrain_edges) <- names(edges)
 
-igraph_edges <- rbind(igraph_edges, airtrain_edges)
-#save igraph edges
-save(file = 'igraph_edges.rdata', igraph_edges)
+igraph_edges <- rbind(edges, airtrain_edges)
+
+save_edges(igraph_edges, 'at_igraph_edges')
