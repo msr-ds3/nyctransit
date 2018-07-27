@@ -56,18 +56,19 @@ write.csv(generated, file = here("data", "itineraries-M-train.csv"), row.names =
 generated <- get_itinerary(graph, '120', '130', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Red-Line-96-23-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, 'A19', 'D19', 10, stops)
+generated <- get_itinerary(graph, 'A19', 'D18', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Orange-Line-96-23-train.csv"), row.names = F)
 
 # Shortest Paths from Midtown to Jamaica (i.e. 5 Av/53 St (F12) => JFK Airport (G06))
 generated <- get_itinerary(graph, 'F12', 'G06', 10, stops)
 write.csv(generated, file = here("data", "itineraries-Midtown-Jamaica.csv"), row.names = F)
 
-# Shortest Paths from Atlantic to Fulton (i.e. 5 Av/53 St (F12) => JFK Airport (G06))
-generated <- get_itinerary(graph, '235', '229', 10, stops)
-write.csv(generated, file = here("data", "itineraries-Atlantic-Fulton-red.csv"), row.names = F)
+# Shortest Paths from 96th to Fulton - Red Line (i.e. 96 St (235) => Fulton St (229))
+generated <- get_itinerary(graph, '120', '229', 10, stops)
+write.csv(generated, file = here("data", "itineraries-96-Fulton-red.csv"), row.names = F)
 
-generated <- get_itinerary(graph, '235', '418', 10, stops)
-write.csv(generated, file = here("data", "itineraries-Atlantic-Fulton-green.csv"), row.names = F)
+# Shortest Paths from 96th to Fulton - Red Line (i.e. 96 St (235) => Fulton St (229))
+generated <- get_itinerary(graph, '625', '418', 10, stops)
+write.csv(generated, file = here("data", "itineraries-96-Fulton-green.csv"), row.names = F)
 
 
