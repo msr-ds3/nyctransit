@@ -245,21 +245,24 @@ format_itinerary_raw <- function(shortest_paths_df) {
   return(itinerary)
 }
 
-format_itinerary <- function(paths, graph, src, dest, stops = NULL, map = NULL, attributeNames){
+format_itinerary <- function(paths, graph, src, dest, stops = NULL, map = NULL, attributeNames=NULL){
   path_tibble <- combine_paths_to_tibble(paths,graph, attributeNames)
   if (is.null(path_tibble)) {
     warning(paste('No path between', src, dest))
     return(NULL)
   }
+  
+  path_tibble
+  if (!is.null(map)){
+    path_tibble <- path_tibble %>% mutate(nxt_station = lead(station)) %>% 
+      left_join(map, by = c('station'='stop_id_u', 'nxt_station'='nxt_stop_id_u')) %>%
+      group_by(itinerary_id) %>% 
+      mutate(station = c(ifelse(line == 'T', lag(nxt_stop_id), stop_id)[-length(nxt_stop_id)], last(nxt_stop_id[length(nxt_stop_id)-1]))) %>% 
+      select(-stop_id, -nxt_stop_id, -nxt_station) %>% ungroup
+  }
+
   result <- format_itinerary_raw(greedy(path_tibble))
   if (is.null(stops)) result else left_join(result, stops[,c('stop_id','stop_name')], by = c('station' ='stop_id'))
-  
-  if (is.null(map)) result else {
-    result %>% mutate(nxt_station = lead(station)) %>% 
-      left_join(map, by = c('station'='stop_id_u', 'nxt_station'='nxt_stop_id_u')) %>%
-      group_by(itinerary_id) %>%
-      mutate(station = c(stop_id[-length(nxt_stop_id)],last(nxt_stop_id[length(nxt_stop_id)-1]))) %>% select(-stop_id, -nxt_stop_id, -nxt_station) 
-  }
  }
 
 get_itinerary_directed <- function(graph, src, dest, k, stops = NULL, attributeNames = NULL){
