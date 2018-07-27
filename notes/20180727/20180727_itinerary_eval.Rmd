@@ -235,16 +235,31 @@ debug_train_schedules_plot(train_data, subway_data)
 
 # NOTE: DEBUG PLOT - show all trains individually on plot
 
-debug_itin_plot <- function(itin_df, subway_data, start_hour = 8, end_hour = 9) {
-  filtered <- itin_df %>% 
-    filter(hour(leg1_start_time) >= start_hour & hour(leg1_start_time <= end_hour))
+debug_itin_plot <- function(itin_df, subway_data, itin_number, num_trips = 5, start_hour = 8, end_hour = 9) {
   
-  filtered %>% mutate(itin = row_number()) %>%
-    filter(itin <= 5) %>%
-    ggplot() +
-    geom_segment()
-
+  filtered <- itin_df %>% filter(itin_id == itin_number)
+  
+  reshaped_df <- filtered %>% select(matches("leg*")) %>% ungroup() %>%
+    mutate(row_id = 1:n()) %>%
+    gather(variable, value, -row_id) %>%
+    extract(variable, c("leg", "var"), 'leg(.*?)_(.*)') %>%
+    select(row_id, leg, var, value) %>%
+    spread(var, value) %>%
+    na.omit() %>%
+    filter(row_id <= num_trips)
+  
+  reshaped_df$start_time <- as.POSIXct(as.numeric(reshaped_df$start_time), origin = "1970-01-01", tz = "UTC")
+  reshaped_df$end_time <- as.POSIXct(as.numeric(reshaped_df$end_time), origin = "1970-01-01", tz = "UTC")
+    
+  
+  plot <- reshaped_df %>% ggplot(aes(x = start_time, y = row_id)) +
+    geom_segment(aes(xend = end_time, yend = row_id, color = as.factor(line))) +
+    geom_text(aes(label = trip_id)) 
+  
+  return(plot)
 }
+
+debug_itin_plot(green_line_itins, subway_data, 1)
 
 # filtered_test_df <- test_df %>% filter(hour(leg1_start_time) >= 8 & hour(leg1_start_time) <= 9)
 
