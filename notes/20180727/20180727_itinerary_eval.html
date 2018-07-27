@@ -143,7 +143,7 @@ $(document).ready(function () {
   pred &lt;- prediction(as.numeric(auc_df$time_diff, units = &quot;mins&quot;), as.factor(auc_df$itin_line))
   perf_nb &lt;- performance(pred, 'auc')@y.values[[1]]
   perf &lt;- performance(pred, 'auc')
-  return(perf_nb)
+  ifelse( perf_nb &lt; 0.5, return(1 - perf_nb), return(perf))
 }
 
 # given a df with historical time_diffs for many initineraries
@@ -174,7 +174,7 @@ plot_frontier &lt;- function(itins_df) {
 <p>Looking at trip time distributions between 96 St and 23 St on the Red Line (1, 2, 3) versus the Orange Line (B, D)</p>
 <div id="gather-red-line-data" class="section level4">
 <h4>Gather Red Line Data</h4>
-<pre class="r"><code>red_line_data &lt;- read_csv('../../data/itineraries-Red-Line-96-23-train.csv')</code></pre>
+<pre class="r"><code>red_line_data &lt;- read_csv(here(&quot;data&quot;, &quot;itineraries-Red-Line-96-23-train.csv&quot;))</code></pre>
 <pre><code>## Parsed with column specification:
 ## cols(
 ##   itinerary_id = col_integer(),
@@ -228,7 +228,7 @@ red_line_itins &lt;- compute_all_itins(red_line_cleaned, subway_data)%&gt;%
 </div>
 <div id="gather-orange-line-data" class="section level4">
 <h4>Gather Orange Line Data</h4>
-<pre class="r"><code>orange_line_data &lt;- read_csv('../../data/itineraries-Orange-Line-96-23-train.csv')</code></pre>
+<pre class="r"><code>orange_line_data &lt;- read_csv(here(&quot;data&quot;, &quot;itineraries-Orange-Line-96-23-train.csv&quot;))</code></pre>
 <pre><code>## Parsed with column specification:
 ## cols(
 ##   itinerary_id = col_integer(),
@@ -307,14 +307,14 @@ compute_auc(top_2_trips)</code></pre>
 
 ## Warning in mutate_impl(.data, dots): binding character and factor vector,
 ## coercing into character vector</code></pre>
-<pre><code>## [1] 0.2238804</code></pre>
+<pre><code>## [1] 0.7761196</code></pre>
 </div>
 </div>
 <div id="midtown-to-jamaica" class="section level3">
 <h3>Midtown to Jamaica</h3>
 <pre class="r"><code># load midtown-jamaica data, and clean for our uses
 #   - filter out event and add direction to station id
-mj_data &lt;- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %&gt;%
+mj_data &lt;- read_csv(here(&quot;data&quot;, &quot;itineraries-Midtown-Jamaica.csv&quot;)) %&gt;%
   filter(event != &quot;travel&quot;, itinerary_id &lt; 2)</code></pre>
 <pre><code>## Parsed with column specification:
 ## cols(
