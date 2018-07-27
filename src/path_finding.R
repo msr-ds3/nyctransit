@@ -75,7 +75,7 @@ k_shortest_yen <- function(graph, src, dest, k){
       spurPath <- shortest_path(t_g,spurNode, dest)
       if (!is.null(spurPath)){
         total_path <- list(c(rootPath[-i], spurPath))
-
+        
         if (is_significant_deviation(graph, total_path[[1]])){
           if (!total_path %in% B) B[length(B)+1] <- total_path
         }else{
@@ -254,13 +254,38 @@ format_itinerary <- function(paths, graph, src, dest, stops = NULL, map = NULL, 
   
   path_tibble
   if (!is.null(map)){
-    path_tibble <- path_tibble %>% mutate(nxt_station = lead(station)) %>% 
-      left_join(map, by = c('station'='stop_id_u', 'nxt_station'='nxt_stop_id_u')) %>%
-      group_by(itinerary_id) %>% 
-      mutate(station = c(ifelse(line == 'T', lag(nxt_stop_id), stop_id)[-length(nxt_stop_id)], last(nxt_stop_id[length(nxt_stop_id)-1]))) %>% 
-      select(-stop_id, -nxt_stop_id, -nxt_station) %>% ungroup
-  }
-
+      path_tibble <- path_tibble %>% mutate(nxt_station = lead(station)) %>% 
+      left_join(map, by = c('station'='stop_id_u', 'nxt_station'='nxt_stop_id_u')) %>% 
+      mutate(nxt_stop_id= lag(nxt_stop_id)) %>% 
+      group_by(itinerary_id) %>%  mutate(station2 = ifelse(stop_id == nxt_stop_id, stop_id, NA),
+                                         station2 = ifelse(is.na(stop_id), nxt_stop_id, station2),
+                                         station2 = ifelse(is.na(nxt_stop_id), stop_id, station2))
+    
+    path_tibble[,'order'] <- 1:nrow(path_tibble)
+    
+    newrows <- list()
+    
+    for (i in 1:nrow(path_tibble)){
+      row <- path_tibble[i,]
+      if(is.na(row$station2))
+      {
+        path_tibble[i,'station2']<- path_tibble[i,'stop_id']
+        j <- row
+        j_attri <- edge.attributes(graph, get.edge.ids(graph, c(row$station,row$station)))
+        n_j <- names(j)
+        n_ja <- names(j_attri)
+        n <- n_ja[n_ja%in%n_j]
+        j[n] <- as.character(j_attri[n])
+        j['station2'] <- row$nxt_stop_id
+        j['order'] <- row$order-.5
+        j['line'] <- 'T'
+        newrows[[length(newrows)+1]] <- j
+      }
+    }
+    path_tibble <- rbind(path_tibble, newrows) %>% arrange(order) %>% mutate(station = station2) %>% 
+      select(-station2, -order, -stop_id, -nxt_stop_id, -nxt_station) %>%
+      ungroup
+    }
   result <- format_itinerary_raw(greedy(path_tibble))
   if (is.null(stops)) result else left_join(result, stops[,c('stop_id','stop_name')], by = c('station' ='stop_id'))
  }

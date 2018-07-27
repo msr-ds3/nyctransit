@@ -74,8 +74,9 @@ save_edges <- function(edges, name)
   map <- create_map(edges)
   deduplicate <- deduplicate(map)
   exceptions <- map %>% filter(count != 1, route_id != 'T')
-  map <- map%>% group_by(stop_id_u, nxt_stop_id_u) %>% mutate(x = stop_id == last(stop_id) & nxt_stop_id == last(nxt_stop_id)) %>%
-    filter(x == T) %>% select(stop_id, stop_id_u, nxt_stop_id, nxt_stop_id_u)
+  map <- map%>%  filter(route_id != 'T') %>% select(stop_id, stop_id_u, nxt_stop_id, nxt_stop_id_u)
+    # group_by(stop_id_u, nxt_stop_id_u) %>% mutate(x = stop_id == last(stop_id) & nxt_stop_id == last(nxt_stop_id)) %>%
+    # filter(x == T) 
   
   file_name <- paste0('data/',name, '.rdata')
   map_name <- paste0(name, '_map')
