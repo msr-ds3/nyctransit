@@ -7,12 +7,15 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
 library(tidyverse)
 library(lubridate)
 library(ggthemes)
 library(ROCR)
 library(here)
-
+```
+```{r}
 load(file = here("data", "todd_subway_realtime.RData"))
 source(file = here("src", "itinerary_evaluation.R"))
 ```
@@ -40,9 +43,9 @@ compute_auc <- function(itin_pair_df) {
 plot_frontier <- function(itins_df) {
 
   plot_data <- itins_df %>%
-    mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
+    #mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
     # filter out weekends, and only get hour_start, hour_end
-    filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
+    #filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
     group_by(itin_id, label) %>%
     mutate(avg = mean(time_diff), stdv = sd(time_diff))
 
@@ -67,7 +70,7 @@ Looking at trip time distributions between 96 St and 23 St on the Red Line (1, 2
 #### Gather Red Line Data
 
 ```{r red-line-data}
-red_line_data <- read_csv(here("data", "itineraries-Red-Line-96-23-train.csv"))
+red_line_data <- read_csv(here::here("data", "itineraries-Red-Line-96-23-train.csv"))
 
 # filter out event and adding direction to station id
 red_line_cleaned <- red_line_data %>%
@@ -81,7 +84,7 @@ red_line_itins <- compute_all_itins(red_line_cleaned, subway_data)%>%
 #### Gather Orange Line Data
 
 ```{r orange-line-data}
-orange_line_data <- read_csv(here("data", "itineraries-Orange-Line-96-23-train.csv"))
+orange_line_data <- read_csv(here::here("data", "itineraries-Orange-Line-96-23-train.csv"))
 
 # filter out event and adding direction to station id
 orange_line_cleaned <- orange_line_data %>%
@@ -110,31 +113,34 @@ plot_frontier(red_orange_df)
 compute_auc(top_2_trips)
 ```
 
-### Midtown to Jamaica (JFK)
+### Midtown to Jamaica (JFK) during afternoon rush hour (3pm-5pm)
 
 ```{r midtown-jamaica-plots}
 
 # load midtown-jamaica data, and clean for our uses
 #   - filter out event and add direction to station id
-mj_data <- read_csv(here("data", "itineraries-Midtown-Jamaica.csv")) %>%
+mj_data <- read_csv(here::here("data", "itineraries-Midtown-Jamaica.csv")) %>%
   filter(event != "travel", itinerary_id < 2)
 
-all_itin_df <- compute_all_itins(mj_data, subway_data) %>% filter(time_diff != 0) # filtering out 0's from E train
-plot_densities(all_itin_df)
+mj_df <- compute_all_itins(mj_data, subway_data, 15, 17) %>% 
+  filter(time_diff != 0) 
+
+# filtering out 0's from E train
+plot_densities(mj_df)
 
 # NOTE: DEBUG CODE
-subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
-  mutate(start_time = min(departure_time), count = n()) %>%
-  ungroup() %>% filter(realtime_trip_id %in% c(13391, 13404, 13457, 13495, 13517)) %>% View
+# subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
+#   mutate(start_time = min(departure_time), count = n()) %>%
+#   ungroup() %>% filter(realtime_trip_id %in% c(13391, 13404, 13457, 13495, 13517)) %>% View
 ```
-### Midtown to Mets Willets (LGA)
+### Midtown to Mets Willets (LGA) during afternoon rush hour (3pm-5pm)
 
 ```{r Bryant Park- Mets Willets}
-bm_data <- read_csv(here("data","itineraries-5ave-MetsWillets.csv")) %>%
+bm_data <- read_csv(here::here("data","itineraries-5ave-MetsWillets.csv")) %>%
   filter(event != "travel", itinerary_id < 2)
 
-all_itin_df.2 <- compute_all_itins(bm_data, subway_data) %>% filter(time_diff > 2) # filtering out 0's from E train
-plot_densities(all_itin_df.2)
+bm_df <- compute_all_itins(bm_data, subway_data, 15,17) %>% filter(time_diff > 2) # filtering out 0's from E train
+plot_densities(bm_df)
 
 
 ```
@@ -143,7 +149,7 @@ plot_densities(all_itin_df.2)
 
 #### Gathering Red Line Data from 96 - Fulton
 ```{r red-96-fulton-data}
-red_line_data <- read_csv(here("data", "itineraries-96-Fulton-red.csv"))
+red_line_data <- read_csv(here::here("data", "itineraries-96-Fulton-red.csv"))
 
 # filter out event and adding direction to station id
 red_line_cleaned <- red_line_data %>%
@@ -156,7 +162,7 @@ red_line_itins <- compute_all_itins(red_line_cleaned, subway_data) %>%
 
 #### Gathering Green Line Data from 96 - Fulton
 ```{r green-96-fulton-data}
-green_line_data <- read_csv(here("data", "itineraries-96-Fulton-green.csv"))
+green_line_data <- read_csv(here::here("data", "itineraries-96-Fulton-green.csv"))
 
 # filter out event and adding direction to station id
 green_line_cleaned <- green_line_data %>%
@@ -190,7 +196,76 @@ compute_auc(red_green_top_pair)
 
 # TODO: Write A Function To Show Trains On Plot
 
+trains = c("1", "2_3")
+start_stop = c("120S", "123S")
+end_stop = c("123S", "229S")
+train_data <- vector("list", length(trains))
+
+for (i in 1:length(trains)) {
+  start <- start_stop[i]
+  end <- end_stop[i]
+  lines <- trains[i]
+  
+  leg_data <- get_leg_data(lines, start, end, subway_data)
+  
+  # NOTE: DEBUG CODE
+  # print(nrow(leg_data))
+  
+  # append to list
+  train_data[[i]] <- leg_data
+}
+
+# plot_data <- bind_rows(train_data)
+# plot_data %>% View
+
+debug_train_schedules_plot <- function(train_data, subway_data, start_hour = 8, end_hour = 9) {
+  # filtered_df <- itins_df %>% filter(hour(leg1_start_time) >= start_hour & hour(leg1_start_time) <= end_hour)
+  
+  plot_data <- rbind_list(train_data)
+  print(plot_data)
+  plot_data %>%
+    filter(month(start_time) == 2,
+           day(start_time) == 16,
+           hour(start_time) >= start_hour & hour(start_time) <= end_hour) %>%
+    arrange(start_time) %>%
+    mutate(itin = row_number()) %>%
+    ggplot(aes(color = route_mta_id)) +
+    geom_segment(aes(x = start_time, xend = departure_time, y = itin, yend = itin)) +
+    geom_text(aes(label = realtime_trip_id, x = start_time, y = itin))
+  
+}
+
+debug_train_schedules_plot(train_data, subway_data)
+
 # NOTE: DEBUG PLOT - show all trains individually on plot
+
+debug_itin_plot <- function(itin_df, subway_data, itin_number, num_trips = 5, start_hour = 8, end_hour = 9) {
+  
+  filtered <- itin_df %>% filter(itin_id == itin_number)
+  
+  reshaped_df <- filtered %>% select(matches("leg*")) %>% ungroup() %>%
+    mutate(row_id = 1:n()) %>%
+    gather(variable, value, -row_id) %>%
+    extract(variable, c("leg", "var"), 'leg(.*?)_(.*)') %>%
+    select(row_id, leg, var, value) %>%
+    spread(var, value) %>%
+    na.omit() %>%
+    filter(row_id <= num_trips)
+  
+  reshaped_df$start_time <- as.POSIXct(as.numeric(reshaped_df$start_time), origin = "1970-01-01", tz = "UTC")
+  reshaped_df$end_time <- as.POSIXct(as.numeric(reshaped_df$end_time), origin = "1970-01-01", tz = "UTC")
+    
+  
+  plot <- reshaped_df %>% ggplot(aes(x = start_time, y = row_id)) +
+    geom_segment(aes(xend = end_time, yend = row_id, color = as.factor(line))) +
+    geom_point(aes(x = start_time, y = row_id)) +
+    geom_point(aes(x = end_time, y = row_id)) +
+    geom_text(aes(label = line), nudge_y = 0.25) 
+  
+  return(plot)
+}
+
+debug_itin_plot(green_line_itins, subway_data, 1)
 
 # filtered_test_df <- test_df %>% filter(hour(leg1_start_time) >= 8 & hour(leg1_start_time) <= 9)
 
@@ -205,16 +280,16 @@ compute_auc(red_green_top_pair)
 # TODO: Write A Function To Show Itineraries On Plot
 
 # ITINERARY PLOT
-# filtered_test_df %>% mutate(itin = row_number()) %>%
-#   filter(itin <= 5) %>%
-#   ggplot() +
-#     geom_segment(aes(x = leg1_start_time, xend = leg1_end_time, y = itin, yend = itin), color = 'red') +
-#     geom_segment(aes(x = leg2_start_time, xend = leg2_end_time, y = itin, yend = itin), color = 'blue') +
-#     geom_segment(aes(x = leg3_start_time, xend = leg3_end_time, y = itin, yend = itin), color = 'green') +
-#     geom_text(aes(label = leg1_trip_id, x = leg1_start_time, y = itin), color = "red") +
-#     geom_text(aes(label = leg2_trip_id, x = leg2_start_time, y = itin), color = "blue") +
-#     geom_text(aes(label = leg3_trip_id, x = leg3_start_time, y = itin), color = "green") +
-#     ylim(c(0, 10))
+ red_green_top_pair %>% mutate(itin = row_number()) %>%
+   filter(itin <= 5) %>%
+   ggplot() +
+     geom_segment(aes(x = leg1_start_time, xend = leg1_end_time, y = itin, yend = itin), color = 'red') +
+     geom_segment(aes(x = leg2_start_time, xend = leg2_end_time, y = itin, yend = itin), color = 'blue') +
+     geom_segment(aes(x = leg3_start_time, xend = leg3_end_time, y = itin, yend = itin), color = 'green') +
+     geom_text(aes(label = leg1_trip_id, x = leg1_start_time, y = itin), color = "red") +
+     geom_text(aes(label = leg2_trip_id, x = leg2_start_time, y = itin), color = "blue") +
+     geom_text(aes(label = leg3_trip_id, x = leg3_start_time, y = itin), color = "green") +
+     ylim(c(0, 10))
 
 # filtered_test_df %>% ggplot() +
 #   geom_histogram(aes(x = time_diff))
