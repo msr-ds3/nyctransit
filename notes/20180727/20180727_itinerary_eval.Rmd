@@ -31,7 +31,7 @@ compute_auc <- function(itin_pair_df) {
   pred <- prediction(as.numeric(auc_df$time_diff, units = "mins"), as.factor(auc_df$itin_line))
   perf_nb <- performance(pred, 'auc')@y.values[[1]]
   perf <- performance(pred, 'auc')
-  return(perf)
+  return(perf_nb)
 }
 
 # given a df with historical time_diffs for many initineraries
@@ -49,8 +49,7 @@ plot_frontier <- function(plot_data) {
     geom_point() +
     xlab('Standard Deviation of Trip Time') +
     ylab('Average Trip Time') +
-    geom_text(aes(label = paste0(group, itin_id,sep='')), hjust = 0.5, vjust = 2)+
-    ylim(c(10, 30))
+    geom_text(aes(label = paste0(group, itin_id,sep='')), hjust = 0.5, vjust = 2)
 
   return(plot)
 }
