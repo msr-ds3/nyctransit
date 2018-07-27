@@ -3,17 +3,17 @@ library(here)
 library(tidyverse)
 
 source(here::here("src", "path_finding.R"))
-load(here::here("data", "igraph_edges.rdata"))
+load(here::here("data", "at_igraph_edges.rdata"))
 stations <- read_csv('http://web.mta.info/developers/data/nyct/subway/Stations.csv')
 stops <- read_csv(here::here("data", "google_transit_subway_static", "stops.txt"))
 
-igraph_edges <- igraph_edges %>% mutate(weight = as.numeric(mean))
+igraph_edges <- at_igraph_edges %>% mutate(weight = as.numeric(mean))
 graph <- graph.data.frame(igraph_edges)
 
 from <- '128'
 to <- 'F18'
 
-x <- get_itinerary(graph, '128','F18',2, map = igraph_edges_map, attributeNames = '90%')
+x <- get_itinerary(graph, '128','JFK',2, map = at_igraph_edges_map, attributeNames = '90%')
 x <- get_itinerary_complex(graph,'617','613',3, map = igraph_edges_map, stations = stations)
 
 #get_itinerary(graph, stops, 'A27','132',10)
