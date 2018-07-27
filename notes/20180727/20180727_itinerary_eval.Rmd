@@ -235,6 +235,17 @@ debug_train_schedules_plot(train_data, subway_data)
 
 # NOTE: DEBUG PLOT - show all trains individually on plot
 
+debug_itin_plot <- function(itin_df, subway_data, start_hour = 8, end_hour = 9) {
+  filtered <- itin_df %>% 
+    filter(hour(leg1_start_time) >= start_hour & hour(leg1_start_time <= end_hour))
+  
+  filtered %>% mutate(itin = row_number()) %>%
+    filter(itin <= 5) %>%
+    ggplot() +
+    geom_segment()
+
+}
+
 # filtered_test_df <- test_df %>% filter(hour(leg1_start_time) >= 8 & hour(leg1_start_time) <= 9)
 
 # plot_data <- bind_rows(train_data[[1]], train_data[[2]], train_data[[3]])
