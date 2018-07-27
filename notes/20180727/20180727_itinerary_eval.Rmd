@@ -50,7 +50,7 @@ plot_frontier <- function(itins_df) {
     geom_point() +
     xlab('Standard Deviation of Trip Time') +
     ylab('Average Trip Time') +
-    geom_text(aes(label = paste0(group, itin_id,sep='')), hjust = 0.5, vjust = 2)
+    geom_text(aes(label = paste0(group, itin_id,sep='')), hjust = 0.5, vjust = 1)
 
   return(plot)
 }
@@ -110,7 +110,7 @@ plot_frontier(red_orange_df)
 compute_auc(top_2_trips)
 ```
 
-### Midtown to Jamaica
+### Midtown to Jamaica (JFK)
 
 ```{r midtown-jamaica-plots}
 
@@ -126,6 +126,17 @@ plot_densities(all_itin_df)
 subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
   mutate(start_time = min(departure_time), count = n()) %>%
   ungroup() %>% filter(realtime_trip_id %in% c(13391, 13404, 13457, 13495, 13517)) %>% View
+```
+### Midtown to Mets Willets (LGA)
+
+```{r Bryant Park- Mets Willets}
+bm_data <- read_csv(here("data","itineraries-5ave-MetsWillets.csv")) %>%
+  filter(event != "travel", itinerary_id < 2)
+
+all_itin_df.2 <- compute_all_itins(bm_data, subway_data) %>% filter(time_diff > 2) # filtering out 0's from E train
+plot_densities(all_itin_df.2)
+
+
 ```
 
 ### Red/Green to Fulton
