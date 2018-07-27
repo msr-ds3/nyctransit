@@ -7,13 +7,6 @@ shortest_path <- function(graph, src, dest){
   if (length(path)==1) NULL else path
 }
 
-# add_path_attributes <- function(graph, id, path){
-#   edges <- E(graph, path = path)
-#   line <- c(edges$route_id,'end')
-#   weight <- c(edges$weight, 'end')
-#   tibble(itinerary_id = id, station = path, line, weight)
-# }
-
 combine_paths_to_tibble <- function(paths, graph, attributeNames){
   if (is.null(paths[[1]])) return (NULL)
   r <- NULL
@@ -21,20 +14,12 @@ combine_paths_to_tibble <- function(paths, graph, attributeNames){
     path <- paths[[i]]
     edges <- E(graph, path = path)
     attrs <- edge.attributes(graph, edges)
-    line <- c(attrs[['route_id']], 'end')
-    weight <- c(attrs[['weight']], 'end')
-    t <-tibble(itinerary_id = i, station = path, line, weight)
-   
-    for (name in attributeNames){
-      t[,name] <- c(attrs[[name]],'end')
-    }
+    t <- tibble(itinerary_id = i, station = path)
+    for (name in c('route_id','weight', attributeNames))
+      t[,name] <- c(attrs[[name]], 'end')
     r <- rbind(r, t)
   }
-  r
-
-  # 1:length(paths) %>%
-  #   lapply(function(i) add_path_attributes(graph,i, paths[[i]])) %>%
-  #   reduce(rbind)
+  rename(r, line = route_id)
 }
 
 path_weight <- function(graph, path) sum(E(graph, path=path)$weight)
@@ -270,8 +255,8 @@ format_itinerary <- function(paths, graph, src, dest, stops = NULL, attributeNam
   if (is.null(stops)) result else left_join(result, stops[,c('stop_id','stop_name')], by = c('station' ='stop_id'))
 }
 
-get_itinerary_directed <- function(graph, src, dest, k, stops = NULL){
-  k_shortest_yen(graph, src, dest,k) %>% format_itinerary(graph, src, dest, stops)
+get_itinerary_directed <- function(graph, src, dest, k, stops = NULL, attributeNames = NULL){
+  k_shortest_yen(graph, src, dest,k) %>% format_itinerary(graph, src, dest, stops, attributeNames)
 }
 
 get_itinerary <- function(graph, src,dest, k, stops = NULL, attributeNames = NULL){

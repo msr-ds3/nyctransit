@@ -31,7 +31,7 @@ compute_auc <- function(itin_pair_df) {
   pred <- prediction(as.numeric(auc_df$time_diff, units = "mins"), as.factor(auc_df$itin_line))
   perf_nb <- performance(pred, 'auc')@y.values[[1]]
   perf <- performance(pred, 'auc')
-  return(perf_nb)
+  ifelse( perf_nb < 0.5, return(1 - perf_nb), return(perf))
 }
 
 # given a df with historical time_diffs for many initineraries
