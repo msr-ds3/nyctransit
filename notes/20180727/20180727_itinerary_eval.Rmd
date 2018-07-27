@@ -11,9 +11,10 @@ library(tidyverse)
 library(lubridate)
 library(ggthemes)
 library(ROCR)
+library(here)
 
-load(file = "../../data/todd_subway_realtime.RData")
-source(file = "../../src/itinerary_evaluation.R")
+load(file = here("data", "todd_subway_realtime.RData"))
+source(file = here("src", "itinerary_evaluation.R"))
 ```
 
 ## Plotting Functions
@@ -66,7 +67,7 @@ Looking at trip time distributions between 96 St and 23 St on the Red Line (1, 2
 #### Gather Red Line Data
 
 ```{r red-line-data}
-red_line_data <- read_csv('../../data/itineraries-Red-Line-96-23-train.csv')
+red_line_data <- read_csv(here("data", "itineraries-Red-Line-96-23-train.csv"))
 
 # filter out event and adding direction to station id
 red_line_cleaned <- red_line_data %>%
@@ -80,7 +81,7 @@ red_line_itins <- compute_all_itins(red_line_cleaned, subway_data)%>%
 #### Gather Orange Line Data
 
 ```{r orange-line-data}
-orange_line_data <- read_csv('../../data/itineraries-Orange-Line-96-23-train.csv')
+orange_line_data <- read_csv(here("data", "itineraries-Orange-Line-96-23-train.csv"))
 
 # filter out event and adding direction to station id
 orange_line_cleaned <- orange_line_data %>%
@@ -115,7 +116,7 @@ compute_auc(top_2_trips)
 
 # load midtown-jamaica data, and clean for our uses
 #   - filter out event and add direction to station id
-mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
+mj_data <- read_csv(here("data", "itineraries-Midtown-Jamaica.csv")) %>%
   filter(event != "travel", itinerary_id < 2)
 
 all_itin_df <- compute_all_itins(mj_data, subway_data) %>% filter(time_diff != 0) # filtering out 0's from E train
