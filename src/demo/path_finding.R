@@ -73,4 +73,7 @@ write.csv(generated, file = here("data", "itineraries-96-Fulton-red.csv"), row.n
 generated <- get_itinerary(graph, '625', '418', 10, stops,igraph_edges_map)
 write.csv(generated, file = here("data", "itineraries-96-Fulton-green.csv"), row.names = F)
 
+# Shortest Paths from Bryant Park to Mets Willets Point (5 Ave(724) => Mets Willets (702))
+generated <- get_itinerary(graph, '724', '702', 10, stops)
+write.csv(generated, file = here("data", "itineraries-5ave-MetsWillets.csv"), row.names = F)
 
