@@ -1,15 +1,20 @@
 library(igraph)
 library(here)
+library(tidyverse)
 
-source(here("src", "path_finding.R"))
-load(here("data", "igraph_edges.rdata"))
-stops <- read_csv(here("data", "google_transit_subway_static", "stops.txt"))
+source(here::here("src", "path_finding.R"))
+load(here::here("data", "igraph_edges.rdata"))
+stops <- read_csv(here::here("data", "google_transit_subway_static", "stops.txt"))
+
 igraph_edges <- igraph_edges %>% mutate(weight = as.numeric(mean))
 graph <- graph.data.frame(igraph_edges)
 
 from <- '128'
 to <- 'F18'
-to2 <- '123'
+
+x <- get_itinerary_new(graph, '128','F18',2, map = igraph_edges_map, attributeNames = '90%')
+map <- igraph_edges_map[,c('stop_id','nxt_stop_id','nxt_stop_id_u', 'stop_id_u')]
+
 
 # path <- list()
 # path[[1]] <- shortest_name_path(graph, from, to)
