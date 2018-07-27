@@ -14,28 +14,7 @@ from <- '128'
 to <- 'F18'
 
 x <- get_itinerary(graph, '128','F18',2, map = igraph_edges_map, attributeNames = '90%')
-x <- get_itinerary_complex(graph,'613','617',3, map = igraph_edges_map, stations)
-map <- igraph_edges_map[,c('stop_id','nxt_stop_id','nxt_stop_id_u', 'stop_id_u')]
-
-
-# path <- list()
-# path[[1]] <- shortest_name_path(graph, from, to)
-# path[[2]] <- shortest_name_path(graph, from, to2)
-# 
-# path_with_attributes <- add_path_attributes(graph, 1, path[[1]])
-# 
-# paths_tibble <- combine_paths_to_tibble(graph, path)
-# 
-# path_distance(graph, path[[1]])
-# path_distance(graph, path[[2]])
-# 
-# path_sorted <- sort_path(graph, path)
-
-vertices <- V(graph)$name
-vertices <- vertices[vertices != from]
-for (i in vertices) 
-  get_itinerary(graph,stops, from, i, 3)
-
+x <- get_itinerary_complex(graph,'617','613',3, map = igraph_edges_map, stations = stations)
 
 #get_itinerary(graph, stops, 'A27','132',10)
 generated <- get_itinerary(graph, '120', '131', 10, stops, igraph_edges_map)
