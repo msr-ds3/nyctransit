@@ -32,7 +32,7 @@ test_train_1 <- test_data_1 %>%
   filter(event != "travel", itinerary_id < 4)
 
 #output for first data input
-all_itin_df.1 <- compute_all_itins(test_train_1)%>%
+all_itin_df.1 <- compute_all_itins(test_train_1, subway_data)%>%
   mutate(group='red')
 
 ```
@@ -47,7 +47,7 @@ test_train_2 <- test_data_2 %>%
   filter(event != "travel", itinerary_id < 4)
 
 #output for first data input
-all_itin_df.2 <- compute_all_itins(test_train_2) %>%
+all_itin_df.2 <- compute_all_itins(test_train_2, subway_data) %>%
   mutate(group='orange')
 
 #combine first line df with second line df
@@ -195,7 +195,7 @@ auc_function(auc_df)
 mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
   filter(event != "travel", itinerary_id < 2)
 
-all_itin_df <- compute_all_itins(mj_data, subway_data)
+all_itin_df <- compute_all_itins(mj_data, subway_data) %>% filter(time_diff != 0) # filtering out 0's from E train
 plot_densities(all_itin_df)
 
 
@@ -203,6 +203,8 @@ plot_densities(all_itin_df)
 subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
   mutate(start_time = min(departure_time), count = n()) %>%
   ungroup() %>% filter(realtime_trip_id %in% c(13391, 13404, 13457, 13495, 13517)) %>% View
+
+# TODO: filter out 0's
 ```
 
 #### Atlantic to Fulton (Morning)
