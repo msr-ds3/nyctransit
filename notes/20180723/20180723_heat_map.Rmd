@@ -1,4 +1,5 @@
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 ---
 title: "Heat Map (we're trying)"
 author: "Sasha, Ayliana, Taxi"
@@ -63,6 +64,8 @@ leaflet(map_data) %>%
                    fillOpacity = 0.5)
 
 =======
+=======
+>>>>>>> Stashed changes
 ---
 title: "Heat Map (we're trying)"
 author: "Sasha, Ayliana, Taxi"
@@ -131,5 +134,8 @@ leaflet(map_data) %>%
 
 
 
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 ```
