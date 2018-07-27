@@ -308,10 +308,10 @@ merge_vertex <- function(graph, parent, children, mode){
   delete.vertices(graph, children)
 }
 
-get_itinerary_complex <- function(graph, src, dest, k, stations, stops = NULL){
+get_itinerary_complex <- function(graph, src, dest, k, stations, stops = NULL, map= NULL, attributeNames = NULL){
   old_graph <- graph
-  src_children <- stations[stations[,'Complex ID'] == src,'GTFS Stop ID'][[1]] %>% sapply(paste0, c('N','S')) %>% reduce(c)
-  dest_children <- stations[stations[,'Complex ID'] == dest,'GTFS Stop ID'][[1]] %>% sapply(paste0, c('N','S')) %>% reduce(c)
+  src_children <- stations[stations[,'Complex ID'] == src,'GTFS Stop ID'][[1]]
+  dest_children <- stations[stations[,'Complex ID'] == dest,'GTFS Stop ID'][[1]]
 
   src_name <- paste0('CID', src)
   dest_name <- paste0('CID', dest)
@@ -335,6 +335,6 @@ get_itinerary_complex <- function(graph, src, dest, k, stations, stops = NULL){
       }
       path
     })
-  paths %>% format_itinerary(old_graph, src, dest, stops)
+  paths %>% format_itinerary(old_graph, src, dest, stops,map, attributeNames)
 }
 
