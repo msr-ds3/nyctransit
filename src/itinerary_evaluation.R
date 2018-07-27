@@ -34,7 +34,7 @@ get_leg_data <- function(lines, start, end, subway_data, hour_start = 7, hour_en
 
 # given one specific itinerary dataframe
 # returns a dataframe of what those itineraries looked like in historical data
-get_itinerary_times <- function(itinerary, subway_data) {
+get_itinerary_times <- function(itinerary, subway_data, hour_start = 7, hour_end = 10) {
   
   # handle the initial transfer special case
   transfer_special_case <- itinerary %>% filter(leg == 0)
@@ -89,7 +89,7 @@ get_itinerary_times <- function(itinerary, subway_data) {
     end <- stop_station[[i]][2]
     lines <- trains[i]
     
-    leg_data <- get_leg_data(lines, start, end, subway_data)
+    leg_data <- get_leg_data(lines, start, end, subway_data, hour_start, hour_end)
     
     # NOTE: DEBUG CODE
     # print(nrow(leg_data))
@@ -232,7 +232,7 @@ plot_distribution_for_itinerary <- function(itin_time_df) {
 }
 
 # given cleaned shortest path itin data, return dataframe with all historical itins
-compute_all_itins <- function(cleaned_data, subway_data) {
+compute_all_itins <- function(cleaned_data, subway_data, start_hour = 7, end_hour = 10) {
   
   num_itins <- cleaned_data$itinerary_id %>% unique() %>% length()
   result <- vector("list", length = num_itins)
@@ -240,7 +240,7 @@ compute_all_itins <- function(cleaned_data, subway_data) {
   # iterate through all itineraries
   for (i in 1:num_itins) {
     itin <- cleaned_data %>% filter(itinerary_id == i)
-    result[[i]] <- get_itinerary_times(itin, subway_data) %>% mutate(itin_id = i, itin_label=sprintf("%s: %s", i, label))
+    result[[i]] <- get_itinerary_times(itin, subway_data, start_hour, end_hour) %>% mutate(itin_id = i, itin_label=sprintf("%s: %s", i, label))
   }
   
   all_itin_df <- bind_rows(result)
