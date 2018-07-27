@@ -245,7 +245,7 @@ format_itinerary_raw <- function(shortest_paths_df) {
   return(itinerary)
 }
 
-format_itinerary <- function(paths, graph, src, dest, stops = NULL, attributeNames){
+format_itinerary <- function(paths, graph, src, dest, stops = NULL, map = NULL, attributeNames){
   path_tibble <- combine_paths_to_tibble(paths,graph, attributeNames)
   if (is.null(path_tibble)) {
     warning(paste('No path between', src, dest))
@@ -253,28 +253,40 @@ format_itinerary <- function(paths, graph, src, dest, stops = NULL, attributeNam
   }
   result <- format_itinerary_raw(greedy(path_tibble))
   if (is.null(stops)) result else left_join(result, stops[,c('stop_id','stop_name')], by = c('station' ='stop_id'))
-}
+  
+  if (is.null(map)) result else {
+    result %>% mutate(nxt_station = lead(station)) %>% 
+      left_join(map, by = c('station'='stop_id_u', 'nxt_station'='nxt_stop_id_u')) %>%
+      group_by(itinerary_id) %>%
+      mutate(station = c(stop_id[-length(nxt_stop_id)],last(nxt_stop_id[length(nxt_stop_id)-1]))) %>% select(-stop_id, -nxt_stop_id, -nxt_station) 
+  }
+ }
 
 get_itinerary_directed <- function(graph, src, dest, k, stops = NULL, attributeNames = NULL){
   k_shortest_yen(graph, src, dest,k) %>% format_itinerary(graph, src, dest, stops, attributeNames)
 }
 
-get_itinerary <- function(graph, src,dest, k, stops = NULL, attributeNames = NULL){
-  old_graph <- graph
-  src_children <- paste0(src, c('N','S'))
-  dest_children <- paste0(dest, c('N','S'))
-  graph <- merge_vertex(graph, src, src_children, 'out')
-  graph <- merge_vertex(graph, dest, dest_children, 'in')
-  paths <- k_shortest_yen(graph, src, dest, k) 
-  
-  paths <- lapply(paths,function(path){
-    path_len <- length(path)
-    path[1] <- if(are.connected(old_graph, src_children[1], path[2])) src_children[1] else src_children[2]
-    path[path_len] <- if(are.connected(old_graph, path[path_len -1], dest_children[1])) dest_children[1] else dest_children[2]
-    path
-  });
-  paths %>% format_itinerary(old_graph, src, dest, stops, attributeNames)
+get_itinerary<- function(graph, src, dest, k, stops = NULL, map = NULL, attributeNames = NULL){
+  k_shortest_yen(graph, src, dest,k) %>%
+    format_itinerary(graph, src, dest, stops, map, attributeNames)
 }
+
+# get_itinerary <- function(graph, src,dest, k, stops = NULL, attributeNames = NULL){
+#   old_graph <- graph
+#   src_children <- paste0(src, c('N','S'))
+#   dest_children <- paste0(dest, c('N','S'))
+#   graph <- merge_vertex(graph, src, src_children, 'out')
+#   graph <- merge_vertex(graph, dest, dest_children, 'in')
+#   paths <- k_shortest_yen(graph, src, dest, k) 
+#   
+#   paths <- lapply(paths,function(path){
+#     path_len <- length(path)
+#     path[1] <- if(are.connected(old_graph, src_children[1], path[2])) src_children[1] else src_children[2]
+#     path[path_len] <- if(are.connected(old_graph, path[path_len -1], dest_children[1])) dest_children[1] else dest_children[2]
+#     path
+#   });
+#   paths %>% format_itinerary(old_graph, src, dest, stops, attributeNames)
+# }
 
 get_multiple_edges <- function(source,neighbors, mode){
   edges <- reduce(neighbors, function(prev, cur) c(prev, source, cur))
@@ -296,10 +308,10 @@ merge_vertex <- function(graph, parent, children, mode){
   delete.vertices(graph, children)
 }
 
-get_itinerary_complex <- function(graph, src, dest, k, stations, stops = NULL){
+get_itinerary_complex <- function(graph, src, dest, k, stations, stops = NULL, map= NULL, attributeNames = NULL){
   old_graph <- graph
-  src_children <- stations[stations[,'Complex ID'] == src,'GTFS Stop ID'][[1]] %>% sapply(paste0, c('N','S')) %>% reduce(c)
-  dest_children <- stations[stations[,'Complex ID'] == dest,'GTFS Stop ID'][[1]] %>% sapply(paste0, c('N','S')) %>% reduce(c)
+  src_children <- stations[stations[,'Complex ID'] == src,'GTFS Stop ID'][[1]]
+  dest_children <- stations[stations[,'Complex ID'] == dest,'GTFS Stop ID'][[1]]
 
   src_name <- paste0('CID', src)
   dest_name <- paste0('CID', dest)
@@ -323,5 +335,6 @@ get_itinerary_complex <- function(graph, src, dest, k, stations, stops = NULL){
       }
       path
     })
-  paths %>% format_itinerary(old_graph, src, dest, stops)
+  paths %>% format_itinerary(old_graph, src, dest, stops,map, attributeNames)
 }
+
