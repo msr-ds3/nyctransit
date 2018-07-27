@@ -254,7 +254,9 @@ debug_itin_plot <- function(itin_df, subway_data, itin_number, num_trips = 5, st
   
   plot <- reshaped_df %>% ggplot(aes(x = start_time, y = row_id)) +
     geom_segment(aes(xend = end_time, yend = row_id, color = as.factor(line))) +
-    geom_text(aes(label = trip_id)) 
+    geom_point(aes(x = start_time, y = row_id)) +
+    geom_point(aes(x = end_time, y = row_id)) +
+    geom_text(aes(label = line), nudge_y = 0.25) 
   
   return(plot)
 }
