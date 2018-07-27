@@ -1,0 +1,221 @@
+---
+title: "20180727_mta_triptime_distribution"
+author: "Phoebe Nguyen, Akbar Mirza"
+date: "July 27, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(ggthemes)
+library(ROCR)
+library(here)
+
+load(file = here("data", "todd_subway_realtime.RData"))
+source(file = here("src", "itinerary_evaluation.R"))
+```
+
+## Plotting Functions
+
+```{r function-definitions}
+compute_auc <- function(itin_pair_df) {
+  # pull out the number from the ROCR package with pred <- predictions(predicted, actual); performance(pred, 'auc')@y.values[[1]]
+  # or  with the pROC package: as.numeric(auc(response = actual, predictor = predicted))
+  # itinerary is the actual value, trip time is the predicted value
+  auc_df <- itin_pair_df %>%
+    mutate(itin_line = as.factor(paste0(group, itin_id, sep=''))) %>%
+    ungroup() %>%
+    select(itin_line, time_diff)
+  
+  pred <- prediction(as.numeric(auc_df$time_diff, units = "mins"), as.factor(auc_df$itin_line))
+  perf_nb <- performance(pred, 'auc')@y.values[[1]]
+  perf <- performance(pred, 'auc')
+  ifelse( perf_nb < 0.5, return(1 - perf_nb), return(perf))
+}
+
+# given a df with historical time_diffs for many initineraries
+# will return a plot that maps avg time_diff vs variance
+plot_frontier <- function(itins_df) {
+
+  plot_data <- itins_df %>%
+    mutate(day_of_week = weekdays(leg1_start_time), hour = hour(leg1_start_time)) %>%
+    # filter out weekends, and only get hour_start, hour_end
+    filter(isWeekend(day_of_week) == F, hour >= 7 & hour < 10) %>%
+    group_by(itin_id, label) %>%
+    mutate(avg = mean(time_diff), stdv = sd(time_diff))
+
+  plot <- plot_data %>% ggplot(aes(x = stdv, y = avg)) +
+    geom_point() +
+    xlab('Standard Deviation of Trip Time') +
+    ylab('Average Trip Time') +
+    geom_text(aes(label = paste0(group, itin_id,sep='')), hjust = 0.5, vjust = 1)
+
+  return(plot)
+}
+```
+
+## Evaluating Interesting Multi-Leg Trips
+
+Evaluating Trip Itineraries With Multiple Legs.
+
+### Red Line vs Orange Line
+
+Looking at trip time distributions between 96 St and 23 St on the Red Line (1, 2, 3) versus the Orange Line (B, D) 
+
+#### Gather Red Line Data
+
+```{r red-line-data}
+red_line_data <- read_csv(here("data", "itineraries-Red-Line-96-23-train.csv"))
+
+# filter out event and adding direction to station id
+red_line_cleaned <- red_line_data %>%
+  filter(event != "travel", itinerary_id < 4)
+
+#output for first data input
+red_line_itins <- compute_all_itins(red_line_cleaned, subway_data)%>%
+  mutate(group='red')
+```
+
+#### Gather Orange Line Data
+
+```{r orange-line-data}
+orange_line_data <- read_csv(here("data", "itineraries-Orange-Line-96-23-train.csv"))
+
+# filter out event and adding direction to station id
+orange_line_cleaned <- orange_line_data %>%
+  filter(event != "travel", itinerary_id < 4)
+
+#output for first data input
+orange_line_itins <- compute_all_itins(orange_line_cleaned, subway_data) %>%
+  mutate(group='orange')
+
+#combine first line df with second line df
+red_orange_df <- bind_rows(red_line_itins, orange_line_itins)
+```
+
+#### Evaluating Differences Between Red & Orange Line & Plotting
+
+```{r red-orange-comparison}
+top_2_trips <- red_orange_df %>% group_by(group) %>% filter(itin_id == "1")
+  
+# Plot Distribution as Densities
+plot_densities(top_2_trips)
+
+# Plot Frontiers
+plot_frontier(red_orange_df)
+
+# Plot AUC for Top 2 Trips
+compute_auc(top_2_trips)
+```
+
+### Midtown to Jamaica (JFK)
+
+```{r midtown-jamaica-plots}
+
+# load midtown-jamaica data, and clean for our uses
+#   - filter out event and add direction to station id
+mj_data <- read_csv(here("data", "itineraries-Midtown-Jamaica.csv")) %>%
+  filter(event != "travel", itinerary_id < 2)
+
+all_itin_df <- compute_all_itins(mj_data, subway_data) %>% filter(time_diff != 0) # filtering out 0's from E train
+plot_densities(all_itin_df)
+
+# NOTE: DEBUG CODE
+subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
+  mutate(start_time = min(departure_time), count = n()) %>%
+  ungroup() %>% filter(realtime_trip_id %in% c(13391, 13404, 13457, 13495, 13517)) %>% View
+```
+### Midtown to Mets Willets (LGA)
+
+```{r Bryant Park- Mets Willets}
+bm_data <- read_csv(here("data","itineraries-5ave-MetsWillets.csv")) %>%
+  filter(event != "travel", itinerary_id < 2)
+
+all_itin_df.2 <- compute_all_itins(bm_data, subway_data) %>% filter(time_diff > 2) # filtering out 0's from E train
+plot_densities(all_itin_df.2)
+
+
+```
+
+### Red/Green to Fulton
+
+#### Gathering Red Line Data from 96 - Fulton
+```{r red-96-fulton-data}
+red_line_data <- read_csv(here("data", "itineraries-96-Fulton-red.csv"))
+
+# filter out event and adding direction to station id
+red_line_cleaned <- red_line_data %>%
+  filter(event != "travel", itinerary_id < 4)
+
+#output for first data input
+red_line_itins <- compute_all_itins(red_line_cleaned, subway_data) %>%
+  mutate(group='red')
+```
+
+#### Gathering Green Line Data from 96 - Fulton
+```{r green-96-fulton-data}
+green_line_data <- read_csv(here("data", "itineraries-96-Fulton-green.csv"))
+
+# filter out event and adding direction to station id
+green_line_cleaned <- green_line_data %>%
+  filter(event != "travel", itinerary_id < 4)
+
+#output for first data input
+green_line_itins <- compute_all_itins(green_line_cleaned, subway_data) %>%
+  mutate(group='green')
+```
+
+#### Comparison of Red v. Green Data from 96 - Fulton
+```{r red-green-96-fulton-comparison}
+#combine first line df with second line df
+red_green_df <- bind_rows(red_line_itins, green_line_itins)
+
+red_green_top_pair <- red_green_df %>% group_by(group) %>% filter(itin_id == "1")
+  
+# Plot Distribution as Densities
+plot_densities(red_green_top_pair)
+
+# Plot Frontiers
+plot_frontier(red_green_df)
+
+# Plot AUC for Top 2 Trips
+compute_auc(red_green_top_pair)
+```
+
+## Plots for Debugging
+
+```{r debugging_plots}
+
+# TODO: Write A Function To Show Trains On Plot
+
+# NOTE: DEBUG PLOT - show all trains individually on plot
+
+# filtered_test_df <- test_df %>% filter(hour(leg1_start_time) >= 8 & hour(leg1_start_time) <= 9)
+
+# plot_data <- bind_rows(train_data[[1]], train_data[[2]], train_data[[3]])
+# plot_data %>% filter(month(start_time) == 2 & day(start_time) == 16 & hour(start_time) > 19 & hour(start_time) < 24) %>%
+#   arrange(start_time) %>%
+#   mutate(itin = row_number()) %>%
+#   ggplot(aes(color = route_mta_id)) +
+#   geom_segment(aes(x = start_time, xend = departure_time, y = itin, yend = itin)) +
+#   geom_text(aes(label = realtime_trip_id, x = start_time, y = itin))
+
+# TODO: Write A Function To Show Itineraries On Plot
+
+# ITINERARY PLOT
+# filtered_test_df %>% mutate(itin = row_number()) %>%
+#   filter(itin <= 5) %>%
+#   ggplot() +
+#     geom_segment(aes(x = leg1_start_time, xend = leg1_end_time, y = itin, yend = itin), color = 'red') +
+#     geom_segment(aes(x = leg2_start_time, xend = leg2_end_time, y = itin, yend = itin), color = 'blue') +
+#     geom_segment(aes(x = leg3_start_time, xend = leg3_end_time, y = itin, yend = itin), color = 'green') +
+#     geom_text(aes(label = leg1_trip_id, x = leg1_start_time, y = itin), color = "red") +
+#     geom_text(aes(label = leg2_trip_id, x = leg2_start_time, y = itin), color = "blue") +
+#     geom_text(aes(label = leg3_trip_id, x = leg3_start_time, y = itin), color = "green") +
+#     ylim(c(0, 10))
+
+# filtered_test_df %>% ggplot() +
+#   geom_histogram(aes(x = time_diff))
+```

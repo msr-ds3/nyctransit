@@ -32,7 +32,7 @@ test_train_1 <- test_data_1 %>%
   filter(event != "travel", itinerary_id < 4)
 
 #output for first data input
-all_itin_df.1 <- compute_all_itins(test_train_1)%>%
+all_itin_df.1 <- compute_all_itins(test_train_1, subway_data)%>%
   mutate(group='red')
 
 ```
@@ -47,7 +47,7 @@ test_train_2 <- test_data_2 %>%
   filter(event != "travel", itinerary_id < 4)
 
 #output for first data input
-all_itin_df.2 <- compute_all_itins(test_train_2) %>%
+all_itin_df.2 <- compute_all_itins(test_train_2, subway_data) %>%
   mutate(group='orange')
 
 #combine first line df with second line df
@@ -175,14 +175,12 @@ auc_function <- function(auc_df) {
 pred <- prediction(as.numeric(auc_df$time_diff, units = "mins"), as.factor(auc_df$itin_line))
 perf_nb <- performance(pred, 'auc')@y.values[[1]]
 perf <- performance(pred, 'auc')
-return(perf)
+ifelse( perf_nb < 0.5, return(1 - perf_nb), return(perf))
 }
 
 auc_function(auc_df)
 
-# plot(auc_function(auc_df))
 
-#paste0("taking random trips from itinerary ", first_itin , " and itinerary ", sec_itin, ', ', auc_function(auc_df)*100 ,"% of the time trip time of itin ", first_itin, " will be shorter than trip time of itin ", sec_itin) %>% print
 ```
 ## Interesting Examples
 
@@ -195,7 +193,7 @@ auc_function(auc_df)
 mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
   filter(event != "travel", itinerary_id < 2)
 
-all_itin_df <- compute_all_itins(mj_data, subway_data)
+all_itin_df <- compute_all_itins(mj_data, subway_data) %>% filter(time_diff != 0) # filtering out 0's from E train
 plot_densities(all_itin_df)
 
 
@@ -203,10 +201,47 @@ plot_densities(all_itin_df)
 subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
   mutate(start_time = min(departure_time), count = n()) %>%
   ungroup() %>% filter(realtime_trip_id %in% c(13391, 13404, 13457, 13495, 13517)) %>% View
+
+# TODO: filter out 0's
 ```
 
 #### Atlantic to Fulton (Morning)
 
 ```{r atlantic-fulton-plots}
+
+# load midtown-jamaica data, and clean for our uses
+#   - filter out event and add direction to station id
+# compare 2-3 train with the 5 train
+
+mj_data <- read_csv('../../data/itineraries-Midtown-Jamaica.csv') %>%
+  filter(event != "travel", itinerary_id < 4)
+
+
+
+# TODO: UNCOMMENT WHEN ALL SPECIAL CASES RESOLVED
+itin_max <- max(mj_data$itinerary_id)
+result <- vector ("list", length = itin_max)
+
+for (i in 1:itin_max) {
+  itin <- mj_data %>% filter(itinerary_id == i)
+  result[[i]] <- get_itinerary_times(itin, subway_data) %>% mutate(itin_id=sprintf("%s: %s", i, label))
+}
+
+all_itin_df <- bind_rows(result)
+
+# TODO: Refactor This into plot_densities function
+filtered <- all_itin_df %>%
+  mutate(day_of_week = weekdays(leg1_start_time),
+         hour = hour(leg1_start_time)) %>%
+  filter(isWeekend(day_of_week) == F,
+         hour >= 7 & hour < 10)
+filtered$itin_id <- as.factor(filtered$itin_id)
+
+filtered %>%
+  ggplot(aes(x = time_diff, group=itin_id, col=itin_id, fill=itin_id)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_discrete(guide = guide_legend()) +
+  theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines'))
+  # geom_histogram(), position = "identity", alpha = 0.5)
 
 ```
