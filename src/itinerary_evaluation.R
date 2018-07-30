@@ -165,12 +165,22 @@ get_itinerary_times <- function(itinerary, subway_data, start_hour = 7, end_hour
     }
     # expected_wait <- if_else(is_empty(expected_wait), 0, expected_wait)
     
-    row_info <- c(row_info,
-                  expected_wait / 60, # divide by 60 to turn to mins
-                  as.character(start_mta_route),
-                  train_data[[1]]$realtime_trip_id[i],
-                  start_time,
-                  end_time)
+    row_info <- vector("list", (4 * len_trains) + 1)
+    
+    row_info[[1]] <- expected_wait / 60
+    row_info[[2]] <- as.character(start_mta_route)
+    row_info[[3]] <- train_data[[1]]$realtime_trip_id[i]
+    row_info[[4]] <- start_time
+    row_info[[5]] <- end_time
+    
+    row_info_idx <- 6
+    
+    # row_info <- c(row_info,
+    #               expected_wait / 60, # divide by 60 to turn to mins
+    #               as.character(start_mta_route),
+    #               train_data[[1]]$realtime_trip_id[i],
+    #               start_time,
+    #               end_time)
     
     if (len_trains > 1) {
       for (ii in 2:len_trains) {
@@ -205,11 +215,17 @@ get_itinerary_times <- function(itinerary, subway_data, start_hour = 7, end_hour
         }
         
         end_time <- train_data[[ii]]$departure_time[curr_idx]
-        row_info <- c(row_info,
-                      as.character(train_data[[ii]]$route_mta_id[curr_idx]),
-                      train_data[[ii]]$realtime_trip_id[curr_idx],
-                      train_data[[ii]]$start_time[curr_idx],
-                      end_time)
+        row_info[[row_info_idx]] <- as.character(train_data[[ii]]$route_mta_id[curr_idx])
+        row_info[[row_info_idx + 1]] <- train_data[[ii]]$realtime_trip_id[curr_idx]
+        row_info[[row_info_idx + 2]] <- train_data[[ii]]$start_time[curr_idx]
+        row_info[[row_info_idx + 3]] <- end_time
+        row_info_idx = row_info_idx + 4
+        
+        # row_info <- c(row_info,
+        #               as.character(train_data[[ii]]$route_mta_id[curr_idx]),
+        #               train_data[[ii]]$realtime_trip_id[curr_idx],
+        #               train_data[[ii]]$start_time[curr_idx],
+        #               end_time)
         
         # NOTE: DEBUG CODE
         # print(sprintf("Leg #%s\n", ii))
@@ -228,7 +244,8 @@ get_itinerary_times <- function(itinerary, subway_data, start_hour = 7, end_hour
     } else {
       output_df[i, ] <- row_info
     }
-    row_info <- list()
+    # row_info <- list()
+    row_info_idx = 1
     # increment i
     i = i + 1
   }
