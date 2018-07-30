@@ -259,8 +259,8 @@ format_itinerary <- function(paths, graph, src, dest, stops = NULL, map = NULL, 
       group_by(itinerary_id) %>%  mutate(station2 = ifelse(stop_id == nxt_stop_id, stop_id, NA),
                                          station2 = ifelse(is.na(stop_id), nxt_stop_id, station2),
                                          station2 = ifelse(is.na(nxt_stop_id), stop_id, station2),
-                                         station2 = ifelse(is.na(station2) & nchar(stop_id) == 4, stop_id, station2),
-                                         station2 = ifelse(is.na(station2) & nchar(nxt_stop_id) == 4, nxt_stop_id, station2),
+                                         station2 = ifelse(is.na(station2) & nchar(stop_id) == 3 & nchar(nxt_stop_id) == 4, nxt_stop_id, station2),
+                                         station2 = ifelse(is.na(station2) & nchar(nxt_stop_id) == 3 & nchar(stop_id) == 4, stop_id, station2),
                                          station2 = ifelse(nchar(station2) == 3, paste0(station2, 'N'), station2))
     
     path_tibble[,'order'] <- 1:nrow(path_tibble)

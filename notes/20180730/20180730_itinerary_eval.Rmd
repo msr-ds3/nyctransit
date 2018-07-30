@@ -14,10 +14,12 @@ library(lubridate)
 library(ggthemes)
 library(ROCR)
 library(here)
-```
-```{r load data and function}
-load(file = here("data", "todd_subway_realtime.RData"))
+library(profvis)
+
 source(file = here("src", "itinerary_evaluation.R"))
+```
+```{r load-data}
+load(file = here("data", "todd_subway_realtime.RData"))
 ```
 ```{r route color}
 routes <- read_csv('../../data/google_transit_subway_static/routes.txt') 
@@ -217,6 +219,17 @@ af_complex_itins <- compute_all_itins(af_complex_cleaned, subway_data)
 
 # plot distributions
 plot_densities(af_complex_itins)
+
+
+# TODO: DELETE
+profvis({
+  #output for first data input
+  af_complex_itins.1 <- compute_all_itins(af_complex_cleaned, subway_data)
+  
+  #output for first data input
+  af_complex_itins.2 <- compute_all_itins(af_complex_cleaned, small_subway_data)
+})
+
 ```
 
 ### Atlantic to Union Square - Super (Complex) Comparison
@@ -224,6 +237,7 @@ plot_densities(af_complex_itins)
 ```{r atlantic-union-sq-complex}
 aus_complex_data <- read_csv(here::here("data", "super-itin-atlantic-union.csv"))
 
+small_subway_data <- subway_data %>% filter(month(departure_time) == 2)
 # filter out event and adding direction to station id
 aus_complex_cleaned <- aus_complex_data %>%
   filter(event != "travel", itinerary_id < 4)
