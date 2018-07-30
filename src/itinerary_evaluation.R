@@ -141,23 +141,29 @@ get_itinerary_times <- function(itinerary, subway_data, start_hour = 7, end_hour
   no_more_trips <- F
   waited_too_long <- F
   
+  expected_wait_df <- wait_times %>%
+    filter(stop_mta_id == train_data[[1]]$stop_mta_id[1],
+           route_mta_id %in% trains[1])
+  
   while (i <= num_trains) {
     
     start_time <- train_data[[1]]$start_time[i]
     start_mta_route = train_data[[1]]$route_mta_id[i]
-    start_stop_mta_id = train_data[[1]]$stop_mta_id[i]
     end_time <- train_data[[1]]$departure_time[i]
     start_time_tod <- convert_hour_to_time_of_day(train_data[[1]]$hour[i])
     start_time_dow <- wday(start_time)
-    expected_wait <- wait_times %>%
-      filter(route_mta_id == start_mta_route,
-             stop_mta_id == start_stop_mta_id,
-             day == start_time_dow, time_of_day == start_time_tod) %>%
+    expected_wait <- expected_wait_df %>%
+      filter(day == start_time_dow,
+             time_of_day == start_time_tod,
+             route_mta_id == start_mta_route) %>%
       select(pred_median_wait) %>%
       first()
     
     # check if expected_wait time exists
-    expected_wait <- if_else(is_empty(expected_wait), 0, expected_wait)
+    if (is_empty(expected_wait)) {
+      expected_wait <- 0
+    }
+    # expected_wait <- if_else(is_empty(expected_wait), 0, expected_wait)
     
     row_info <- c(row_info,
                   expected_wait / 60, # divide by 60 to turn to mins
