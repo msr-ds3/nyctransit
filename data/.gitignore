@@ -5,3 +5,5 @@ todd_subway_realtime.csv
 *.Rdata
 *.RData
 *.rdata
+!igraph_edges.rdata
+!at_igraph_edges.rdata

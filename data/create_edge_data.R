@@ -54,19 +54,19 @@ scheduled_edges <- select(scheduled_edges,
 #---------------Transfer edges---------------------
 #
 transfer_edges <- transfers %>% 
-  select(stop_id = from_stop_id, nxt_stop_id = to_stop_id, duration = min_transfer_time)
+  select(stop_id = from_stop_id, nxt_stop_id = to_stop_id, duration = min_transfer_time) %>%
+  mutate(route_id = "T")
 #add direction to stop_id
-transfer_edges_NS <- mutate(transfer_edges, stop_id = paste0(stop_id, 'N'), nxt_stop_id = paste0(nxt_stop_id,'S'))
-transfer_edges_SN <- mutate(transfer_edges, stop_id = paste0(stop_id, 'S'), nxt_stop_id = paste0(nxt_stop_id,'N'))
-transfer_edges_NN <- mutate(transfer_edges, stop_id = paste0(stop_id, 'N'), nxt_stop_id = paste0(nxt_stop_id,'N'))
-transfer_edges_SS <- mutate(transfer_edges, stop_id = paste0(stop_id, 'S'), nxt_stop_id = paste0(nxt_stop_id,'S'))
-transfer_edges <- rbind(transfer_edges_SN, transfer_edges_NS, transfer_edges_SS, transfer_edges_NN) %>%
-  mutate(route_id = 'T') %>% filter(stop_id != nxt_stop_id)
+# transfer_edges_NS <- mutate(transfer_edges, stop_id = paste0(stop_id, 'N'), nxt_stop_id = paste0(nxt_stop_id,'S'))
+# transfer_edges_SN <- mutate(transfer_edges, stop_id = paste0(stop_id, 'S'), nxt_stop_id = paste0(nxt_stop_id,'N'))
+# transfer_edges_NN <- mutate(transfer_edges, stop_id = paste0(stop_id, 'N'), nxt_stop_id = paste0(nxt_stop_id,'N'))
+# transfer_edges_SS <- mutate(transfer_edges, stop_id = paste0(stop_id, 'S'), nxt_stop_id = paste0(nxt_stop_id,'S'))
+# transfer_edges <- rbind(transfer_edges_SN, transfer_edges_NS, transfer_edges_SS, transfer_edges_NN) %>%
+#   mutate(route_id = 'T') %>% filter(stop_id != nxt_stop_id)
 #---------------realtime edges---------------------
 #reorder and rename stop_mta_id to stop_id
 realtime_edges <- realtime %>% arrange(realtime_trip_id, departure_time) %>% rename(stop_id = stop_mta_id)
 
-#remove direction from stop_id and convert direction to N, S 
 
 #add nxt_stop_id, nxt_departure_time, start_trip_time, end_trip_time and duration
 realtime_edges <- realtime_edges %>% group_by(realtime_trip_id) %>% 
@@ -82,6 +82,9 @@ realtime_edges <- realtime_edges %>% select(route_id = route_mta_id, trip_id = r
                                             stop_id, nxt_stop_id,
                                             departure_time, nxt_departure_time,
                                             duration)
+
+realtime_edges <- realtime_edges %>% mutate(start_trip_time = as.numeric(start_trip_time) %% secondsIn24Hours)
+
 save(file = 'edges.rdata',scheduled_edges, transfer_edges, realtime_edges)
 
                                
