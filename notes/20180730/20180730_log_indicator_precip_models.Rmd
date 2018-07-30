@@ -26,6 +26,7 @@ library(maptools)
 library(httr)
 library(rgdal)
 library(RColorBrewer)
+library(scales)
 
 # load todd data
 # following only work's on Amanda's machine:
@@ -51,7 +52,7 @@ station_data <- station_data %>%
   select(stop_name, stop_id, structure, lat, long)
 
 # https://www.ncdc.noaa.gov/cdo-web/datatools/lcd         hourly weather data
-weather_2018 <- read_csv("../../project data/weather_2018.csv") %>% 
+weather_2018 <- read_csv("../../../project data/weather_2018.csv") %>% 
   mutate(ymd = as.Date(DATE), hour = hour(DATE)) %>%
   select(ymd, DATE, hour, HOURLYPrecip)
 
@@ -140,7 +141,7 @@ leaflet(model_df) %>%
 
 ```{r}
 # interaction of stop with precip LOGS MAKE IT WORSE
-x2 <- sparse.model.matrix(perc90 ~ as.factor(stop_mta_id)*avg_precip + 
+x2 <- sparse.model.matrix(perc90 ~ as.factor(stop_mta_id)*log(avg_precip + 0.1) + 
                     as.factor(route_mta_id) + as.factor(day) + 
                     as.factor(time_of_day), data = exp_wait_time_and_weather)
 
@@ -229,7 +230,7 @@ leaflet(model3_df) %>%
 
 ```{r}
 # interaction of stop with precip 
-x4 <- sparse.model.matrix(median ~ as.factor(stop_mta_id)*avg_precip + 
+x4 <- sparse.model.matrix(median ~ as.factor(stop_mta_id)*log(avg_precip + 0.1) + 
                     as.factor(route_mta_id) + as.factor(day) + 
                     as.factor(time_of_day), data = exp_wait_time_and_weather)
 
@@ -277,44 +278,125 @@ leaflet(model4_df) %>%
 ```{r}
 # wait times df
 wait_times <- exp_wait_time_and_weather %>% left_join(station_data, by = c("stop_mta_id" = "stop_id")) %>%
-  select(route_mta_id, stop_mta_id, stop_name, day, time_of_day, avg_precip, lat, long) %>%
+  select(route_mta_id, stop_mta_id, stop_name, day, time_of_day, avg_precip, lat, long, median, perc90) %>%
   mutate(route_mta_id = as.factor(route_mta_id),
          stop_mta_id = as.factor(stop_mta_id),
          day = as.factor(day),
          hour = as.factor(time_of_day)) %>%
-  filter(avg_precip == 0) %>%
   arrange(stop_mta_id) %>%
   distinct()
+
+wait_times_matrix_precip <- sparse.model.matrix(~ stop_mta_id*log(avg_precip + 0.1) +
+                                     route_mta_id + day +
+                                     time_of_day, data = wait_times)
 
 wait_times_matrix <- sparse.model.matrix(~ stop_mta_id +
                                      route_mta_id + day +
                                      time_of_day, data = wait_times)
+
 wait_times$pred_90th_wait <- as.vector(predict(model, newx = wait_times_matrix, s = "lambda.min"))
 wait_times$pred_median_wait <- as.vector(predict(model3, newx = wait_times_matrix, s = "lambda.min"))
 
-save(wait_times, file = "../../data/modeled_wait_times.RData")
+wait_times$pred_90th_wait_precip <- as.vector(predict(model2, newx = wait_times_matrix_precip, s = "lambda.min"))
+wait_times$pred_median_wait_precip <- as.vector(predict(model4, newx = wait_times_matrix_precip, s = "lambda.min"))
+
+cor(wait_times$pred_median_wait_precip, wait_times$median)^2 #r^2
+sqrt(mean((wait_times$pred_median_wait_precip - wait_times$median)^2)) #rmse
+
+
+
+exp_wait_time_and_weather$pred_90th_wait <- as.vector(predict(model, newx = x, s = "lambda.min"))
+exp_wait_time_and_weather$pred_median_wait <- as.vector(predict(model3, newx = x3, s = "lambda.min"))
+
+exp_wait_time_and_weather$pred_90th_wait_precip <- as.vector(predict(model2, newx = x2, s = "lambda.min"))
+exp_wait_time_and_weather$pred_median_wait_precip <- as.vector(predict(model4, newx = x4, s = "lambda.min"))
+
+cor(exp_wait_time_and_weather$pred_median_wait_precip, exp_wait_time_and_weather$median)^2 #r^2
+sqrt(mean((exp_wait_time_and_weather$pred_median_wait_precip - exp_wait_time_and_weather$median)^2)) #rmse
+
+
+exp_wait_time_and_weather %>% ggplot(aes(x = avg_precip)) + geom_histogram() + scale_y_log10(label = comma)
+
+```
+
+```{r}
+df <-exp_wait_time_and_weather %>% filter(stop_mta_id == "210N", as.numeric(avg_precip) >0) 
+as.numeric(median(df$avg_precip)) # 0.007875
+
+df %>% ggplot(aes(x = avg_precip)) + geom_histogram()
+
+# using median for indicator
+x5 <- sparse.model.matrix(median ~ as.factor(stop_mta_id)*I(avg_precip > 0.007875) + 
+                    as.factor(route_mta_id) + as.factor(day) + 
+                    as.factor(time_of_day), data = exp_wait_time_and_weather)
+
+model5 <- glmnet(x5, y2, alpha = 0 , lambda = 0)
+
+model5_df <- tidy(model5)
+
+model5_df <- model5_df %>% arrange(desc(estimate)) %>% filter(!grepl("precip", term))
+
+model5_df$term  <- gsub("[as.factor(stop_mta_id)]*","",model5_df$term)
+
+model5_df$term  <- substring(model5_df$term, 1, 4) 
+
+model5_df <- left_join(model5_df, station_data, by = c("term" = "stop_id")) %>% na.omit()
+
+x6 <- sparse.model.matrix(perc90 ~ as.factor(stop_mta_id)*I(avg_precip > 0.007875) + 
+                    as.factor(route_mta_id) + as.factor(day) + 
+                    as.factor(time_of_day), data = exp_wait_time_and_weather)
+
+model6 <- glmnet(x6, y, alpha = 0 , lambda = 0)
+
+model6_df <- tidy(model6)
+
+model6_df <- model6_df %>% arrange(desc(estimate)) %>% filter(!grepl("precip", term))
+
+model6_df$term  <- gsub("[as.factor(stop_mta_id)]*","",model6_df$term)
+
+model6_df$term  <- substring(model6_df$term, 1, 4) 
+
+model6_df <- left_join(model6_df, station_data, by = c("term" = "stop_id")) %>% na.omit()
+```
+
+```{r}
+# r^2 and rmse on test and train sets respectivetly with new models using indicators for precip
+wait_times$pred_90th_wait_precip_I <- as.vector(predict(model6, newx = wait_times_matrix_precip, s = "lambda.min"))
+wait_times$pred_median_wait_precip_I <- as.vector(predict(model5, newx = wait_times_matrix_precip, s = "lambda.min"))
+
+cor(wait_times$pred_median_wait_precip_I, wait_times$median)^2 #r^2
+sqrt(mean((wait_times$pred_median_wait_precip_I - wait_times$median)^2)) #rmse
+
+
+exp_wait_time_and_weather$pred_90th_wait_precip_I <- as.vector(predict(model6, newx = x6, s = "lambda.min"))
+exp_wait_time_and_weather$pred_median_wait_precip_I <- as.vector(predict(model5, newx = x5, s = "lambda.min"))
+
+cor(exp_wait_time_and_weather$pred_median_wait_precip_I, exp_wait_time_and_weather$median)^2 #r^2
+sqrt(mean((exp_wait_time_and_weather$pred_median_wait_precip_I - exp_wait_time_and_weather$median)^2)) #rmse
 ```
 
 ```{r}
 
 # map plot of stops interacted with precip
+# median with precip = 0
+model5_no_rain <- model5_df %>% filter()
 clrs <- brewer.pal(5, "RdYlGn")
 
 pal <- colorNumeric(
   palette = clrs,
-  domain = mon_nine$pred_model2,
+  domain = model5_df$estimate,
   reverse = TRUE)
 
 
-leaflet(mon_nine) %>%
+leaflet(model5_df) %>%
   addTiles() %>%
   setView(-73.9124206, 40.737, zoom = 11) %>%
   addProviderTiles("CartoDB.Positron") %>%
   addCircleMarkers(~long, ~lat,
-                   popup = paste("<b>", mon_nine$stop_name, "</b>",
-                                 "<br/>", round(mon_nine$pred_model2/60, 2), "mins"),
+                   popup = paste("<b>", model5_df$stop_name, "</b>",
+                                 "<br/>", round(model5_df$estimate/60, 2), "mins"),
                    radius = 5,
-                   color = ~pal(pred_model2),
+                   color = ~pal(estimate),
                    stroke = FALSE, 
                    fillOpacity = 0.5)
 
@@ -323,29 +405,24 @@ leaflet(mon_nine) %>%
 ```
 
 ```{r}
-
-#mon_nine <- mon_nine %>%
-#  mutate(pred_clipped = pmin(pred, quantile(pred, 0.9)))
-
-
 # map plot of stops interacted with precip
 clrs <- brewer.pal(5, "RdYlGn")
 
 pal <- colorNumeric(
   palette = clrs,
-  domain = mon_nine$pred_model4,
+  domain = wait_times$pred_median_wait,
   reverse = TRUE)
 
 
-leaflet(mon_nine) %>%
+leaflet(wait_times) %>%
   addTiles() %>%
   setView(-73.9124206, 40.737, zoom = 11) %>%
   addProviderTiles("CartoDB.Positron") %>%
   addCircleMarkers(~long, ~lat,
-                   popup = paste("<b>", mon_nine$stop_name, "</b>",
-                                 "<br/>", round(mon_nine$pred_model4/60, 2), "mins"),
+                   popup = paste("<b>", wait_times$stop_name, "</b>",
+                                 "<br/>", round(wait_times$pred_median_wait/60, 2), "mins"),
                    radius = 5,
-                   color = ~pal(pred_model4),
+                   color = ~pal(pred_median_wait),
                    stroke = FALSE, 
                    fillOpacity = 0.5)
 
