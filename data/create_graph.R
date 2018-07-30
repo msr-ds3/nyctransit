@@ -53,10 +53,17 @@ create_edges <- function (scheduled_edges, realtime_edges, transfer_edges, quant
 }
 
 create_map <- function(edges_directed) {
-  edges_directed %>%
-  mutate(stop_id_u = substr(stop_id, 1, nchar(stop_id)-1), nxt_stop_id_u = substr(nxt_stop_id, 1, nchar(nxt_stop_id)-1))  %>% group_by(stop_id_u, nxt_stop_id_u) %>% 
-  mutate(count = n()) %>% ungroup() %>% mutate( stop_id_u = ifelse(count == 1 | route_id == 'T', stop_id_u,stop_id),
-                                                nxt_stop_id_u = ifelse(count == 1 | route_id == 'T', nxt_stop_id_u,nxt_stop_id)) 
+  # edges_directed %>%
+  # mutate(stop_id_u = substr(stop_id, 1, nchar(stop_id)-1), nxt_stop_id_u = substr(nxt_stop_id, 1, nchar(nxt_stop_id)-1))  %>% group_by(stop_id_u, nxt_stop_id_u) %>% 
+  # mutate(count = n()) %>% ungroup() %>% mutate( stop_id_u = ifelse(count == 1 | route_id == 'T', stop_id_u,stop_id),
+  #                                               nxt_stop_id_u = ifelse(count == 1 | route_id == 'T', nxt_stop_id_u,nxt_stop_id)) 
+  
+  edges_directed %>% 
+    mutate(stop_id_u = ifelse(route_id == 'T', stop_id, substr(stop_id, 1, nchar(stop_id)-1)), 
+         nxt_stop_id_u = ifelse(route_id == 'T', nxt_stop_id, substr(nxt_stop_id, 1, nchar(nxt_stop_id)-1))) %>% 
+    group_by(stop_id_u, nxt_stop_id_u) %>% mutate(count = n()) %>% ungroup() %>% 
+    mutate(stop_id_u = ifelse(count == 1, stop_id_u, stop_id),
+           nxt_stop_id_u = ifelse(count == 1, nxt_stop_id_u, nxt_stop_id))
 }
 
 deduplicate <- function(edge_map){
@@ -74,7 +81,7 @@ save_edges <- function(edges, name)
   map <- create_map(edges)
   deduplicate <- deduplicate(map)
   exceptions <- map %>% filter(count != 1, route_id != 'T')
-  map <- map%>%  filter(route_id != 'T') %>% select(stop_id, stop_id_u, nxt_stop_id, nxt_stop_id_u)
+  map <- map %>% select(stop_id, stop_id_u, nxt_stop_id, nxt_stop_id_u)
     # group_by(stop_id_u, nxt_stop_id_u) %>% mutate(x = stop_id == last(stop_id) & nxt_stop_id == last(nxt_stop_id)) %>%
     # filter(x == T) 
   
@@ -95,14 +102,13 @@ save_edges <- function(edges, name)
 
 #make sure to run create_edge_data.r before running this
 load('data/edges.rdata')
-realtime_edges <- realtime_edges %>% mutate(start_trip_time = as.numeric(start_trip_time) %% secondsIn24Hours)
+# realtime_edges <- realtime_edges %>% mutate(start_trip_time = as.numeric(start_trip_time) %% secondsIn24Hours)
 
 #create edges
 edges <- create_edges(scheduled_edges, realtime_edges, transfer_edges, 
                              cutoff = 5, relative_cutoff = .1, time_range = c('7:00:00','9:00:00'), 
                              include_day_of_week = 'Weekday')
 
-map <- create_map(edges)
 save_edges(edges, 'igraph_edges')
 
 #add airtrains

@@ -34,11 +34,11 @@ write.csv(generated, file = here("data", "itineraries-Akbar-train.csv"), row.nam
 generated <- get_itinerary(graph, 'M14', 'D18', 10, stops, igraph_edges_map)
 write.csv(generated, file = here("data", "itineraries-M-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, '120', '130', 10, stops,igraph_edges_map)
-write.csv(generated, file = here("data", "itineraries-Red-Line-96-23-train.csv"), row.names = F)
+generated <- get_itinerary(graph, '121', '130', 10, stops,igraph_edges_map)
+write.csv(generated, file = here("data", "itineraries-Red-Line-86-23-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, 'A19', 'D18', 10, stops, igraph_edges_map)
-write.csv(generated, file = here("data", "itineraries-Orange-Line-96-23-train.csv"), row.names = F)
+generated <- get_itinerary(graph, 'A20', 'D18', 10, stops, igraph_edges_map)
+write.csv(generated, file = here("data", "itineraries-Orange-Line-86-23-train.csv"), row.names = F)
 
 # Shortest Paths from Midtown to Jamaica (i.e. 5 Av/53 St (F12) => JFK Airport (G06))
 generated <- get_itinerary(graph, 'F12', 'G06', 10, stops, igraph_edges_map)
@@ -56,3 +56,22 @@ write.csv(generated, file = here("data", "itineraries-96-Fulton-green.csv"), row
 generated <- get_itinerary(graph, '724', '702', 10, stops)
 write.csv(generated, file = here("data", "itineraries-5ave-MetsWillets.csv"), row.names = F)
 
+# Shortest Paths from Complex IDs
+# FORMAT: get_itinerary_complex(graph, start_complex, end_complex, k, map = igraph_edges_map, stations = stations)
+# ==============================================================================
+
+# Shortest Path from Atlantic Av (617) => Fulton (628)
+super_generated <- get_itinerary_complex(graph, 617, 628, 10, map = at_igraph_edges_map, stations = stations, stops = stops)
+write.csv(super_generated, file = here("data", "super-itin-atlantic-fulton.csv"))
+# Shortest Path from Atlantic Av (617) => Union Square (602)
+super_generated <- get_itinerary_complex(graph, 617, 602, 10, map = at_igraph_edges_map, stations = stations, stops = stops)
+write.csv(super_generated, file = here("data", "super-itin-atlantic-union.csv"))
+# Shortest Path from Atlantic Av (617) => Bryant Park (609)
+super_generated <- get_itinerary_complex(graph, 617, 609, 10, map = at_igraph_edges_map, stations = stations, stops = stops)
+write.csv(super_generated, file = here("data", "super-itin-atlantic-bryant.csv"))
+# Shortest Path from Atlantic Av (617) => Grand Central (610)
+super_generated <- get_itinerary_complex(graph, 617, 610, 10, map = at_igraph_edges_map, stations = stations, stops = stops)
+write.csv(super_generated, file = here("data", "super-itin-atlantic-grand-central.csv"))
+# Shortest Path from Atlantic Av (617) => Times Sq (611)
+super_generated <- get_itinerary_complex(graph, 617, 611, 10, map = at_igraph_edges_map, stations = stations, stops = stops)
+write.csv(super_generated, file = here("data", "super-itin-atlantic-times-square.csv"))
