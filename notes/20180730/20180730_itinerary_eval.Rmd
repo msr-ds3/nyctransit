@@ -126,7 +126,7 @@ mj_df <- compute_all_itins(mj_data, subway_data, 15, 17) %>%
   filter(time_diff != 0) 
 
 # filtering out 0's from E train
-plot_densities(mj_df)
+plot_densities(mj_df, 15, 17)
 
 # NOTE: DEBUG CODE
 # subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
@@ -140,10 +140,10 @@ bm_data <- read_csv(here::here("data","itineraries-5ave-MetsWillets.csv")) %>%
   filter(event != "travel", itinerary_id < 2)
 
 bm_df <- compute_all_itins(bm_data, subway_data, 15,17) %>% filter(time_diff > 2) # filtering out 0's from E train
-plot_densities(bm_df)
+plot_densities(bm_df, 15, 17)
 
 mj_bm_comparison_df <- bind_rows(mj_df, bm_df)
-plot_densities(mj_bm_comparison_df)
+plot_densities(mj_bm_comparison_df, 15, 17)
 ```
 
 ### Red/Green to Fulton
