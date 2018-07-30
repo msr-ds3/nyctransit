@@ -2,8 +2,25 @@ library(tidyverse)
 library(lubridate)
 library(ggthemes)
 library(ROCR)
+library(here)
+
+load(file = here::here("data", "modeled_wait_times.RData"))
 
 # Helper Functions for Itinerary Evaluation
+# given an hour of the day
+# returns the bin for that time of day
+convert_hour_to_time_of_day <- function(hour) {
+  
+  tod <- case_when(
+    (hour < 5) ~ "Early morning",
+    (5 <= hour & hour < 10) ~ "Morning rush",
+    (10 <= hour & hour < 15) ~ "Mid-day",
+    (15 <= hour & hour < 20) ~ "Evening rush",
+    (hour >= 20) ~ "Night time"
+  )
+  
+  return(tod)
+}
 
 # given day of week as a string
 # returns true if weekend else returns false
@@ -34,7 +51,7 @@ get_leg_data <- function(lines, start, end, subway_data, start_hour = 7, end_hou
 
 # given one specific itinerary dataframe
 # returns a dataframe of what those itineraries looked like in historical data
-get_itinerary_times <- function(itinerary, subway_data, hour_start = 7, hour_end = 10) {
+get_itinerary_times <- function(itinerary, subway_data, start_hour = 7, end_hour = 10) {
   
   # handle the initial transfer special case
   transfer_special_case <- itinerary %>% filter(leg == 0)
@@ -100,7 +117,7 @@ get_itinerary_times <- function(itinerary, subway_data, hour_start = 7, hour_end
   
   num_trains <- nrow(train_data[[1]])
   
-  output_df <- data.frame(d=numeric(num_trains))
+  output_df <- data.frame(expected_wait=numeric(num_trains))
   
   # format output_df with appropriate columns
   
@@ -112,7 +129,8 @@ get_itinerary_times <- function(itinerary, subway_data, hour_start = 7, hour_end
     output_df[[paste('leg', i, '_end_time', sep='')]] <- numeric(num_trains)
   }
   
-  output_df <- subset(output_df, select = -c(d))
+  # TODO: prune this code
+  # output_df <- subset(output_df, select = -c(d))
   
   i <- 1
   row_info <- list()
@@ -124,11 +142,28 @@ get_itinerary_times <- function(itinerary, subway_data, hour_start = 7, hour_end
   waited_too_long <- F
   
   while (i <= num_trains) {
+    
+    start_time <- train_data[[1]]$start_time[i]
+    start_mta_route = train_data[[1]]$route_mta_id[i]
+    start_stop_mta_id = train_data[[1]]$stop_mta_id[i]
     end_time <- train_data[[1]]$departure_time[i]
+    start_time_tod <- convert_hour_to_time_of_day(train_data[[1]]$hour[i])
+    start_time_dow <- wday(start_time)
+    expected_wait <- wait_times %>%
+      filter(route_mta_id == start_mta_route,
+             stop_mta_id == start_stop_mta_id,
+             day == start_time_dow, time_of_day == start_time_tod) %>%
+      select(pred_median_wait) %>%
+      first()
+    
+    # check if expected_wait time exists
+    expected_wait <- if_else(is_empty(expected_wait), 0, expected_wait)
+    
     row_info <- c(row_info,
-                  as.character(train_data[[1]]$route_mta_id[i]),
+                  expected_wait / 60, # divide by 60 to turn to mins
+                  as.character(start_mta_route),
                   train_data[[1]]$realtime_trip_id[i],
-                  train_data[[1]]$start_time[i],
+                  start_time,
                   end_time)
     
     if (len_trains > 1) {
@@ -201,10 +236,14 @@ get_itinerary_times <- function(itinerary, subway_data, hour_start = 7, hour_end
     output_df[[paste('leg', i, '_end_time', sep='')]] <- as.POSIXct(output_df[[paste('leg', i, '_end_time', sep='')]],
                                                                     origin = "1970-01-01", tz = "UTC")
   }
+  
   output_df$adjusted_end_time <- output_df[, ncol(output_df)] + end_transfer_time
-  output_df$time_diff <- output_df[, ncol(output_df)] - output_df[, 3] # as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC")
+  output_df$time_diff <- output_df[, ncol(output_df)] - output_df[, 4] # as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC")
   # set units of time_diff to minutes always
   units(output_df$time_diff) <- "mins"
+  
+  # adjust time_diff with padded_wait
+  output_df$time_diff <- output_df$time_diff + output_df$expected_wait
   # output_df$given_start_time <- as.POSIXct(start_time, origin = "1970-01-01", tz = "UTC")
   
   output_df$label <- label
