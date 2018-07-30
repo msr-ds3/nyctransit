@@ -207,6 +207,70 @@ af_complex_itins <- compute_all_itins(af_complex_cleaned, subway_data)
 plot_densities(af_complex_itins)
 ```
 
+### Atlantic to Union Square - Super (Complex) Comparison
+
+```{r atlantic-union-sq-complex}
+aus_complex_data <- read_csv(here::here("data", "super-itin-atlantic-union.csv"))
+
+# filter out event and adding direction to station id
+aus_complex_cleaned <- aus_complex_data %>%
+  filter(event != "travel", itinerary_id < 4)
+
+#output for first data input
+aus_complex_itins <- compute_all_itins(aus_complex_cleaned, subway_data)
+
+# plot distributions
+plot_densities(aus_complex_itins)
+```
+
+### Atlantic to Bryant Park - Super (Complex) Comparison
+
+```{r atlantic-bryant-complex}
+abp_complex_data <- read_csv(here::here("data", "super-itin-atlantic-bryant.csv"))
+
+# filter out event and adding direction to station id
+abp_complex_cleaned <- abp_complex_data %>%
+  filter(event != "travel", itinerary_id < 4)
+
+#output for first data input
+abp_complex_itins <- compute_all_itins(abp_complex_cleaned, subway_data)
+
+# plot distributions
+plot_densities(abp_complex_itins)
+```
+
+### Atlantic to Grand Central - Super (Complex) Comparison
+
+```{r atlantic-grand-central-complex}
+agc_complex_data <- read_csv(here::here("data", "super-itin-atlantic-grand-central.csv"))
+
+# filter out event and adding direction to station id
+agc_complex_cleaned <- agc_complex_data %>%
+  filter(event != "travel", itinerary_id < 4)
+
+#output for first data input
+agc_complex_itins <- compute_all_itins(agc_complex_cleaned, subway_data)
+
+# plot distributions
+plot_densities(agc_complex_itins)
+```
+
+### Atlantic to Times Square - Super (Complex) Comparison
+
+```{r atlantic-times-square-complex}
+ats_complex_data <- read_csv(here::here("data", "super-itin-atlantic-times-square.csv"))
+
+# filter out event and adding direction to station id
+ats_complex_cleaned <- ats_complex_data %>%
+  filter(event != "travel", itinerary_id < 4)
+
+#output for first data input
+ats_complex_itins <- compute_all_itins(ats_complex_cleaned, subway_data)
+
+# plot distributions
+plot_densities(ats_complex_itins)
+```
+
 ## Plots for Debugging
 
 ```{r debugging_plots}
