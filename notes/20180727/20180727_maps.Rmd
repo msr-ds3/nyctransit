@@ -115,7 +115,7 @@ get_heatmap_static_info <- function(dest, igraph) {
   
 
   map_data <- map_data %>%
-    mutate(subway_mins = distance%/%60)
+    mutate(subway_mins = round(distance/60, 2))
   
   return(map_data)
 
