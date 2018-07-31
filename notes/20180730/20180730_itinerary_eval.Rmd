@@ -14,10 +14,24 @@ library(lubridate)
 library(ggthemes)
 library(ROCR)
 library(here)
-```
-```{r}
-load(file = here("data", "todd_subway_realtime.RData"))
+library(profvis)
+
 source(file = here("src", "itinerary_evaluation.R"))
+```
+```{r load-data}
+load(file = here("data", "todd_subway_realtime.RData"))
+```
+```{r route color}
+routes <- read_csv('../../data/google_transit_subway_static/routes.txt') 
+routes$route_color <- replace_na(routes$route_color, "000000") 
+routes <- routes %>% mutate(route_color = sprintf("#%s", route_color))
+
+line_color <- routes %>% group_by(route_color) %>% select(route_short_name, route_color) %>% arrange(route_color)
+hex_color <- data.frame(route_color= c(unique(line_color$route_color)),
+                          color_name= c("black","dark green","green", "blue","light green", "dark gray", "brown", "light gray", "purple", "red",  "yellow"  ,"orange" ))
+
+route_color_dict <- left_join(line_color, hex_color)
+
 ```
 
 ## Plotting Functions
@@ -65,7 +79,7 @@ Evaluating Trip Itineraries With Multiple Legs.
 
 ### Red Line vs Orange Line
 
-Looking at trip time distributions between 96 St and 23 St on the Red Line (1, 2, 3) versus the Orange Line (B, D) 
+Looking at trip time distributions between 86 St and 23 St on the Red Line (1, 2, 3) versus the Orange Line (B, D, F, M) 
 
 #### Gather Red Line Data
 
@@ -205,6 +219,17 @@ af_complex_itins <- compute_all_itins(af_complex_cleaned, subway_data)
 
 # plot distributions
 plot_densities(af_complex_itins)
+
+
+# TODO: DELETE
+profvis({
+  #output for first data input
+  af_complex_itins.1 <- compute_all_itins(af_complex_cleaned, subway_data)
+  
+  #output for first data input
+  af_complex_itins.2 <- compute_all_itins(af_complex_cleaned, small_subway_data)
+})
+
 ```
 
 ### Atlantic to Union Square - Super (Complex) Comparison
@@ -212,6 +237,7 @@ plot_densities(af_complex_itins)
 ```{r atlantic-union-sq-complex}
 aus_complex_data <- read_csv(here::here("data", "super-itin-atlantic-union.csv"))
 
+small_subway_data <- subway_data %>% filter(month(departure_time) == 2)
 # filter out event and adding direction to station id
 aus_complex_cleaned <- aus_complex_data %>%
   filter(event != "travel", itinerary_id < 4)

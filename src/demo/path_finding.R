@@ -34,11 +34,11 @@ write.csv(generated, file = here("data", "itineraries-Akbar-train.csv"), row.nam
 generated <- get_itinerary(graph, 'M14', 'D18', 10, stops, igraph_edges_map)
 write.csv(generated, file = here("data", "itineraries-M-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, '120', '130', 10, stops,igraph_edges_map)
-write.csv(generated, file = here("data", "itineraries-Red-Line-96-23-train.csv"), row.names = F)
+generated <- get_itinerary(graph, '121', '130', 10, stops,igraph_edges_map)
+write.csv(generated, file = here("data", "itineraries-Red-Line-86-23-train.csv"), row.names = F)
 
-generated <- get_itinerary(graph, 'A19', 'D18', 10, stops, igraph_edges_map)
-write.csv(generated, file = here("data", "itineraries-Orange-Line-96-23-train.csv"), row.names = F)
+generated <- get_itinerary(graph, 'A20', 'D18', 10, stops, igraph_edges_map)
+write.csv(generated, file = here("data", "itineraries-Orange-Line-86-23-train.csv"), row.names = F)
 
 # Shortest Paths from Midtown to Jamaica (i.e. 5 Av/53 St (F12) => JFK Airport (G06))
 generated <- get_itinerary(graph, 'F12', 'G06', 10, stops, igraph_edges_map)
