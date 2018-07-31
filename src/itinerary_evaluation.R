@@ -133,7 +133,8 @@ get_itinerary_times <- function(itinerary, subway_data, start_hour = 7, end_hour
   # output_df <- subset(output_df, select = -c(d))
   
   i <- 1
-  row_info <- list()
+  # row_info <- list()
+  row_info <- vector("list", (4 * len_trains) + 1)
   
   counters <- rep(1, len_trains)
   
@@ -165,7 +166,7 @@ get_itinerary_times <- function(itinerary, subway_data, start_hour = 7, end_hour
     }
     # expected_wait <- if_else(is_empty(expected_wait), 0, expected_wait)
     
-    row_info <- vector("list", (4 * len_trains) + 1)
+    
     
     row_info[[1]] <- expected_wait / 60
     row_info[[2]] <- as.character(start_mta_route)
