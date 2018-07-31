@@ -111,10 +111,10 @@ map_an_itinerary <- function(home, start, itinerary) {
     setView(median(map_df$stop_lon), median(map_df$stop_lat), zoom = 12) %>%
     addProviderTiles("CartoDB.Positron")
 
-for (i in 1:1) {
+for (i in 1:num_layers) {
   df <- map_df %>% filter(itinerary_id==i)
   
-  # df %>% View
+  df %>% View
 
   map <- map %>%
     # add station markers
@@ -169,10 +169,10 @@ for (i in 1:1) {
   }
 
 }
-# 
-#   map <- map %>%
-#     addLayersControl(overlayGroups = as.character(seq(1:num_layers)),
-#                      options = layersControlOptions(collapsed = FALSE))
+
+  map <- map %>%
+    addLayersControl(overlayGroups = as.character(seq(1:num_layers)),
+                     options = layersControlOptions(collapsed = FALSE))
   return(map)
 }
 ```
@@ -303,7 +303,6 @@ maps[[1]] <- map_with
 maps[[2]] <-map_without
 sync(maps)
 
-mapview::mapshot(map_with, file = paste("./itin_with_l.png"))
-mapview::mapshot(map_without, file = ("itin_without_l.png"))
+
 
 ```
