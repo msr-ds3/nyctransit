@@ -313,7 +313,8 @@ compute_all_itins <- function(cleaned_data, subway_data, start_hour = 7, end_hou
 
 # given a dataframe with multiple itins
 # returns density plot / histogram of time_diffs
-plot_densities <- function(all_itin_df, start_hour = 7 , end_hour = 10) { 
+plot_densities <- function(all_itin_df, start_hour = 7 , end_hour = 10, bins = 60) { 
+  
   plot_data <- all_itin_df %>%
     mutate(day_of_week = weekdays(leg1_start_time),
            hour = hour(leg1_start_time)) %>%
@@ -323,11 +324,13 @@ plot_densities <- function(all_itin_df, start_hour = 7 , end_hour = 10) {
   plot_data$itin_id <- as.factor(plot_data$itin_id)
   
   plot <- plot_data %>%
-    ggplot(aes(x = time_diff, group=itin_label, col=itin_label, fill=itin_label)) +
-    geom_histogram(position = "identity", alpha = 0.5) +
-    xlab('Trip Time') +
+    ggplot(aes(x = time_diff, group=itin_label, fill=itin_label)) +
+    geom_histogram(position = "identity", alpha = 0.5, bins = bins) +
+    xlab('Trip Time (in minutes)') +
+    ylab('Number of Trips') +
     scale_fill_discrete(guide = guide_legend()) +
-    theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines'))
+    theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines')) +
+    xlim(as.numeric(quantile(mj_df$time_diff, c(0.1, 0.9))))
   # geom_histogram(), position = "identity", alpha = 0.5)
   
   return(plot)
