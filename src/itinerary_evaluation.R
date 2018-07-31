@@ -315,11 +315,11 @@ compute_all_itins <- function(cleaned_data, subway_data, start_hour = 7, end_hou
 # returns density plot / histogram of time_diffs
 plot_densities <- function(all_itin_df, start_hour = 7 , end_hour = 10, bins = 60) { 
   
-  plot_data <- all_itin_df %>%
-    mutate(day_of_week = weekdays(leg1_start_time),
-           hour = hour(leg1_start_time)) %>%
-    filter(isWeekend(day_of_week) == F,
-           hour >= start_hour & hour < end_hour)
+  plot_data <- all_itin_df # %>%
+    # mutate(day_of_week = weekdays(leg1_start_time),
+    #        hour = hour(leg1_start_time)) %>%
+    # filter(isWeekend(day_of_week) == F,
+    #        hour >= start_hour & hour < end_hour)
   
   plot_data$itin_id <- as.factor(plot_data$itin_id)
   
