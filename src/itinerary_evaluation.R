@@ -330,7 +330,7 @@ plot_densities <- function(all_itin_df, start_hour = 7 , end_hour = 10, bins = 6
     ylab('Number of Trips') +
     scale_fill_discrete(guide = guide_legend()) +
     theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines')) +
-    xlim(as.numeric(quantile(mj_df$time_diff, c(0.1, 0.9))))
+    xlim(as.numeric(quantile(plot_data$time_diff, c(0.1, 0.9))))
   # geom_histogram(), position = "identity", alpha = 0.5)
   
   return(plot)
