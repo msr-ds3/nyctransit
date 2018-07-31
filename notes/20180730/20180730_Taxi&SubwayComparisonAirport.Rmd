@@ -1,0 +1,167 @@
+---
+author: "Peter Farquharson"
+title: "20180730_Taxi_Six_Month"
+output: html_document
+---
+
+```{r setup, ""}
+
+
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+library(ggthemes)
+
+load("../../data/todd_subway_realtime.RData")
+load("../../data/taxi_data_2015_01-06-lite_clean.Rdata")
+stops <- read_csv("../../data/google_transit_subway_static/stops.txt")
+stop_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
+source("../../src/path_finding.R")
+load("../../data/at_igraph_edges.rdata")
+at_igraph_edges <- at_igraph_edges %>% mutate(weight = as.numeric(mean))
+graph <- graph.data.frame(at_igraph_edges)
+
+source("../../src/itinerary_evaluation.R")
+
+
+```
+
+
+```{r improved_distance}
+
+filter_trips_with_airport <- function(taxi_df, from_stop, to_stop, threshold, day_filter, hour_filter, cos_adjust){
+  
+  if(from_stop == "JFK"){from_stop <- "John F. Kennedy International Airport"}
+  if(to_stop == "JFK"){to_stop <- "John F. Kennedy International Airport"}
+  if(from_stop == "LGA"){from_stop <- "LaGuardia Airport"}
+  if(to_stop == "LGA"){to_stop <- "LaGuardia Airport"}
+  
+  filtered_trips <- taxi_df %>% 
+    filter(wday(pickup_datetime) %in% day_filter, hour(pickup_datetime) %in% hour_filter)
+  
+  if(from_stop == "John F. Kennedy International Airport" | from_stop == "LaGuardia Airport"){
+    filtered_trips <- filtered_trips %>% filter(pickup_neighborhood == from_stop)
+  }
+  else{
+    from_coords <- stop_data %>% filter(`GTFS Stop ID` == from_stop) %>% select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, lng = `GTFS Longitude`)
+    filtered_trips <- filtered_trips %>%
+      mutate(distance_source = 110.25 * sqrt(((from_coords[['lat']] - pickup_latitude)*cos_adjust)^2 + ((from_coords[['lng']] - pickup_longitude)*cos_adjust)^2)) %>%
+      filter(distance_source < threshold)
+  }
+  if(to_stop == "John F. Kennedy International Airport" | to_stop == "LaGuardia Airport"){
+    filtered_trips <- filtered_trips %>% filter(dropoff_neighborhood == to_stop)
+  }
+  else{
+    to_coords <- stop_data %>% filter(`GTFS Stop ID` == to_stop) %>% select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, lng = `GTFS Longitude`)
+    filtered_trips <- filtered_trips %>% 
+      mutate(distance_dest = 110.25 * sqrt(((to_coords[['lat']] - dropoff_latitude)*cos_adjust)^2 + ((to_coords[['lng']] - dropoff_longitude)*cos_adjust)^2)) %>%
+      filter(distance_dest < threshold)
+  }
+  return(filtered_trips)
+}
+
+```
+
+
+```{r , "Function for taxi and subway"}
+
+TaxixSubway<- function(start_id, stop_id, plot_name, days = 2:6 ,hours = 7:22){
+
+  air_train_time <- 0
+
+  const_cos_adjust <- cos((median(rbind(taxi_clean_lite$pickup_latitude, taxi_clean_lite$dropoff_latitude)) * pi)/ 180)
+
+  df1 <- filter_trips_with_airport(taxi_clean_lite, start_id, stop_id, .33, days, hours, const_cos_adjust)
+  df1$trip <- "Taxi"
+
+  df1$trip_time_in_min <- df1$trip_time_in_sec/60
+    df1$label <- " Taxi"
+    
+    
+ if(start_id == "JFK"){
+    subway_start_id <-"G06"
+    air_train_time <- air_train_time + 480
+  }else{
+    subway_start_id <- start_id
+  }
+  if(stop_id == "JFK"){
+    subway_stop_id <-"G06"
+    air_train_time <- air_train_time + 480
+  }else{
+      subway_stop_id <- stop_id
+    }
+    
+  generated <- get_itinerary(graph, subway_start_id, subway_stop_id, 1,stops = stops,  map = at_igraph_edges_map) %>% filter(event != "travel", itinerary_id < 4)
+
+ # all_itin_df <- compute_all_itins(generated, realtime) %>% mutate(trip_time_in_min = time_diff) #%>% filter(time_diff != 0)
+  
+  all_itin_df <- compute_all_itins(generated, realtime) %>% mutate(trip_time_in_min = time_diff + air_train_time/60)
+  
+
+# all_itin_df$trip_time_in_min <- trip_time_in_min + air_train_time
+
+
+  all_itin_df$trip <- "Subway"
+
+
+  plot_df1 <- df1 %>% 
+    select(trip_time_in_min, trip, label)
+
+  ninth_quantile <- quantile(plot_df1$trip_time_in_min, 0.95)
+  
+  plot_all_itin_df <- all_itin_df %>%
+  select(trip_time_in_min, trip, label)
+
+  fused_df <-rbind(plot_df1, plot_all_itin_df) %>% mutate(label = gsub("=>","\n",label))
+  
+  fused_df %>% ggplot() + ggtitle(plot_name) + geom_density(aes(x = trip_time_in_min, fill = label, color = label),alpha = 0.2)+  xlim(0, ninth_quantile)
+}
+
+```
+
+
+```{r plotting_trips_of_interest}
+#airport check 
+TaxixSubway("120", "JFK", "96th to JFK")
+
+#Late Night outer borough : Times Sq to Gun Hill Road
+TaxixSubway("127", "208", "Times Sq to Gun Hill Road", hours = 21:3)
+
+#Late Night outer borough: Union Sq to  WakeField 
+TaxixSubway("635", "201", "Union Sq to  WakeField ", hours = 21:3)
+
+
+#96th to Times Square
+#West side
+TaxixSubway("120", "127", "96th to Times Square (West)", hours = 16:18)
+
+#96th to Times Square
+#East side
+TaxixSubway("625", "725", "96th to Times Square (East)")
+
+#96 to 14th
+#West Side
+TaxixSubway("120", "132", "96th to 14th (West)")
+
+#96 to 14th
+#East side
+TaxixSubway("625", "635", "96th to 14th (East)")
+
+#West side
+#96 to chambers St
+TaxixSubway("120", "137", "96th to Chambers (West)")
+
+#East side
+#96 to chambers
+TaxixSubway("625", "A36", "96th to Chambers (East)")
+
+#Port authority to grand central
+TaxixSubway("A27", "631", "Port Authority to Grand Central", hours = 16:18)
+
+
+```
+
+
