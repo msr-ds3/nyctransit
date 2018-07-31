@@ -324,7 +324,7 @@ plot_densities <- function(all_itin_df, start_hour = 7 , end_hour = 10) {
   
   plot <- plot_data %>%
     ggplot(aes(x = time_diff, group=itin_label, col=itin_label, fill=itin_label)) +
-    geom_density(alpha = 0.5) +
+    geom_histogram(position = "identity", alpha = 0.5) +
     xlab('Trip Time') +
     scale_fill_discrete(guide = guide_legend()) +
     theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines'))
