@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
 library(ggthemes)
+library(here)
 
 # load todd's subway_data
 load(file = "../../data/todd_subway_realtime.RData")
@@ -118,6 +119,9 @@ plot_local_express <- function(local_line, express_line, start_stop_id, end_stop
 }
 
 plot_local_express ("1", "2", "120S", "132S")
+
+plot <- plot_local_express ("1", "2", "120S", "132S")
+ggsave(plot = plot, file = here("figures", "local-vs-express-96-14-St.png"), width = 5, height = 4, dpi = 300)
 ```
 
 ## Introducing One Stop Transfer
@@ -308,7 +312,7 @@ plot_express <- local_with_express_diffs %>%
 
 # code for combining plots as per: https://stackoverflow.com/questions/21192002/how-to-combine-2-plots-ggplot-into-one-plot
 local_diffs$group <- "local"
-local_with_express_diffs$group <- "local w/ express"
+local_with_express_diffs$group <- "express + local"
 
 combined <- rbind(local_diffs, local_with_express_diffs)
 
@@ -319,5 +323,6 @@ combined_plot <- ggplot(combined, aes(x=diffs, group=group, col=group, fill=grou
 # geom_density(alpha = 0.8, position = "identity")
 
 combined_plot
+ggsave(plot = combined_plot, file = here("figures", "local-vs-express+local-96-18-St.png"), width = 5, height = 4, dpi = 300)
 
 ```
