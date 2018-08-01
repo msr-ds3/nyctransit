@@ -64,7 +64,7 @@ as.data.frame(routes_by_lines) %>% head
 ```{r}
 connections <- stop_times %>%
   left_join(stops) %>% 
-  extract(trip_id, c("route_id"), regex=".*_.*_(.*)\\.\\..*", remove=FALSE) %>%
+  extract(trip_id, c("route_id"), regex=".*_.*_([^.]*)\\.\\.?.*", remove=FALSE) %>%
   mutate(stop_id = substr(stop_id, 1, 3),
     prev_stop_id = ifelse(trip_id == lag(trip_id), lag(stop_id), NA),
     prev_stop_lat = ifelse(trip_id == lag(trip_id), lag(stop_lat), NA),
@@ -75,7 +75,7 @@ sequences <- connections %>%
   left_join(routes) 
 
 # catch NA color values
-sequences$route_color <- replace_na(sequences$route_color, "000000") 
+sequences$route_color <- replace_na(sequences$route_color, "6D6E71") 
 
 sequences <- sequences %>%
   mutate(route_color = sprintf("#%s", route_color)) %>%
@@ -135,11 +135,10 @@ ggmap(nyc_map) +
 
 map <- leaflet() %>%
   addTiles() %>%
-  setView(-74.00, 40.71, zoom = 12) %>%
+  setView(-73.95, 40.72, zoom = 10.5) %>%
   addProviderTiles("CartoDB.Positron") %>%
   addCircleMarkers(sequences$stop_lon, sequences$stop_lat, color = sequences$route_color,
-                   popup = full_sequences$stop_name,
-                   radius = 3)
+                   radius = 4, stroke = FALSE, fillOpacity = 0.7)
 
 for (i in 1:nrow(full_sequences)) {
   map <- map %>%
@@ -149,7 +148,29 @@ for (i in 1:nrow(full_sequences)) {
                  dashArray = ifelse(full_sequences[i,]$route_id == "T", c(8), c(0)),
                  weight = 1)
 }
+
 map
+```
+
+
+#### Map with walking grid and stations (for presentation)
+```{r}
+library(mapview)
+
+# sequences$stop_lat <- jitter(sequences$stop_lat, factor = 10)
+# sequences$stop_lon <- jitter(sequences$stop_lon, factor = 10)
+
+map <- leaflet() %>%
+  addTiles() %>%
+  setView(-73.95, 40.72, zoom = 10.5) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addCircleMarkers(data = filtered_grid, lng = ~lon, lat = ~lat,
+                     color = "#000000",
+                     radius = 0.5, stroke = FALSE, fillOpacity = 0.3) %>%
+  addCircleMarkers(sequences$stop_lon, sequences$stop_lat, color = sequences$route_color,
+                   radius = 4, stroke = FALSE, fillOpacity = 0.7)
+
+mapshot(map, url = "stations_and_walking_grid.html", file = "stations_and_walking_grid.png")
 
 ```
 
