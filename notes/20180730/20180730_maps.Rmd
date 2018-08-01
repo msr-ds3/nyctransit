@@ -35,7 +35,7 @@ stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
 stops <- stops %>% dplyr::select(stop_id, stop_lat, stop_lon, stop_name)
 
 routes <- read_csv('../../data/google_transit_subway_static/routes.txt')
-routes$route_color <- replace_na(routes$route_color, "000000") 
+routes$route_color <- replace_na(routes$route_color, "6D6E71") 
 routes <- routes %>%
   mutate(route_color = sprintf("#%s", route_color))
 
@@ -94,85 +94,90 @@ map_an_itinerary <- function(home, start, itinerary) {
   # start/stop marker colors
   green <- "#468504"
   red <- "#cf3400"
-  stop_rad <- 5
-  line_weight <- 3
+  stop_rad <- 6
+  line_weight <- 4
   
   map_df <- get_map_data(itinerary) %>%
     mutate(line = str_replace_all(line, "_", " "),
            mins = round(as.integer(weight)/60, 1))
-
+  
   # map_df %>% View
   
   num_layers <- max(map_df$itinerary_id)
   home <- home[rep(seq_len(nrow(home)), each=3), ]
-
+  
   map <- leaflet() %>%
     addTiles() %>%
     setView(median(map_df$stop_lon), median(map_df$stop_lat), zoom = 12) %>%
     addProviderTiles("CartoDB.Positron")
-
-for (i in 1:num_layers) {
-  df <- map_df %>% filter(itinerary_id==i)
   
-  df %>% View
-
-  map <- map %>%
-    # add station markers
-    addCircleMarkers(df$stop_lon, df$stop_lat, color = df$route_color,
-                     popup = paste("<b>", df$stop_name, "</b>", "<br/>", df$line),
-                     radius = stop_rad, stroke = FALSE, fillOpacity = 0.7,
-                     group = as.character(i)) %>%
-    # add start marker
-    addCircleMarkers(lat = home$lat[i], lng = home$lon[i], color = green, radius = 8, opacity = 0.9,
-                     popup = paste("<b>", "start location", "</b>", "<br/>",
-                                   home$lat[i], home$lon[i]),
-                     group = as.character(i)) %>%
-    # add walk to first station
-    addPolylines(lat = c(home$lat[i], df$stop_lat[nrow(df)]),
-                 lng = c(home$lon[i], df$stop_lon[nrow(df)]),
-                 dashArray = c(8),
-                 color = black, weight = line_weight,
-                 popup = paste("<b>", "walk", "</b>", "<br/>", start$walking_mins[i], "mins"),
-                 group = as.character(i)) %>%
-    # add end marker
-    addCircleMarkers(lat = df$stop_lat[1], lng = df$stop_lon[1], color = red, radius = 8, opacity = 0.9,
-                     popup = paste("<b>", "end location", "</b>", "<br/>",
-                                   df$stop_name[1], "<br/>",
-                                   "<b>", "total commute:", "</b>", start$total_time_mins[i], "mins"),
-                     group = as.character(i))
-
-  for (j in 1:nrow(df)) {
-    if (j == 1 & df$event[j] == "transfer") {
-      map <- map %>% 
-        addPolylines(lat = c(df$stop_lat[j], df$prev_stop_lat[j]),
-                     lng = c(df$stop_lon[j], df$prev_stop_lon[j]),
-                     dashArray = c(8), 
-                     color = black, 
-                     weight = line_weight,
-                     popup = paste("<b>", "walk", "</b>", "<br/>", df$mins[j], "mins"),
-                     group = as.character(i))
-    } else {
-    map <- map %>%
-      addPolylines(lat = c(df$stop_lat[j], df$prev_stop_lat[j]),
-                   lng = c(df$stop_lon[j], df$prev_stop_lon[j]),
-                   color = ifelse(df$event[j] == "start_transfer", black, df$route_color[j]),
-                   popup = ifelse(df$event[j] == "start_transfer",
-                                  paste("<b>", "transfer", "</b>",
-                                        df$line[j+1], "to", df$line[j], "<br/>",
-                                        df$mins, "mins"),
-                                  paste("<b>", df$line[j], "</b>", "<br/>", df$mins[j], "mins")),
-                   dashArray = ifelse(df$event[j] == "start_transfer", c(8), c(0)),
-                   weight = line_weight,
-                   group = as.character(i))
+  # change 1:num_layers to a specific itin_id if we only want to see that one
+  # (e.g. 2:2 to see 2nd best path)
+  for (i in 1:num_layers) {
+    df <- map_df %>% filter(itinerary_id==i)
     
+    # df %>% View
+    
+    map <- map %>%
+      # add station markers
+      addCircleMarkers(df$stop_lon, df$stop_lat, color = df$route_color,
+                       popup = paste("<b>", df$stop_name, "</b>", "<br/>", df$line),
+                       radius = stop_rad, stroke = FALSE, fillOpacity = 0.7,
+                       group = as.character(i)) %>%
+      # add start marker
+      addCircleMarkers(lat = home$lat[i], lng = home$lon[i], color = green, radius = 8, opacity = 0.9,
+                       popup = paste("<b>", "start location", "</b>", "<br/>",
+                                     home$lat[i], home$lon[i]),
+                       popupOptions = popupOptions(noHide = T),
+                       group = as.character(i)) %>%
+      # add walk to first station
+      addPolylines(lat = c(home$lat[i], df$stop_lat[nrow(df)]),
+                   lng = c(home$lon[i], df$stop_lon[nrow(df)]),
+                   dashArray = c(8),
+                   color = black, weight = line_weight,
+                   popup = paste("<b>", "walk", "</b>", "<br/>", start$walking_mins[i], "mins"),
+                   popupOptions = popupOptions(noHide = T, direction = "right"),
+                   group = as.character(i)) %>%
+      # add end marker
+      addCircleMarkers(lat = df$stop_lat[1], lng = df$stop_lon[1], color = red, radius = 8, opacity = 0.9,
+                       popup = paste("<b>", "end location", "</b>", "<br/>",
+                                     df$stop_name[1], "<br/>",
+                                     "<b>", "total commute:", "</b>", start$total_time_mins[i], "mins"),
+                       popupOptions = popupOptions(noHide = T),
+                       group = as.character(i))
+    
+    for (j in 1:nrow(df)) {
+      if (j == 1 & df$event[j] == "transfer") {
+        map <- map %>% 
+          addPolylines(lat = c(df$stop_lat[j], df$prev_stop_lat[j]),
+                       lng = c(df$stop_lon[j], df$prev_stop_lon[j]),
+                       dashArray = c(8), 
+                       color = black, 
+                       weight = line_weight,
+                       popup = paste("<b>", "walk", "</b>", "<br/>", df$mins[j], "mins"),
+                       group = as.character(i))
+      } else {
+        map <- map %>%
+          addPolylines(lat = c(df$stop_lat[j], df$prev_stop_lat[j]),
+                       lng = c(df$stop_lon[j], df$prev_stop_lon[j]),
+                       color = ifelse(df$event[j] == "start_transfer", black, df$route_color[j]),
+                       popup = ifelse(df$event[j] == "start_transfer",
+                                      paste("<b>", "transfer", "</b>",
+                                            df$line[j+1], "to", df$line[j], "<br/>",
+                                            df$mins, "mins"),
+                                      paste("<b>", df$line[j], "</b>", "<br/>", df$mins[j], "mins")),
+                       dashArray = ifelse(df$event[j] == "start_transfer", c(8), c(0)),
+                       weight = line_weight,
+                       group = as.character(i))
+        
+      }
     }
+    
   }
-
-}
-
-  map <- map %>%
-    addLayersControl(overlayGroups = as.character(seq(1:num_layers)),
-                     options = layersControlOptions(collapsed = FALSE))
+  # comment out if we only want 1 layer
+    map <- map %>%
+      addLayersControl(overlayGroups = as.character(seq(1:num_layers)),
+                       options = layersControlOptions(collapsed = FALSE))
   return(map)
 }
 ```
@@ -199,17 +204,17 @@ l_graph <-graph.data.frame(no_l_edges)
 dest <- "635" # 14th St ******
 # dest <- "103N"
 
-# 5 mins walking from 96 St
-home_lat <- 40.79613
-home_lon <- -73.97688
-
-# near L/canarsie
-home_lat <- 40.651501
-home_lon <- -73.895612
-
-# metropolitan ave
-home_lat <- 40.712037 
-home_lon <- -73.894585 
+# # 5 mins walking from 96 St
+# home_lat <- 40.79613
+# home_lon <- -73.97688
+# 
+# # near L/canarsie
+# home_lat <- 40.651501
+# home_lon <- -73.895612
+# 
+# # metropolitan ave
+# home_lat <- 40.712037 
+# home_lon <- -73.894585 
 
 home_lat <- 40.714469
 home_lon <- -73.957626
@@ -219,25 +224,6 @@ home <- data.frame(lat = c(home_lat), lon = c(home_lon))
 
 # number of paths
 k <- 1
-
-
-# # ending location (random coordinate)
-# end_lat <- 40.738703
-# end_lon <- -73.999580
-# end <- data.frame(lat = c(end_lat), lon = c(end_lon))
-# 
-# # number of stops close to the end location to evaluate
-# n_end <- 3
-# 
-# end_stations <- stops %>% 
-#   mutate(stop_id = substr(stop_id, 1, 3),
-#          walking_time = 720*Distance(end$lat, end$lon, stop_lat, stop_lon),
-#          walking_mins = walking_time/60) %>%
-#   distinct %>%
-#   arrange(walking_time) %>%
-#   head(n_end)
-# end_stop_ids <- end_stations$stop_id
-
 
 ```
 
@@ -260,7 +246,7 @@ get_map_with_walking <- function(home, dest, igraph) {
 
   map_data <- map_data %>%
     mutate(subway_mins = round(distance/60, 2))
-
+  
 
   result <- map_data %>% 
     mutate(walking_time = 720*Distance(home$lat, home$lon, stop_lat, stop_lon), 
@@ -300,9 +286,11 @@ maps <- list()
 map_with <- get_map_with_walking(home, dest, graph)
 map_without <- get_map_with_walking(home, dest, l_graph)
 maps[[1]] <- map_with
-maps[[2]] <-map_without
+maps[[2]] <- map_without
 sync(maps)
 
 
+# mapshot(map_with,  url = here::here("figures", "itin_with_l.html"), file =  here::here("figures", "itin_with_l.png"))
+# mapshot(map_without,  url = here::here("figures", "itin_without_l.html"), file =  here::here("figures", "itin_without_l.png"))
 
 ```
