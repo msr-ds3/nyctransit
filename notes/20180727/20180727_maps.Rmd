@@ -37,12 +37,12 @@ stops <- read_csv('../../data/google_transit_subway_static/stops.txt')
 stops <- stops %>% select(stop_id, stop_lat, stop_lon, stop_name)
 
 routes <- read_csv('../../data/google_transit_subway_static/routes.txt')
-routes$route_color <- replace_na(routes$route_color, "000000") 
+routes$route_color <- replace_na(routes$route_color, "6D6E71") 
 routes <- routes %>%
   mutate(route_color = sprintf("#%s", route_color))
 
 source('../../src/path_finding.R')
-load('../../igraph_edges.rdata')
+load('../../data/igraph_edges.rdata')
 
 r <- GET('http://data.beta.nyc//dataset/0ff93d2d-90ba-457c-9f7e-39e47bf2ac5f/resource/35dd04fb-81b3-479b-a074-a27a37888ce7/download/d085e2f8d0b54d4590b1e7d1f35594c1pediacitiesnycneighborhoods.geojson')
 nyc_neighborhoods <- readOGR(content(r,'text'), 'OGRGeoJSON', verbose = F)
@@ -66,9 +66,9 @@ Distance <- function(LatA, LonA, LatB, LonB){
 
 
 ```{r}
-work <- "137S"
-lga <- "LGAN"
-jfk <- "JFKS"
+work <- "137"
+lga <- "LGA"
+jfk <- "JFK"
 ```
 
 ### GET GRAPHS
@@ -230,6 +230,7 @@ get_commute_heatmap <- function(dest, map_data, grid, palette) {
               opacity = 1) %>% 
     addRasterImage(rr, color=palette, opacity = 0.4)
   
+
   return(m)
 }
 
