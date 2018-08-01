@@ -132,6 +132,6 @@ airtrain_edges <- list(c("702N", "LGAN", "AT", 0, 360, 360),
   reduce(rbind) %>% as.data.frame()
 names(airtrain_edges) <- names(edges)
 
-igraph_edges <- rbind(edges, airtrain_edges)
+transfer_igraph_edges <- rbind(edges, airtrain_edges)
 
-save(igraph_edges, file = 'transfer_igraph_edges')
+save_edges(transfer_igraph_edges, 'transfer_igraph_edges')
