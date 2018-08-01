@@ -133,7 +133,8 @@ get_itinerary_times <- function(itinerary, subway_data, start_hour = 7, end_hour
   # output_df <- subset(output_df, select = -c(d))
   
   i <- 1
-  row_info <- list()
+  # row_info <- list()
+  row_info <- vector("list", (4 * len_trains) + 1)
   
   counters <- rep(1, len_trains)
   
@@ -165,7 +166,7 @@ get_itinerary_times <- function(itinerary, subway_data, start_hour = 7, end_hour
     }
     # expected_wait <- if_else(is_empty(expected_wait), 0, expected_wait)
     
-    row_info <- vector("list", (4 * len_trains) + 1)
+    
     
     row_info[[1]] <- expected_wait / 60
     row_info[[2]] <- as.character(start_mta_route)
@@ -312,21 +313,32 @@ compute_all_itins <- function(cleaned_data, subway_data, start_hour = 7, end_hou
 
 # given a dataframe with multiple itins
 # returns density plot / histogram of time_diffs
-plot_densities <- function(all_itin_df, start_hour = 7 , end_hour = 10) { 
-  plot_data <- all_itin_df %>%
-    mutate(day_of_week = weekdays(leg1_start_time),
-           hour = hour(leg1_start_time)) %>%
-    filter(isWeekend(day_of_week) == F,
-           hour >= start_hour & hour < end_hour)
+plot_densities <- function(all_itin_df, start_hour = 7 , end_hour = 10, bins = 60, route_color_dict) { 
+  
+  plot_data <- all_itin_df # %>%
+    # mutate(day_of_week = weekdays(leg1_start_time),
+    #        hour = hour(leg1_start_time)) %>%
+    # filter(isWeekend(day_of_week) == F,
+    #        hour >= start_hour & hour < end_hour)
   
   plot_data$itin_id <- as.factor(plot_data$itin_id)
   
+  colors <- route_color_dict$route_color
+  names(colors) <- route_color_dict$route_short_name
+  
+  plot_lines <- substr(unique(plot_data$label), 1, 1)
+  plot_colors <- as.vector(colors[plot_lines])
+  
   plot <- plot_data %>%
-    ggplot(aes(x = time_diff, group=itin_label, col=itin_label, fill=itin_label)) +
-    geom_density(alpha = 0.5) +
-    xlab('Trip Time') +
-    scale_fill_discrete(guide = guide_legend()) +
-    theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines'))
+    ggplot(aes(x = as.numeric(time_diff), group=itin_label, fill=itin_label)) +
+    geom_histogram(position = "identity", alpha = 0.5, bins = bins) +
+    xlab('Trip Time (in minutes)') +
+    ylab('Number of Trips') +
+    theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines')) +
+    #xlim(as.numeric(quantile(mj_df$time_diff, c(0.1, 0.9)))) +
+    scale_fill_manual(guide = guide_legend(), values = plot_colors) + 
+    scale_color_manual(values = plot_colors) +
+    xlim(as.numeric(quantile(plot_data$time_diff, c(0.1, 0.9))))
   # geom_histogram(), position = "identity", alpha = 0.5)
   
   return(plot)
