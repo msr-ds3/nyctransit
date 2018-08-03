@@ -53,13 +53,17 @@
 |Line |ggsave(jfk_plot, file = "../../figures/96thSttoJFk.png", width = 4, height = 4)|
 ![](96thSttoJFk.png)
 
+## [auto_readme.sh](auto_readme.sh)
+location not found
+
 ## [Commute_time_distribution_by_borough(handicap).png](Commute_time_distribution_by_borough(handicap).png)
 
 | | | |
 |-|-|-|
 |Location | [../notes/20180730/disability_figure_script/create_figures.R](../notes/20180730/disability_figure_script/create_figures.R)|
 |Line Number |24|
-|Line |ggsave(filename = 'figures/Commute_time_distribution_by_borough(handicap).png', plot_dist_commute_time_by_borough)|
+|Line |ggsave(filename = 'figures/Commute_time_distribution_by_borough(handicap).png', plot_dist_commute_time_by_borough)
+|
 ![](Commute_time_distribution_by_borough(handicap).png)
 
 ## [Commute_time_distribution(normal_vs_handicap).png](Commute_time_distribution(normal_vs_handicap).png)
@@ -68,7 +72,8 @@
 |-|-|-|
 |Location | [../notes/20180730/disability_figure_script/create_figures.R](../notes/20180730/disability_figure_script/create_figures.R)|
 |Line Number |20|
-|Line |ggsave(filename = 'figures/Commute_time_distribution(normal_vs_handicap).png', plot_dist_commute_time)|
+|Line |ggsave(filename = 'figures/Commute_time_distribution(normal_vs_handicap).png', plot_dist_commute_time)
+|
 ![](Commute_time_distribution(normal_vs_handicap).png)
 
 ## [Difference_Commute_time_distribution.png](Difference_Commute_time_distribution.png)
@@ -77,7 +82,8 @@
 |-|-|-|
 |Location | [../notes/20180730/disability_figure_script/create_figures.R](../notes/20180730/disability_figure_script/create_figures.R)|
 |Line Number |13|
-|Line |ggsave(filename = 'figures/Difference_Commute_time_distribution.png', plot_dist_difference)|
+|Line |ggsave(filename = 'figures/Difference_Commute_time_distribution.png', plot_dist_difference)
+|
 ![](Difference_Commute_time_distribution.png)
 
 ## [Difference_Commute_time_distribution_worst_neighborhoods.png](Difference_Commute_time_distribution_worst_neighborhoods.png)
@@ -86,7 +92,8 @@
 |-|-|-|
 |Location | [../notes/20180730/disability_figure_script/create_figures.R](../notes/20180730/disability_figure_script/create_figures.R)|
 |Line Number |32|
-|Line |ggsave(filename = 'figures/Difference_Commute_time_distribution_worst_neighborhoods.png', plot_dist_difference_worst_neighborhood)|
+|Line |ggsave(filename = 'figures/Difference_Commute_time_distribution_worst_neighborhoods.png', plot_dist_difference_worst_neighborhood)
+|
 ![](Difference_Commute_time_distribution_worst_neighborhoods.png)
 
 ## [difference_in_coverage.png](difference_in_coverage.png)
@@ -95,7 +102,8 @@
 |-|-|-|
 |Location | [../notes/20180730/disability_figure_script/create_figures.R](../notes/20180730/disability_figure_script/create_figures.R)|
 |Line Number |72|
-|Line | ) %>% mapshot(file = 'difference_in_coverage.png', vwidth = 2000, vheight = 3000)|
+|Line | ) %>% mapshot(file = 'difference_in_coverage.png', vwidth = 2000, vheight = 3000)
+|
 ![](difference_in_coverage.png)
 
 ## [distribution-of-wait-times-from-atlantic-to-fulton-super-network.png](distribution-of-wait-times-from-atlantic-to-fulton-super-network.png)
@@ -137,7 +145,8 @@ location not found
 |-|-|-|
 |Location | [../notes/20180730/disability_figure_script/create_figures.R](../notes/20180730/disability_figure_script/create_figures.R)|
 |Line Number |52|
-|Line |mapshot(map_diff, file ='heatmap_difference(normal_vs_handicap).png')|
+|Line |mapshot(map_diff, file ='heatmap_difference(normal_vs_handicap).png')
+|
 ![](heatmap_difference(normal_vs_handicap).png)
 
 ## [heatmap_handicap.png](heatmap_handicap.png)
@@ -146,7 +155,8 @@ location not found
 |-|-|-|
 |Location | [../notes/20180730/disability_figure_script/create_figures.R](../notes/20180730/disability_figure_script/create_figures.R)|
 |Line Number |40|
-|Line |mapshot(map_wheel, file = 'heatmap_handicap.png')|
+|Line |mapshot(map_wheel, file = 'heatmap_handicap.png')
+|
 ![](heatmap_handicap.png)
 
 ## [heatmap_normal.png](heatmap_normal.png)
@@ -155,7 +165,8 @@ location not found
 |-|-|-|
 |Location | [../notes/20180730/disability_figure_script/create_figures.R](../notes/20180730/disability_figure_script/create_figures.R)|
 |Line Number |46|
-|Line |mapshot(map_walking, file = 'heatmap_normal.png')|
+|Line |mapshot(map_walking, file = 'heatmap_normal.png')
+|
 ![](heatmap_normal.png)
 
 ## [income_v_50P_time_to_34.png](income_v_50P_time_to_34.png)
@@ -163,8 +174,8 @@ location not found
 | | | |
 |-|-|-|
 |Location | [../notes/20180730/20180730_census.Rmd](../notes/20180730/20180730_census.Rmd)|
-|Line Number |262|
-|Line |# ggsave("../../figures/income_v_50P_time_to_34.png", plot = plot_50, height = 7, width = 10)|
+|Line Number |294|
+|Line |ggsave("income_v_50P_time_to_34.png", plot = plot_50, height = 6, width = 18)|
 ![](income_v_50P_time_to_34.png)
 
 ## [itin_with_l.html](itin_with_l.html)
@@ -227,9 +238,6 @@ location not found
 ## [map_with_72nd to 14th.png](map_with_72nd to 14th.png)
 location not found
 
-## [output.md](output.md)
-location not found
-
 ## [output.txt](output.txt)
 location not found
 
@@ -251,7 +259,8 @@ location not found
 |-|-|-|
 |Location | [../data/clean_google_transit_subway_static.R](../data/clean_google_transit_subway_static.R)|
 |Line Number |1|
-|Line |library(tidyverse) ../data/clean_google_transit_subway_static.R|
+|Line |library(tidyverse)
+ ../data/clean_google_transit_subway_static.R|
 ![](t)
 
 ## [TimesSqtoGunHillRoad_9to3am.png](TimesSqtoGunHillRoad_9to3am.png)
