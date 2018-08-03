@@ -18,9 +18,8 @@ library(here)
 load(file = here("data", "todd_subway_realtime.RData"))
 source(file = here("src", "itinerary_evaluation.R"))
 ```
-## Mean and Variance Trade Off
 
-Comparing 1 train to B_D local train
+## load in station data
 
 ```{r, include=FALSE}
 
@@ -48,9 +47,9 @@ edges <- trip_edges %>% select(route, stop_id, prev_stop_id) %>% distinct()
 stations <- edges %>% left_join(station_data, by = c("stop_id"="stop_id")) %>% select(line=route, stop_id, stop_name)
 
 ```
+## Manual Trip time function
 
-```{r}
-
+```{r compare two local lines}
 # Helper Function to Determine if Day is Weekend
 isWeekend <- function(day_of_week) {
   ifelse(day_of_week == "Saturday" | day_of_week == "Sunday", T, F)
@@ -114,36 +113,204 @@ compare_locals <- function(local_line,local_line.2,line_color, line_color.2, sta
   return(combined_df)
 }
 
-plot_histogram <- function(combined_df) {
+plot_density <- function(combined_df, plot_colors) {
   # code for combining plots as per: https://stackoverflow.com/questions/21192002/how-to-combine-2-plots-ggplot-into-one-plot
 
   combined_plot <- ggplot(combined_df, aes(x=diff, group=group, col=group, fill=group)) +
-    geom_histogram(alpha = 0.5, position = "identity") +
-    xlab('Trip Time from Times Sq to Canal') +
-    theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines'))
+    geom_density(alpha = 0.7, position = "identity") +
+    labs(title = "Trip Time Distribution", x = "Trip Time (in minutes)", y="Propotion", group = "Itinerary\n") +
+    theme(legend.position = "bottom", 
+          legend.direction = "vertical", 
+          legend.key.size = unit(1.5, 'lines'),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank()) +
+    #xlim(as.numeric(quantile(combined_df$time_diff, c(0.1, 0.9)))) +
+    scale_fill_manual(guide = guide_legend(), values = plot_colors) + 
+    scale_color_manual(values = plot_colors)
+    # # 
    # NOTE: can get intersecting distributions by running the code below 
   # geom_density(alpha = 0.8, position = "identity")
   return(combined_plot)       
    }
  
 
-# Compare Red vs yellow line Trip Time from 86th St - 34th St
-# plot_df <- compare_locals ("1", "D", "121S", "128S", "A20S", "D17S")
+# Compare Red vs Orange line Trip Time from 86th St -> 34th St
+plot_df <- compare_locals ("1", "D","1 Train: 86th St -> 34th St", "B_D Train: 86th St -> 34th St", "121S", "128S", "A20S", "D17S")
+plot_colors <- c("#EE352E","#FF6319")
 
 # Compare Red vs Blue line Trip Time from Times Sq - Canal St
 #plot_df <- compare_locals ("1", "E", "127S", "135S", "A27S", "A34S")
 
 # Compare Red vs yellow line Trip Time from Times Sq - Canal St
-plot_df <- compare_locals ("1", "R", "Red line", "Yellow Line", "127S", "135S", "R16S", "R23S")
+#plot_df <- compare_locals ("1", "R", "Red line", "Yellow Line", "127S", "135S", "R16S", "R23S")
 
 #plot_df %>% group_by(group) %>% summary(diff)
 
-plot_histogram(plot_df)
+#compare_two_local_line_density_plot <- 
+  plot_density(plot_df,plot_colors)
+
+ggsave(file = '../../figures/compare_two_local_line_density_plot.png', width = 4, height = 4)
 ```
 
+```{r AUC}
+compute_auc <- function(itin_pair_df) {
+    auc_df <- itin_pair_df %>%
+    #mutate(itin_line = as.factor(paste0(group, itin_id, sep=''))) %>%
+    #ungroup() %>%
+    select(line, diff)
+  
+  pred <- prediction(as.numeric(auc_df$diff, units = "mins"), as.factor(auc_df$line))
+  perf_nb <- performance(pred, 'auc')@y.values[[1]]
+  perf <- performance(pred, 'auc')
+  ifelse( perf_nb < 0.5, return(1 - perf_nb), return(perf))
+}
+compute_auc(plot_df)
+```
 
+## Comparing Distributions of Local vs Local + Express
+- Starting from 96th st. Station, take the 2_3 train, then transfer at Times Sq. 42nd St., take the 1 train to go to 18th St.
+
+### Computing Local + Express Wait Times On Large Scale Efficiently
 ```{r}
-load(here::here("data", "at_igraph_edges.rdata"))
-at_igraph_edges_directed
+load(file = "../../data/todd_subway_realtime_2.RData")
+```
+```{r example-for-trips}
+
+local_line <- "1"
+express_line <- "2"
+start_stop_id <- "120S"
+transfer_stop_id <- "127S"
+end_stop_id <- "131S"
+#start_time <- "2018-01-20 09:30:00"
+
+# Getting 2 Trains
+data_2_train <- subway_data.2 %>%
+  filter(stop_mta_id == "120S" | stop_mta_id == "127S",
+         route_mta_id == "2") %>%
+  # filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
+  group_by(realtime_trip_id) %>%
+  mutate(start_time = min(departure_time)) %>%
+  filter(n() >= 2, stop_mta_id == "127S") %>%
+  arrange(arrival_time)
+
+# Getting 1 Trains
+data_1_train <- subway_data.2 %>%
+  filter(stop_mta_id == "127S" | stop_mta_id == end_stop_id,
+         route_mta_id == local_line) %>%
+  # filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
+  group_by(realtime_trip_id) %>%
+  mutate(end_time = max(departure_time)) %>%
+  filter(n() >= 2, stop_mta_id == "127S") %>%
+  arrange(departure_time)
+
+
+# NOTE: train 1 start time and train 2 end time for debugging and evaluating purposes
+i = 1
+j = 1
+times <- vector('numeric')
+start_times <- vector('double')
+transfer_arrival_times <- vector('double')
+end_times <- vector('double')
+transfer_departure_times <- vector('double')
+realtime_start_ids <- vector('numeric')
+realtime_end_ids <- vector('numeric')
+
+while (i < nrow(data_2_train)) {
+  if (data_1_train$departure_time[j] > data_2_train$arrival_time[i]) {
+    # df <- data.frame(trip_time = 0, start_trip = 0, end_trip = 0)
+    realtime_start_ids <- c(realtime_start_ids, data_2_train$realtime_trip_id[i])
+    start_times <- c(start_times, data_2_train$start_time[i])
+    transfer_arrival_times <- c(transfer_arrival_times, data_2_train$arrival_time[i])
+    realtime_end_ids <- c(realtime_end_ids, data_1_train$realtime_trip_id[j])
+    transfer_departure_times <- c(transfer_departure_times, data_1_train$departure_time[j])
+    end_times <- c(end_times, data_1_train$end_time[j])
+    times <- c(times, as.numeric(difftime(data_1_train$end_time[j], data_2_train$start_time[i]), units = "mins"))
+    i = i + 1
+  } else {
+    j = j + 1
+  }
+}
+
+# verify with real data
+new_df <- data.frame(start_trip_id = realtime_start_ids,
+                     starts = as.POSIXct(start_times, origin = "1970-01-01", tz = "UTC"),
+                     transfer_starts = as.POSIXct(transfer_arrival_times, origin = "1970-01-01", tz = "UTC"),
+                     end_trip_id = realtime_end_ids,
+                     transfer_ends = as.POSIXct(transfer_departure_times, origin = "1970-01-01", tz = "UTC"),
+                     ends = as.POSIXct(end_times, origin = "1970-01-01", tz = "UTC"),
+                     diffs = times)
+new_df %>% summarise(avg = mean(diffs), stdv= sd(diffs))
+# Views to Verify Trips
+# ORIGINAL SUBWAY DATA
+#subway_data %>% filter(realtime_trip_id == 3300 & stop_mta_id == "120S" | realtime_trip_id == 3327 & stop_mta_id == "131S") %>% View("subway_data 3300")
+# NEW DATA FRAME DATA
+#new_df %>% filter(start_trip_id == 3300) %>% View("new_df 3300")
+
+```
+
+### Plotting Distributions of Local vs Local + Express
+
+```{r plotting-dist-local-v-local+express}
+
+# Local Train Data & Distribution
+# local_line <- "1"
+# express_line <- "2"
+# start_stop_id <- "120S"
+# end_stop_id <- "131S"
+
+
+# local train
+local_diffs <- subway_data %>%
+  filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
+         route_mta_id == local_line) %>%
+  left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
+  group_by(realtime_trip_id) %>% 
+  arrange(desc(departure_time)) %>%
+  mutate(diff = as.numeric(difftime(first(departure_time),last(departure_time)), units = "mins")) %>%
+  select(realtime_trip_id, diff) %>%
+  unique() %>% ungroup() %>%
+  select(diffs=diff)
+
+# plot for local line
+plot_local <- local_diffs %>%
+  ggplot(aes(x=diffs)) + 
+  geom_histogram(fill="blue", alpha= 0.5, position = "identity")+
+  xlim(0,40) + 
+  #ylim(0,8000) +
+  labs(title = "Trip Time from 96th St. to 18th St.", x = "Trip time (in minute)", y="Number of trips")
+plot_local
+ggsave(file = '../../figures/trip_time_red_line_local.png', width = 4, height = 4)
+
+
+# express train
+local_with_express_diffs <- new_df %>%
+  select(diffs)
+
+# plot for express train
+plot_local_and_express <- local_with_express_diffs %>%
+  ggplot(aes(x=diffs)) + 
+  geom_histogram(fill="red", alpha= 0.5, position = "identity")+
+  xlim(0,40) + 
+  ylim(0,8000) +
+  labs(title = "Trip Time from 96th St. to 18th St.", x = "Trip time (in minute)", y="Number of trips")
+plot_local_and_express
+ggsave(file = '../../figures/trip_time_red_line_localwexpress.png', width = 4, height = 4)
+
+# code for combining plots as per: https://stackoverflow.com/questions/21192002/how-to-combine-2-plots-ggplot-into-one-plot
+local_diffs$group <- "local 1 train"
+local_with_express_diffs$group <- "express with local 1 train"
+
+combined <- rbind(local_diffs, local_with_express_diffs)
+
+
+combined_plot <- ggplot(combined, aes(x=diffs, group=group, col=group, fill=group)) +
+  geom_histogram(alpha = 0.8, position = "identity") +
+  xlim(c(0, 40)) +
+  labs(title = "Trip Time from 96th St. to 18th St.", x = "Trip time (in minute)", y="Number of trips") +
+  theme(legend.position = "none") 
+combined_plot
+ggsave(file = '../../figures/trip_time_red_line_local_vs_localwexpress.png', width = 4, height = 4)
+
 ```
 

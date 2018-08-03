@@ -11,7 +11,7 @@ plot_histogram <- function(all_itin_df, start_hour = 7 , end_hour = 10, bins = 6
   colors <- route_color_dict$route_color
   names(colors) <- route_color_dict$route_short_name
   
-  plot_lines <- substr(unique(plot_data$label), 1, 1)
+  plot_lines <- substr(uniquata$label), 1, 1)
   plot_colors <- as.vector(colors[plot_lines])
   
   plot <- plot_data %>%

@@ -2,7 +2,8 @@
 
 # look at every file in the directory
 echo "# Figures"
-for f in *
+# f="Commute_time_distribution_by_borough(handicap).png"
+for f in *.{png,html}
 do
     echo "## [$f]($f)"
 
@@ -16,15 +17,16 @@ do
 	echo "location not found"
     else
     echo 
-    echo "| | | |"
-    echo "|-|-|-|"
-    echo "|Location | [`echo $file | cut -d':' -f1`](`echo $file | cut -d':' -f1`)|"
-    echo "|Line Number |`echo $file | cut -d':' -f2`|"
-    echo "|Line |`echo $file | cut -d':' -f3`|"
+    echo "| | |"
+    echo "-|-"
+    echo "**Location** | [`echo $file | cut -d':' -f1`](`echo $file | cut -d':' -f1`)"
+    echo "**Line Number** |`echo $file | cut -d':' -f2`"
+    line="`echo $file | cut -d':' -f3`"
+    echo "**Line** |`echo "$file" | cut -d':' -f3`"
 
     if [[ "taxi.png" =~ .*\.png ]];
     then
-        echo "![]($f)"
+        echo "**Preview** | ![]($f) "
     fi
     fi
 
