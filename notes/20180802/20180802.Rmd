@@ -28,14 +28,16 @@ library(rgdal)
 library(RColorBrewer)
 library(scales)
 library(mapview)
+library(here)
 
 # load todd data
 # following only work's on Amanda's machine:
-load("~/Microsoft DS3/project/project data/todd_subway_data.RData")
+#load("~/Microsoft DS3/project/project data/todd_subway_data.RData")
 # this should work on everyone's, assuming things were generated with the scripts in ../../data
+load(here("data", "todd_subway_realtime.RData"))
 #load("../../data/todd_subway_realtime.RData")
-#todd_subway_data <- realtime
-#rm(realtime)
+todd_subway_data <- realtime
+rm(realtime)
 ```
 
 ```{r}
@@ -53,7 +55,7 @@ station_data <- station_data %>%
   select(stop_name, stop_id, structure, lat, long)
 
 # https://www.ncdc.noaa.gov/cdo-web/datatools/lcd         hourly weather data
-weather_2018 <- read_csv("~/Microsoft DS3/project/project data/weather_2018.csv") %>%
+weather_2018 <- read_csv(here("data", "weather_2018.csv")) %>%
   mutate(ymd = as.Date(DATE), hour = hour(DATE)) %>%
   select(ymd, DATE, hour, HOURLYPrecip)
 
@@ -80,12 +82,14 @@ todd_subway_data <- todd_subway_data %>%
                     labels = c('Early morning', 'Morning rush', 'Mid-day', 'Evening rush', 'Night time')), 
          day = wday(departure_time)) 
 
+# the "complete" below should be uncommented for full pdf
+# (increases runtime, but it's the correct way)
 exp_wait <- todd_subway_data %>% 
-  group_by(seconds_until_next_departure, stop_mta_id, route_mta_id, ymd, time_of_day) %>% 
+  group_by(seconds_until_next_departure, stop_mta_id, route_mta_id, ymd, time_of_day) %>%
   summarize(n = n()) %>% # count for time intervals by line
   group_by(route_mta_id, stop_mta_id, ymd, time_of_day) %>% 
-#  complete(seconds_until_next_departure = 1:max(seconds_until_next_departure), 
-#           fill = list(n = 0)) %>%
+  #complete(seconds_until_next_departure = 1:max(seconds_until_next_departure), 
+  #         fill = list(n = 0)) %>%
   arrange(desc(seconds_until_next_departure)) %>% 
   mutate(cum_n = cumsum(n)) %>%
 #  group_by(route_mta_id, stop_mta_id) %>%
@@ -133,36 +137,31 @@ exp_wait_time_and_weather <-
 
 #df1 %>% ggplot(aes(x = avg_precip)) + geom_histogram()
 
-x5 <- sparse.model.matrix(median ~ as.factor(stop_mta_id)*avg_precip + 
+formula_precip <- formula(~ as.factor(stop_mta_id)*avg_precip + 
                     as.factor(route_mta_id) + as.factor(day) + 
-                    as.factor(time_of_day), data = exp_wait_time_and_weather)
+                    as.factor(time_of_day))
+x5 <- sparse.model.matrix(formula_precip, data = exp_wait_time_and_weather)
 y2 <- exp_wait_time_and_weather$median
 model5 <- glmnet(x5, y2, alpha = 0 , lambda = 0) 
 
 
-
-
-x6 <- sparse.model.matrix(perc90 ~ as.factor(stop_mta_id)*avg_precip + 
-                    as.factor(route_mta_id) + as.factor(day) + 
-                    as.factor(time_of_day), data = exp_wait_time_and_weather)
+x6 <- sparse.model.matrix(formula_precip, data = exp_wait_time_and_weather)
 y <- exp_wait_time_and_weather$perc90
 model6 <- glmnet(x6, y, alpha = 0 , lambda = 0)
 
 
 
-
-x4 <- sparse.model.matrix(median ~ as.factor(stop_mta_id) + 
+formula_without_precip <- formula(~ as.factor(stop_mta_id) + 
                     as.factor(route_mta_id) + as.factor(day) + 
-                    as.factor(time_of_day), data = exp_wait_time_and_weather)
+                    as.factor(time_of_day))
+x4 <- sparse.model.matrix(formula_without_precip, data = exp_wait_time_and_weather)
 y2 <- exp_wait_time_and_weather$median
 model4 <- glmnet(x4, y2, alpha = 0 , lambda = 0)
 
 
 
 
-x3 <- sparse.model.matrix(perc90 ~ as.factor(stop_mta_id) + 
-                    as.factor(route_mta_id) + as.factor(day) + 
-                    as.factor(time_of_day), data = exp_wait_time_and_weather)
+x3 <- sparse.model.matrix(formula_without_precip, data = exp_wait_time_and_weather)
 y <- exp_wait_time_and_weather$perc90
 model3 <- glmnet(x3, y, alpha = 0 , lambda = 0)
 ```
@@ -176,6 +175,12 @@ exp_wait_time_and_weather$pred_median_wait <- as.vector(predict(model4, newx = x
 exp_wait_time_and_weather$pred_90th_wait <- as.vector(predict(model3, newx = x3, s = "lambda.min"))
 
 
+exp_wait_time_and_weather %>%
+  summarize(cor_median = cor(median, pred_median_wait),
+            cor_median_precip = cor(median, pred_median_wait_precip),
+            cor_perc90 = cor(perc90, pred_90th_wait),
+            cor_perc90_precip = cor(perc90, pred_90th_wait_precip))
+
 # map plot of stops interacted with precip
 # predictions with precip = 0 median
 df <- exp_wait_time_and_weather %>% 
@@ -185,21 +190,11 @@ df <- exp_wait_time_and_weather %>%
          day = as.factor(day),
          time_of_day = as.factor(time_of_day)) %>% 
   filter(avg_precip == 0, time_of_day == "Morning rush", day == 3) %>% 
-  distinct(stop_mta_id, route_mta_id, time_of_day, day, avg_precip, median, perc90, 
+  distinct(stop_mta_id, route_mta_id, time_of_day, day, avg_precip, 
            pred_median_wait_precip, pred_90th_wait_precip, pred_90th_wait, pred_median_wait) %>% 
   left_join(station_data, by = c("stop_mta_id" = "stop_id")) #%>%
 #  mutate(jittered_lat = lat + rnorm(n(), mean = 0, sd = 0.001), 
 #         jittered_long = long + rnorm(n(), mean = 0, sd = 0.001)) 
-
-
-df_matrix <- sparse.model.matrix(~ as.factor(stop_mta_id) + 
-                    as.factor(route_mta_id) + as.factor(day) + 
-                    as.factor(time_of_day), data = df)
-
-df$pred_median_wait <- as.vector(predict(model4, newx = df_matrix, s = "lambda.min"))
-df$pred_90th_wait <- as.vector(predict(model3, newx = df_matrix, s = "lambda.min"))
-
-
 
 #save(df, file = "df.RData")
 
@@ -207,35 +202,10 @@ clrs <- brewer.pal(5, "RdYlGn")
 
 pal <- colorNumeric(
   palette = clrs,
-  domain = df$pred_median_wait/60,
-  reverse = TRUE)
-
-map_diff <- 
-  leaflet(df) %>%
-  addTiles() %>%
-  setView(-73.9124206, 40.737, zoom = 11) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  addCircleMarkers(~long, ~lat,
-                   popup = paste("<b>", df$stop_name, "</b>",
-                                 "<br/>", df$route_mta_id, "train",
-                                 "<br/>", round(df$pred_median_wait/60, 2), "minutes",
-                                 "<br/>", substring(df$stop_mta_id, 4,4), "Bound Train"),
-                   radius = 5,
-                   color = ~pal(pred_median_wait/60),
-                   stroke = FALSE, 
-                   fillOpacity = 0.5) %>%
-  addLegend("bottomright", pal = pal,
-              title = "Expected Wait Times by Station", value = round(df$pred_median_wait/60, 2),
-              labFormat = labelFormat(suffix = " mins"), # transform = function(x) exp(x)), 
-              opacity = 1)
-
-clrs <- brewer.pal(5, "RdYlGn")
-pal <- colorNumeric(
-  palette = clrs,
   domain = log2(df$pred_median_wait/60),
   reverse = TRUE)
- 
-map_diff <-
+
+map_median <-
   leaflet(df) %>%
   addTiles() %>%
   setView(-73.9124206, 40.737, zoom = 11) %>%
@@ -254,9 +224,9 @@ map_diff <-
             labFormat = labelFormat(suffix = " mins", transform = function(x) round(2^x, 0)), 
             opacity = 1)
 
-map_diff
+map_median
 
-mapshot(map_diff, file = paste("./expected_wait_times.png"))
+mapshot(map_median, file = paste("./expected_wait_times.png"))
 ```
 
 ```{r}
@@ -266,37 +236,10 @@ clrs <- brewer.pal(5, "YlOrRd")
 
 pal <- colorNumeric(
   palette = clrs,
-  domain = df$pred_90th_wait/60,
-  reverse = FALSE)
-
-map_diff <- 
-  leaflet(df) %>%
-  addTiles() %>%
-  setView(-73.9124206, 40.737, zoom = 11) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  addCircleMarkers(~long, ~lat,
-                   popup = paste("<b>", df$stop_name, "</b>",
-                                 "<br/>", df$route_mta_id, "train",
-                                 "<br/>", round(df$pred_90th_wait/60, 2), "minutes",
-                                 "<br/>", substring(df$stop_mta_id, 4,4), "Bound Train"),
-                   radius = 5,
-                   color = ~pal(pred_90th_wait/60),
-                   stroke = FALSE, 
-                   fillOpacity = 0.5) %>%
-  addLegend("bottomright", pal = pal, 
-            title = "Expected Wait Times by Station <br/> (Worst Case)", 
-            value = round(df$pred_90th_wait/60, 2), 
-            labFormat = labelFormat(suffix = " mins"), #transform = function(x) exp(x)),  
-            opacity = 1)
-
-clrs <- brewer.pal(5, "YlOrRd")
-
-pal <- colorNumeric(
-  palette = clrs,
   domain = log2(df$pred_90th_wait/60),
   reverse = FALSE)
  
-map_diff <-
+map_perc90 <-
   leaflet(df) %>%
   addTiles() %>%
   setView(-73.9124206, 40.737, zoom = 11) %>%
@@ -315,93 +258,94 @@ map_diff <-
             labFormat = labelFormat(suffix = " mins", transform = function(x) round(2^x, 0)), 
             opacity = 1)
 
-map_diff
+map_perc90
 
-mapshot(map_diff, file = paste("./expected_wait_times_worst_case.png"))
+mapshot(map_perc90, file = paste("./expected_wait_times_worst_case.png"))
 ```
 
 
 ```{r}
 
+### Predict with 0 rain and with 0.1 inches of rain, compare
+
+# using a bit of hack to predict to get around missing feature in filtered df
+
+df2 <- rbind(exp_wait_time_and_weather %>% mutate(avg_precip = 0),
+             exp_wait_time_and_weather %>% mutate(avg_precip = 0.1))
+
+df2_matrix <- sparse.model.matrix(formula_precip, data = df2)
+
+df2$pred_median_wait_precip <- as.vector(predict(model5, newx = df2_matrix, s = "lambda.min"))
+df2$pred_perc90_wait_precip <- as.vector(predict(model6, newx = df2_matrix, s = "lambda.min"))
+
 # map plot of stops interacted with precip
 # predictions with precip = 0.01 
-df2 <- exp_wait_time_and_weather %>% 
+df3 <- df2 %>% 
   filter(!(route_mta_id %in% c("GS","SS","FS","H","SI"))) %>%
    mutate(route_mta_id = as.factor(route_mta_id),
          stop_mta_id = as.factor(stop_mta_id),
          day = as.factor(day),
          time_of_day = as.factor(time_of_day)) %>% 
-  filter(avg_precip == 0, time_of_day == "Morning rush", day == 3) %>% 
+  filter(time_of_day == "Morning rush", day == 3) %>% 
   distinct(stop_mta_id, route_mta_id, time_of_day, day, avg_precip, pred_median_wait_precip, pred_90th_wait_precip, pred_90th_wait, pred_median_wait) %>% 
   left_join(station_data, by = c("stop_mta_id" = "stop_id")) %>%
   mutate(jittered_lat = lat + rnorm(n(), mean = 0, sd = 0.001), 
-         jittered_long = long + rnorm(n(), mean = 0, sd = 0.001))  %>%
-  mutate(avg_precip = 0.05)
+         jittered_long = long + rnorm(n(), mean = 0, sd = 0.001)) 
+
+df3_diff <- df3 %>%
+  distinct(stop_mta_id, route_mta_id, time_of_day, day, avg_precip, pred_median_wait_precip) %>%
+  group_by(stop_mta_id, route_mta_id, time_of_day, day) %>%
+  arrange(avg_precip) %>%
+  summarize(count = n(), diff = last(pred_median_wait_precip) - first(pred_median_wait_precip))
 
 ```
 
 ```{r}
 # diffs plot
 
-df2$diff <- df2$pred_90th_wait_precip - df2$pred_90th_wait
+#df2$diff <- df2$pred_90th_wait_precip - df2$pred_90th_wait
 
-df %>% ggplot(aes(x=diff)) +geom_histogram(bins=50) 
+#df %>% ggplot(aes(x=diff)) +geom_histogram(bins=50) 
 
+ggplot(df3_diff, aes(x = diff)) + geom_histogram()
 
-df22 <- df2 %>% filter(diff > 0)
+#df22 <- df2 %>% filter(diff > 0)
+
 clrs <- brewer.pal(5, "YlOrRd")
 
 # 90th percentile diffs
 pal <- colorNumeric(
   palette = clrs,
-  domain = log10(df22$diff/60),
+  domain = log10(df3_diff$diff/60),
   reverse = FALSE,
     na.color = "transparent")
 
+df3_diff <- df3_diff %>%
+  filter(diff > 20) %>%
+  left_join(station_data, by = c("stop_mta_id" = "stop_id")) #%>%
 
+pal <- colorNumeric(
+  palette = clrs,
+  domain = df3_diff$diff/60,
+  reverse = FALSE,
+    na.color = "transparent")
 map_diff <- 
-  leaflet(df22) %>%
+  leaflet(df3_diff) %>%
   addTiles() %>%
   setView(-73.9124206, 40.737, zoom = 11) %>%
   addProviderTiles("CartoDB.Positron") %>%
   addCircleMarkers(~long, ~lat,
-                   popup = paste("<b>", df22$stop_name, "</b>",
-                                 "<br/>", df22$route_mta_id, "train",
-                                 "<br/>", round(log10(df22$diff/60), 2), "minutes",
-                                 "<br/>", substring(df22$stop_mta_id, 4,4), "Bound Train"),
+                   popup = paste("<b>", df3_diff$stop_name, "</b>",
+                                 "<br/>", df3_diff$route_mta_id, "train",
+                                 "<br/>", round(df3_diff$diff), "seconds",
+                                 "<br/>", substring(df3_diff$stop_mta_id, 4,4), "Bound Train"),
                    radius = 5,
-                   color = ~pal(log10(diff/60)),
+                   color = ~pal(diff/60),
                    stroke = FALSE, 
-                   fillOpacity = 0.5) %>%
-  addLegend("bottomright", pal = pal,
-              title = "Additional Commute Time", value = round(log10(df22$diff/60), 2),
-              labFormat = labelFormat(suffix = " mins"),
-              opacity = 1)
+                   fillOpacity = 0.5) 
 map_diff
+
+
 mapshot(map_diff, file = paste("./worst_case_with_rain.png"))
 ```
 
-```{r}
-# median diffs
-clrs <- brewer.pal(5, "RdYlGn")
-
-pal <- colorNumeric(
-  palette = clrs,
-  domain = df$diff,
-  reverse = TRUE)
-
-
-leaflet(df) %>%
-  addTiles() %>%
-  setView(-73.9124206, 40.737, zoom = 11) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  addCircleMarkers(~jittered_long, ~jittered_lat,
-                   popup = paste("<b>", df$stop_name, "</b>",
-                                 "<br/>", df$route_mta_id, "train",
-                                 "<br/>", round(df$diff/60, 2), "minutes",
-                                 "<br/>", substring(df$stop_mta_id, 4,4), "Bound Train"),
-                   radius = 5,
-                   color = ~pal(diff),
-                   stroke = FALSE, 
-                   fillOpacity = 0.5)
-```
