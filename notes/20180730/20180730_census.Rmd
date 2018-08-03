@@ -30,7 +30,7 @@ routes_data <- read_csv('../../data/google_transit_subway_static/routes.txt')
 source('../../src/path_finding.R')
 load('../../data/igraph_edges.rdata')
 load('../../data/income_merged.Rdata')
-load('../../data/wait_times_filtered_df.RData')
+load('../../data/wait_times_rush_hour.rdata')
 
 r <- GET('http://data.beta.nyc//dataset/0ff93d2d-90ba-457c-9f7e-39e47bf2ac5f/resource/35dd04fb-81b3-479b-a074-a27a37888ce7/download/d085e2f8d0b54d4590b1e7d1f35594c1pediacitiesnycneighborhoods.geojson')
 nyc_neighborhoods <- readOGR(content(r,'text'), 'OGRGeoJSON', verbose = F)
@@ -150,6 +150,7 @@ grid <- expand.grid(map_data_lats, map_data_lons) %>%
  dplyr::select(lat = Var1, lon = Var2)
 ```
 
+
 #### Get subway travel time, walking time, total time
 ##### Filter for points reachable within 20 mins of walking
 ```{r get-times}
@@ -242,28 +243,10 @@ plot_90 <- ggplot(filtered_grid, aes(x = median_income, y = time_90P, color = bo
   scale_color_discrete("Borough")+
   geom_smooth(method = "lm") +
   facet_wrap(~borough)
-
-
-filtered_grid <- filtered_grid %>%
-  filter(borough != "Staten Island")
-plot_50 <- ggplot(filtered_grid, aes(x = median_income, y = time_50P/60 + walking_mins, color = borough)) +
-  geom_point(alpha = 0.2) +
-  xlab('Median Household Income') +
-  scale_x_continuous(label = comma) +
-  ylab('50th Perc. Trip Time to 34th St') +
-  scale_y_continuous(label = comma) +
-  scale_color_discrete("Borough")+
-  geom_smooth(method = "lm") +
-  facet_wrap(~borough)
-
-plot_50
-
-multiplot(plot_50, plot_90)
-# ggsave("../../figures/income_v_50P_time_to_34.png", plot = plot_50, height = 7, width = 10)
-
 ```
 
 
+#### for the bronx, and neighborhood with median income around 50k, (try to) make a frontier plot
 ```{r}
 filtered_grid %>% 
   mutate(median_income = pmin(round(median_income/25000)*25000, 100000),
@@ -282,16 +265,79 @@ filtered_grid %>%
   scale_color_discrete(guide=FALSE)
   # # geom_smooth(method = "lm") +
   # facet_grid(median_income~borough, label=comma)
+```
 
 
-bronx <- filtered_grid %>% filter(borough == "Bronx", median_income >= 75000) 
+
+
+### start here to replicate slide deck figures
+#### plot income vs commute time for brooklyn, manhattan, queens
+```{r}
+
+filtered_grid_all <- filtered_grid %>%
+  filter(borough != "Staten Island", borough != "Bronx")
+
+plot_50 <- ggplot(filtered_grid_all, aes(x = median_income, y = time_50P/60 + walking_mins, color = borough)) +
+  geom_point(alpha = 0.2) +
+  xlab('Median Household Income') +
+  scale_x_continuous(label = comma) +
+  ylab('Median Trip Time to 34 St') +
+  scale_y_continuous(label = comma) +
+  scale_color_discrete("Borough")+
+  geom_smooth(method = "lm") +
+  facet_wrap(~borough) +
+  theme_grey(base_size = 20) +
+  theme(legend.position = "bottom")
+
+plot_50
+
+ggsave("income_v_50P_time_to_34.png", plot = plot_50, height = 6, width = 18)
+```
+
+
+#### plot income vs commute time for bronx
+```{r}
+filtered_grid_bx <- filtered_grid %>%
+  filter(borough == "Bronx")
+
+plot_50 <- ggplot(filtered_grid_bx, aes(x = median_income, y = time_50P/60 + walking_mins, color = borough)) +
+  geom_point(alpha = 0.2, color = "purple") +
+  xlab('Median Household Income') +
+  scale_x_continuous(label = comma) +
+  ylab('Median Trip Time to 34 St') +
+  scale_y_continuous(label = comma) +
+  scale_color_discrete("Borough")+
+  geom_smooth(method = "lm", color = "purple") +
+  facet_wrap(~borough) +
+  theme_grey(base_size = 20) +
+  theme(legend.position = "bottom")
+
+plot_50
+
+ggsave("income_bronx.png", plot = plot_50, height = 7, width = 7)
+```
+
+
+
+#### map higher income neighborhoods in the bronx
+```{r}
+manhattan_all <- filtered_grid %>% filter(borough == "Manhattan")
+bronx_all <- filtered_grid %>% filter(borough == "Bronx")
+bronx_75 <- filtered_grid %>% filter(borough == "Bronx", median_income >= 75000) 
 bronx_income <- leaflet(nyc_neighborhoods) %>%
       addTiles() %>%
       addProviderTiles("CartoDB.Positron") %>%
-      setView(-73.87, 40.83, zoom = 11) %>%
-  addCircleMarkers(data = bronx, lat = ~lat, lng = ~lon, radius = 6, stroke = FALSE, color = "red")
+      setView(-73.87, 40.81, zoom = 12) %>%
+  addCircleMarkers(data = manhattan_all, lat = ~lat, lng = ~lon, 
+                   radius = 6, stroke = FALSE, color = "#b0d9bf", fillOpacity = 0.4) %>%
+  addCircleMarkers(data = bronx_all, lat = ~lat, lng = ~lon, 
+                   radius = 6, stroke = FALSE, color = "#d4c1de", fillOpacity = 0.4) %>%
+  addCircleMarkers(data = bronx_75, lat = ~lat, lng = ~lon, 
+                   radius = 6, stroke = FALSE, color = "purple", fillOpacity = 0.7)
+
+bronx_income
 
 mapshot(bronx_income, url = "bronx_income_75000.html", 
-                                       file ="bronx_income_75000.png")
-```
+                                       file ="bronx_income_75000.png", vheight = 1000, vwidth = 1000)
 
+```
