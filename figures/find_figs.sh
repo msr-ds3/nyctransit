@@ -7,7 +7,7 @@ do
 
     # find all Rmds in the repo
     # grep for the filename
-    file=`find .. -name '*.Rmd' -exec grep $f {} \;`
+    file=`find .. -name '*.Rmd' -exec grep -H $f {} \;`
 
     # print based on whether we found the file or not
     if [[ -z $file ]]
