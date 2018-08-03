@@ -20,17 +20,20 @@ source(file = here("src", "itinerary_evaluation.R"))
 ```
 ```{r load-data}
 load(file = here("data", "todd_subway_realtime.RData"))
+load(file= here("data", "line_color_dict.RData"))
 ```
 ```{r route color}
-routes <- read_csv('../../data/google_transit_subway_static/routes.txt') 
-routes$route_color <- replace_na(routes$route_color, "000000") 
-routes <- routes %>% mutate(route_color = sprintf("#%s", route_color))
+# routes <- read_csv('../../data/google_transit_subway_static/routes.txt')
+# routes$route_color <- replace_na(routes$route_color, "6D6E71")
+# routes <- routes %>% mutate(route_color = sprintf("#%s", route_color))
+#  
+# line_color <- routes %>% group_by(route_color) %>% distinct(route_short_name, route_color) %>% arrange(route_color)
+# hex_color <- data.frame(route_color= c(unique(line_color$route_color)),
+#                           color_name= c("dark green","green", "blue","light green", "dark gray", "brown", "light gray", "purple", "red",  "yellow"  ,"orange" ))
+#  
+# route_color_dict <- left_join(line_color, hex_color)
+# save(route_color_dict, file="line_color_dict.RData")
 
-line_color <- routes %>% group_by(route_color) %>% select(route_short_name, route_color) %>% arrange(route_color)
-hex_color <- data.frame(route_color= c(unique(line_color$route_color)),
-                          color_name= c("black","dark green","green", "blue","light green", "dark gray", "brown", "light gray", "purple", "red",  "yellow"  ,"orange" ))
-
-route_color_dict <- left_join(line_color, hex_color)
 
 ```
 
@@ -67,7 +70,7 @@ plot_frontier <- function(itins_df) {
     geom_point() +
     xlab('Standard Deviation of Trip Time') +
     ylab('Average Trip Time') +
-    geom_text(aes(label = paste0(group, itin_id,sep='')), hjust = 0.5, vjust = 1)
+    geom_text(aes(label = paste0(label, itin_id,sep='')), hjust = 0.5, vjust = 1)
 
   return(plot)
 }
@@ -110,6 +113,11 @@ orange_line_itins <- compute_all_itins(orange_line_cleaned, subway_data) %>%
 
 #combine first line df with second line df
 red_orange_df <- bind_rows(red_line_itins, orange_line_itins)
+
+# subway_line <- substr(unique(red_orange_df$label), 1, 1)[2] #this line picks off first character example(Q from trip label)
+# subway_color <- route_color_dict[[which(route_color_dict$route_short_name == subway_line),         "route_color"]]
+#   plot_colors <- c("#F7B731", subway_color)
+  
 ```
 
 #### Evaluating Differences Between Red & Orange Line & Plotting
@@ -118,11 +126,11 @@ red_orange_df <- bind_rows(red_line_itins, orange_line_itins)
 top_2_trips <- red_orange_df %>% group_by(group) %>% filter(itin_id == "1")
   
 # Plot Distribution as Densities
-plot_densities(top_2_trips)
-
+plot_densities(top_2_trips,start_hour = 7 , end_hour = 10, bins = 60, route_color_dict)
+ggsave(file = '../../figures/trip_time_red_express_vs_orange_local.png', width = 4, height = 4)
 # Plot Frontiers
 plot_frontier(red_orange_df)
-
+ggsave(file = '../../figures/redX_vs_orgL_frontier_plot.png', width = 4, height = 4)
 # Plot AUC for Top 2 Trips
 compute_auc(top_2_trips)
 ```
@@ -136,11 +144,10 @@ compute_auc(top_2_trips)
 mj_data <- read_csv(here::here("data", "itineraries-Midtown-Jamaica.csv")) %>%
   filter(event != "travel", itinerary_id < 2)
 
-mj_df <- compute_all_itins(mj_data, subway_data, 15, 17) %>% 
-  filter(time_diff != 0) 
+mj_df <- compute_all_itins(mj_data, subway_data, 15, 17) %>% filter(time_diff != expected_wait)
 
 # filtering out 0's from E train
-plot_densities(mj_df, 15, 17)
+plot_densities(mj_df, start_hour = 15 , end_hour = 17, bins = 20, route_color_dict)
 
 # NOTE: DEBUG CODE
 # subway_data %>% filter(stop_mta_id == "F12N" | stop_mta_id == "G06N", route_mta_id == "E") %>% group_by(realtime_trip_id) %>%
@@ -153,11 +160,14 @@ plot_densities(mj_df, 15, 17)
 bm_data <- read_csv(here::here("data","itineraries-5ave-MetsWillets.csv")) %>%
   filter(event != "travel", itinerary_id < 2)
 
-bm_df <- compute_all_itins(bm_data, subway_data, 15,17) %>% filter(time_diff > 2) # filtering out 0's from E train
-plot_densities(bm_df, 15, 17)
+bm_df <- compute_all_itins(bm_data, subway_data, 15,17) %>% filter(time_diff != expected_wait) # filtering out 0's from E train
+plot_densities(bm_df, start_hour = 15 , end_hour = 17, bins = 60, route_color_dict)
 
 mj_bm_comparison_df <- bind_rows(mj_df, bm_df)
-plot_densities(mj_bm_comparison_df, 15, 17)
+
+plot_densities(mj_bm_comparison_df, start_hour = 15 , end_hour = 17, bins = 60, route_color_dict)
+ggsave(file = '../../figures/trip_time_to_JFK_&_LGA.png', width = 4, height = 4)
+
 ```
 
 ### Red/Green to Fulton
@@ -196,10 +206,12 @@ red_green_df <- bind_rows(red_line_itins, green_line_itins)
 red_green_top_pair <- red_green_df %>% group_by(group) %>% filter(itin_id == "1")
   
 # Plot Distribution as Densities
-plot_densities(red_green_top_pair)
+plot_densities(red_green_top_pair, 7,10,100,route_color_dict)
+ggsave(file = '../../figures/trip_time_red_vs_green_from_96_to_Fulton.png', width = 4, height = 4)
 
 # Plot Frontiers
 plot_frontier(red_green_df)
+ggsave(file = '../../figures/frontier_plot_red_vs_green_from_96_to_Fulton.png', width = 4, height = 4)
 
 # Plot AUC for Top 2 Trips
 compute_auc(red_green_top_pair)
@@ -218,17 +230,18 @@ af_complex_cleaned <- af_complex_data %>%
 af_complex_itins <- compute_all_itins(af_complex_cleaned, subway_data)
 
 # plot distributions
-plot_densities(af_complex_itins)
+plot_densities(af_complex_itins, 7,10,70,route_color_dict)
+#ggsave(file = '../../figures/trip_times_from_Atlantic_Fulton.png', width = 4, height = 4)
 
-
+plot_frontier(af_complex_itins, af_complex_itins$leg1_line)
 # TODO: DELETE
-profvis({
-  #output for first data input
-  af_complex_itins.1 <- compute_all_itins(af_complex_cleaned, subway_data)
-  
-  #output for first data input
-  af_complex_itins.2 <- compute_all_itins(af_complex_cleaned, small_subway_data)
-})
+# profvis({
+#   #output for first data input
+#   af_complex_itins.1 <- compute_all_itins(af_complex_cleaned, subway_data)
+#   
+#   #output for first data input
+#   af_complex_itins.2 <- compute_all_itins(af_complex_cleaned, small_subway_data)
+# })
 
 ```
 
@@ -246,7 +259,7 @@ aus_complex_cleaned <- aus_complex_data %>%
 aus_complex_itins <- compute_all_itins(aus_complex_cleaned, subway_data)
 
 # plot distributions
-plot_densities(aus_complex_itins)
+plot_densities(aus_complex_itins, 7,10, 100, route_color_dict)
 ```
 
 ### Atlantic to Bryant Park - Super (Complex) Comparison
@@ -262,7 +275,7 @@ abp_complex_cleaned <- abp_complex_data %>%
 abp_complex_itins <- compute_all_itins(abp_complex_cleaned, subway_data)
 
 # plot distributions
-plot_densities(abp_complex_itins)
+plot_densities(abp_complex_itins, 7,10, 60, route_color_dict)
 ```
 
 ### Atlantic to Grand Central - Super (Complex) Comparison
@@ -278,7 +291,7 @@ agc_complex_cleaned <- agc_complex_data %>%
 agc_complex_itins <- compute_all_itins(agc_complex_cleaned, subway_data)
 
 # plot distributions
-plot_densities(agc_complex_itins)
+plot_densities(agc_complex_itins, 7,10, 60, route_color_dict)
 ```
 
 ### Atlantic to Times Square - Super (Complex) Comparison
@@ -288,13 +301,13 @@ ats_complex_data <- read_csv(here::here("data", "super-itin-atlantic-times-squar
 
 # filter out event and adding direction to station id
 ats_complex_cleaned <- ats_complex_data %>%
-  filter(event != "travel", itinerary_id < 4)
+  filter(event != "travel", itinerary_id < 3)
 
 #output for first data input
 ats_complex_itins <- compute_all_itins(ats_complex_cleaned, subway_data)
 
 # plot distributions
-plot_densities(ats_complex_itins)
+plot_densities(ats_complex_itins, 7,10, 60,  route_color_dict)
 ```
 
 ## Plots for Debugging
