@@ -1,7 +1,7 @@
 ---
 title: "20180730_mta_triptime_distribution"
 author: "Phoebe Nguyen, Akbar Mirza"
-date: "July 27, 2018"
+date: "July 30, 2018"
 output: html_document
 ---
 
@@ -144,8 +144,10 @@ compute_auc(top_2_trips)
 mj_data <- read_csv(here::here("data", "itineraries-Midtown-Jamaica.csv")) %>%
   filter(event != "travel", itinerary_id < 2)
 
-mj_df <- compute_all_itins(mj_data, subway_data, 15, 17) %>% filter(time_diff != expected_wait)
+mj_df <- compute_all_itins(mj_data, subway_data, 15, 16) %>%
+  filter(time_diff != expected_wait)
 
+test_mj_df <- mj_df %>% filter(week(leg1_start_time) == 18:22)
 # filtering out 0's from E train
 plot_densities(mj_df, start_hour = 15 , end_hour = 17, bins = 20, route_color_dict)
 
@@ -386,6 +388,8 @@ debug_itin_plot <- function(itin_df, subway_data, itin_number, num_trips = 5, st
 }
 
 debug_itin_plot(green_line_itins, subway_data, 1)
+plot <- debug_itin_plot(green_line_itins, subway_data, 1)
+ggsave(plot = plot, file = here("figures", "trips-on-green-line-from-96-to-Fulton-between-7-and-8-am.png"), width = 8, height = 6, dpi = 300)
 
 # filtered_test_df <- test_df %>% filter(hour(leg1_start_time) >= 8 & hour(leg1_start_time) <= 9)
 

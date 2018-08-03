@@ -12,14 +12,13 @@ compute_edge_popularity <- function(edges) {edges %>%
 
 weight_summary <- function(duration, quantiles){
   info <- list()
-  info['mean'] <- mean(duration)
   info['sd'] <- sd(duration)
   quantiles <- quantile(duration, quantiles)
   info[names(quantiles)] <- quantiles
   info
 }
 
-create_edges <- function (scheduled_edges, realtime_edges, transfer_edges, quantiles = c(.1,.5,.9),
+create_edges <- function (scheduled_edges, realtime_edges, transfer_edges, quantiles = c(.5,.9),
              include_day_of_week = NULL, time_range = NULL, cutoff = NULL, relative_cutoff = NULL,
              exclude_routes = NULL, wait_time = NULL, dow = NULL, tod = NULL){
   scheduled_edges <- compute_edge_popularity(scheduled_edges)
@@ -52,13 +51,13 @@ create_edges <- function (scheduled_edges, realtime_edges, transfer_edges, quant
     group_by(stop_mta_id) %>%
       summarize(wait_time_median = mean(pred_median_wait), wait_time_90 = mean(pred_90th_wait))
     
+    save(wait_times_filter, file = "wait_times_rush_hour")
+    
     transfer_edges <- transfer_edges %>% left_join(wait_times_filter, by = c("nxt_stop_id" = "stop_mta_id")) %>% 
-      mutate(duration = duration + wait_time_median) %>% 
+      mutate(`50%` = duration + wait_time_median, `90%` = duration + wait_time_90)  %>%
       select(-wait_time_median, -wait_time_90)
-  }
+    }
   
-  c_names <- names(edges)[c(-(1:3),-5)]
-  transfer_edges[,c_names] <- transfer_edges[,'duration']
   transfer_edges <- transfer_edges %>% mutate(sd =0)
   transfer_edges <- select(transfer_edges, -duration)
   bind_rows(edges, transfer_edges)
@@ -123,16 +122,16 @@ edges <- create_edges(scheduled_edges, realtime_edges, transfer_edges,
 save_edges(edges, 'igraph_edges')
 
 #add airtrains
-airtrain_edges <- list(c("702N", "LGAN", "AT", 360, 0, 360, 360, 360),
-                       c("H03N", "JFKN", "AT", 600, 60, 480, 600, 720),
-                       c("G06N", "JFKN", "AT", 480, 72, 420, 480, 600),
+airtrain_edges <- list(c("702N", "LGAN", "AT", 0, 360, 360),
+                       c("H03N", "JFKN", "AT", 60, 600, 720),
+                       c("G06N", "JFKN", "AT", 72, 480, 600),
                        
-                       c("LGAS", "702S", "AT", 360, 0, 360, 360, 360),
-                       c("JFKS", "H03S", "AT", 600, 60, 480, 600, 720),
-                       c("JFKS", "G06S", "AT", 480, 72, 420, 480, 600))%>%
+                       c("LGAS", "702S", "AT", 0, 360, 360),
+                       c("JFKS", "H03S", "AT", 60, 600, 720),
+                       c("JFKS", "G06S", "AT", 72, 480, 600))%>%
   reduce(rbind) %>% as.data.frame()
 names(airtrain_edges) <- names(edges)
 
-igraph_edges <- rbind(edges, airtrain_edges)
+transfer_igraph_edges <- rbind(edges, airtrain_edges)
 
-save_edges(igraph_edges, 'transfer_igraph_edges')
+save_edges(transfer_igraph_edges, 'transfer_igraph_edges')

@@ -378,25 +378,28 @@ sqrt(mean((exp_wait_time_and_weather$pred_median_wait_precip_I - exp_wait_time_a
 ```{r}
 
 # map plot of stops interacted with precip
-# median with precip = 0
-model5_no_rain <- model5_df %>% filter()
+# median with precip = 0 90th percentile
+df <- exp_wait_time_and_weather %>% 
+  filter(avg_precip == 0) %>% 
+  left_join(station_data, by = c("stop_mta_id" = "stop_id"))
+
 clrs <- brewer.pal(5, "RdYlGn")
 
 pal <- colorNumeric(
   palette = clrs,
-  domain = model5_df$estimate,
+  domain = df$pred_90th_wait_precip_I,
   reverse = TRUE)
 
 
-leaflet(model5_df) %>%
+leaflet(df) %>%
   addTiles() %>%
   setView(-73.9124206, 40.737, zoom = 11) %>%
   addProviderTiles("CartoDB.Positron") %>%
   addCircleMarkers(~long, ~lat,
-                   popup = paste("<b>", model5_df$stop_name, "</b>",
-                                 "<br/>", round(model5_df$estimate/60, 2), "mins"),
+                   popup = paste("<b>", df$stop_name, "</b>",
+                                 "<br/>", round(df$pred_90th_wait_precip_I/60, 2), "mins"),
                    radius = 5,
-                   color = ~pal(estimate),
+                   color = ~pal(pred_90th_wait_precip_I),
                    stroke = FALSE, 
                    fillOpacity = 0.5)
 
