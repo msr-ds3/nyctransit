@@ -20,23 +20,23 @@ unique_trips <- trips %>% group_by(path_id, route_id) %>% summarize(trip_id = fi
 unique_trips <- left_join(unique_trips,stop_times_loc) %>%left_join(routes) %>% 
   mutate(direction = substring(stop_id,4))
 
-a_map <-leaflet() %>%
-  addTiles() %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  setView(-73.89,  40.76, zoom = 12, options = c('zoomSnap:.25'))
+# a_map <-leaflet() %>%
+#   addTiles() %>%
+#   addProviderTiles("CartoDB.Positron") %>%
+#   setView(-73.89,  40.76, zoom = 12, options = c('zoomSnap:.25'))
   
-i <- 1
-for (trip_id in unique(unique_trips$trip_id)){
-  print(i)
-  i <- i+1
-  t <- unique_trips[unique_trips$trip_id == trip_id,] %>%
-    mutate(stop_lon = ifelse(direction == 'N', stop_lon + .01, stop_lon),
-           opacity = ifelse(direction == 'N', .5, 1))
-  a_map <- a_map %>%
-    addPolylines(lng = t$stop_lon, lat = t$stop_lat, color = t$route_color, weight = 2, opacity = .1) %>%
-    addCircles(lng = t$stop_lon, lat = t$stop_lat, color = t$route_color,fillOpacity = .1) 
-}
-mapshot(a_map, file = 'train_map_direction.png', vheight = 1500)
+# i <- 1
+# for (trip_id in unique(unique_trips$trip_id)){
+#   print(i)
+#   i <- i+1
+#   t <- unique_trips[unique_trips$trip_id == trip_id,] %>%
+#     mutate(stop_lon = ifelse(direction == 'N', stop_lon + .01, stop_lon),
+#            opacity = ifelse(direction == 'N', .5, 1))
+#   a_map <- a_map %>%
+#     addPolylines(lng = t$stop_lon, lat = t$stop_lat, color = t$route_color, weight = 2, opacity = .1) %>%
+#     addCircles(lng = t$stop_lon, lat = t$stop_lat, color = t$route_color,fillOpacity = .1) 
+# }
+# mapshot(a_map, file = 'train_map_direction.png', vheight = 1500)
 
 a_map <-leaflet() %>%
   addTiles() %>%
