@@ -156,21 +156,21 @@ library(ggplot2)
 library(gstat)
 library(raster)
 library(mapview)
-library(tidyverse)
-library(profvis)</code></pre>
+library(tidyverse)</code></pre>
 </div>
 <div id="load-data" class="section level4">
 <h4>Load data</h4>
 <pre class="r"><code>stops &lt;- read_csv('../../data/google_transit_subway_static/stops.txt')
-stops &lt;- stops %&gt;% select(stop_id, stop_lat, stop_lon, stop_name)
+stops &lt;- stops %&gt;% dplyr::select(stop_id, stop_lat, stop_lon, stop_name)
 
 routes &lt;- read_csv('../../data/google_transit_subway_static/routes.txt')
-routes$route_color &lt;- replace_na(routes$route_color, &quot;000000&quot;) 
+routes$route_color &lt;- replace_na(routes$route_color, &quot;6D6E71&quot;) 
 routes &lt;- routes %&gt;%
   mutate(route_color = sprintf(&quot;#%s&quot;, route_color))
 
 source('../../src/path_finding.R')
 load('../../data/igraph_edges.rdata')
+load('../../data/wait_times_rush_hour.rdata')
 
 r &lt;- GET('http://data.beta.nyc//dataset/0ff93d2d-90ba-457c-9f7e-39e47bf2ac5f/resource/35dd04fb-81b3-479b-a074-a27a37888ce7/download/d085e2f8d0b54d4590b1e7d1f35594c1pediacitiesnycneighborhoods.geojson')
 nyc_neighborhoods &lt;- readOGR(content(r,'text'), 'OGRGeoJSON', verbose = F)</code></pre>
@@ -204,6 +204,9 @@ get_heatmap_static_info &lt;- function(dest, igraph) {
 
   map_data &lt;- map_data %&gt;% left_join(stops) 
   names(map_data) &lt;- c(&quot;stop_id&quot;, &quot;distance&quot;, &quot;path&quot;, &quot;stop_lat&quot;, &quot;stop_lon&quot;, &quot;stop_name&quot;)
+  
+  map_data &lt;- map_data %&gt;% left_join(wait_times_filter, by = c(&quot;stop_id&quot; = &quot;stop_mta_id&quot;)) %&gt;% mutate(distance = distance + wait_time_90)
+    
   
 
   map_data &lt;- map_data %&gt;%
@@ -270,7 +273,7 @@ get_palette &lt;- function(grid) {
   time_diffs &lt;- all_times %&gt;%
     filter(path.x != path.y) %&gt;%
     mutate(total_diff = total_time_mins.y - total_time_mins.x,
-           subway_diff = total_time_mins.y - total_time_mins.x,
+           subway_diff = subway_mins.y - subway_mins.x,
            walking_diff = walking_mins.y - walking_mins.x)
   
   return(time_diffs)
@@ -316,42 +319,20 @@ get_palette &lt;- function(grid) {
     m &lt;- leaflet(nyc_neighborhoods) %&gt;%
       addTiles() %&gt;%
       addProviderTiles(&quot;CartoDB.Positron&quot;) %&gt;%
-      setView(-73.87, 40.75, zoom = 11) %&gt;%
+      setView(-73.87, 40.71, zoom = 12) %&gt;%
       addLegend(&quot;bottomright&quot;, pal = grid_pal, values = filtered_grid[[diffs[i]]],
-                title = paste(&quot;Change in Commute Time&quot;, &quot;&lt;br/&gt;&quot;, diffs[i]),
+                title = paste(&quot;Change in Commute Time&quot;),
                 labFormat = labelFormat(suffix = &quot; mins&quot;),
                 opacity = 0.5) %&gt;%
-      addRasterImage(rr, color=grid_pal, opacity = 0.5)
+      addRasterImage(rr, color=grid_pal, opacity = 0.5) %&gt;%
+      addMarkers(lat = 40.73467, lng = -73.98995)
 
     maps[[i]] &lt;- m
   }
 
-  sync(maps)
+  return(maps)
 
 }</code></pre>
-</div>
-<div id="settings" class="section level4">
-<h4>settings</h4>
-<pre class="r"><code># final destination station
-dest &lt;- &quot;A31&quot; # 14th St ******
-# dest &lt;- &quot;103&quot;
-dest &lt;- &quot;631&quot; #grand central
-dest &lt;- &quot;128&quot; #penn</code></pre>
-</div>
-<div id="get-graphs" class="section level3">
-<h3>GET GRAPHS</h3>
-<div id="with-l" class="section level4">
-<h4>with L</h4>
-<pre class="r"><code>igraph_edges &lt;- mutate(igraph_edges, 'weight'=`90%`)
-graph &lt;- graph.data.frame(igraph_edges)</code></pre>
-</div>
-<div id="without-l" class="section level4">
-<h4>without L</h4>
-<pre class="r"><code>second_ave &lt;- c(&quot;Q03&quot;, &quot;Q04&quot;, &quot;Q05&quot;)
-
-no_q_edges &lt;- igraph_edges %&gt;%
-  filter((!stop_id %in% second_ave) &amp; (!nxt_stop_id %in% second_ave))
-q_graph &lt;-graph.data.frame(no_q_edges)</code></pre>
 </div>
 <div id="need-this-for-heatmap" class="section level4">
 <h4><strong>need this for heatmap</strong></h4>
@@ -361,48 +342,81 @@ q_graph &lt;-graph.data.frame(no_q_edges)</code></pre>
 <pre class="r"><code>grid_lats &lt;- seq(min(stops$stop_lat), max(stops$stop_lat), by=0.002)
 grid_lons &lt;- seq(min(stops$stop_lon), max(stops$stop_lon), by=0.002)
 grid &lt;- expand.grid(grid_lats, grid_lons) %&gt;%
-    select(lat = Var1, lon = Var2)</code></pre>
+    dplyr::select(lat = Var1, lon = Var2)</code></pre>
+</div>
+<div id="settings" class="section level4">
+<h4>settings</h4>
+<pre class="r"><code># final destination station
+dest &lt;- &quot;635&quot; # 14th St ******
+# dest &lt;- &quot;103&quot;
+# dest &lt;- &quot;631&quot; #grand central
+# dest &lt;- &quot;128&quot; #penn
+# dest &lt;- &quot;LGA&quot;</code></pre>
+</div>
+<div id="get-graphs" class="section level3">
+<h3>GET GRAPHS</h3>
+<div id="normal-graph" class="section level4">
+<h4>normal graph</h4>
+<pre class="r"><code>igraph_edges &lt;- mutate(igraph_edges, 'weight'=`90%`)
+graph &lt;- graph.data.frame(igraph_edges)</code></pre>
+</div>
+<div id="without-l" class="section level4">
+<h4>without L</h4>
+<pre class="r"><code>l &lt;- c(&quot;L01&quot;, &quot;L02&quot;, &quot;L03&quot;, &quot;L05&quot;, &quot;L06&quot;, &quot;L08&quot;)
+no_l_edges &lt;- igraph_edges %&gt;%
+  filter((!stop_id %in% l) &amp; (!nxt_stop_id %in% l))
+l_graph &lt;-graph.data.frame(no_l_edges)</code></pre>
+</div>
+<div id="without-the-2nd-ave-subway" class="section level4">
+<h4>without the 2nd Ave subway</h4>
+<pre class="r"><code>second_ave &lt;- c(&quot;Q03&quot;, &quot;Q04&quot;, &quot;Q05&quot;)
+
+no_q_edges &lt;- igraph_edges %&gt;%
+  filter((!stop_id %in% second_ave) &amp; (!nxt_stop_id %in% second_ave))
+q_graph &lt;-graph.data.frame(no_q_edges)</code></pre>
+</div>
+<div id="get-heatmap-for-normal-map" class="section level4">
+<h4>get heatmap for normal map</h4>
 <pre class="r"><code>graph_static &lt;- get_heatmap_static_info(dest, graph)</code></pre>
 <pre><code>## Warning in get.all.shortest.paths(igraph, dest, mode = &quot;out&quot;): At
 ## structural_properties.c:4974 :Couldn't reach some vertices</code></pre>
 <pre><code>## Joining, by = &quot;stop_id&quot;</code></pre>
 <pre><code>## Warning: Column `stop_id` joining factor and character vector, coercing
 ## into character vector</code></pre>
-<pre class="r"><code>graph_grid &lt;- get_heatmap_grid_info(graph_static, grid)
-
-# 1 min for 0.002 grid
-# 15 s for 0.004 grid
-
-
-q_graph_static &lt;- get_heatmap_static_info(dest, q_graph)</code></pre>
+<pre class="r"><code>graph_grid &lt;- get_heatmap_grid_info(graph_static, grid)</code></pre>
+</div>
+<div id="get-difference-heatmaps-for-l-train" class="section level4">
+<h4>get difference heatmaps for L train</h4>
+<pre class="r"><code>l_graph_static &lt;- get_heatmap_static_info(dest, l_graph)</code></pre>
 <pre><code>## Warning in get.all.shortest.paths(igraph, dest, mode = &quot;out&quot;): At
 ## structural_properties.c:4974 :Couldn't reach some vertices</code></pre>
 <pre><code>## Joining, by = &quot;stop_id&quot;</code></pre>
 <pre><code>## Warning: Column `stop_id` joining factor and character vector, coercing
 ## into character vector</code></pre>
-<pre class="r"><code>q_graph_grid &lt;- get_heatmap_grid_info(q_graph_static, grid)
+<pre class="r"><code>l_graph_grid &lt;- get_heatmap_grid_info(l_graph_static, grid)
 
-time_diffs &lt;- get_diffs(graph_grid, q_graph_grid)
+time_diffs &lt;- get_diffs(graph_grid, l_graph_grid)
 
-get_diff_heatmaps(time_diffs)</code></pre>
-<pre><code>## [inverse distance weighted interpolation]</code></pre>
-<pre><code>## Warning in colors(.): Some values were outside the color scale and will be
-## treated as NA</code></pre>
-<pre><code>## [inverse distance weighted interpolation]</code></pre>
-<pre><code>## Warning in colors(.): Some values were outside the color scale and will be
-## treated as NA</code></pre>
-<pre><code>## [inverse distance weighted interpolation]</code></pre>
+maps &lt;- get_diff_heatmaps(time_diffs)</code></pre>
+<pre><code>## [inverse distance weighted interpolation]
+## [inverse distance weighted interpolation]
+## [inverse distance weighted interpolation]</code></pre>
+<pre class="r"><code>mapshot(maps[[1]], url = 'l_total_diff.html', file = 'l_total_diff.png')
+mapshot(maps[[2]], url = 'l_subway_diff.html', file = 'l_subway_diff.png')
+mapshot(maps[[3]], url = 'l_walking_diff.html', file = 'l_walking_diff.png')
+
+sync(maps)</code></pre>
 <div style="display:inline;width:49%;float:left;border-style:solid;border-color:#BEBEBE;border-width:1px 1px 1px 1px;">
-<div id="htmlwidget-9901" style="width:100%;height:400px;" class="leaflet html-widget"></div>
-<script type="application/json" data-for="htmlwidget-9901">{"x":{"options":{"crs":{"crsClass":"L.CRS.EPSG3857","code":null,"proj4def":null,"projectedBounds":null,"options":{}}},"calls":[{"method":"addTiles","args":["//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",null,null,{"minZoom":0,"maxZoom":18,"tileSize":256,"subdomains":"abc","errorTileUrl":"","tms":false,"noWrap":false,"zoomOffset":0,"zoomReverse":false,"opacity":1,"zIndex":1,"detectRetina":false,"attribution":"&copy; <a href=\"http://openstreetmap.org\">OpenStreetMap<\/a> contributors, <a href=\"http://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA<\/a>"}]},{"method":"addProviderTiles","args":["CartoDB.Positron",null,null,{"errorTileUrl":"","noWrap":false,"detectRetina":false}]},{"method":"addLegend","args":[{"colors":["#006837 , #239B51 10.7975460122699%, #7BC665 23.0674846625766%, #C1E57C 35.3374233128834%, #F6FBB3 47.6073619631902%, #FEE08C 59.8773006134969%, #FCA15A 72.1472392638037%, #E75536 84.4171779141104%, #B51527 96.6871165644172%, #A50026 "],"labels":["1 mins","2 mins","3 mins","4 mins","5 mins","6 mins","7 mins","8 mins"],"na_color":null,"na_label":"NA","opacity":0.5,"position":"bottomright","type":"numeric","title":"Change in Commute Time <br/> total_diff","extra":{"p_1":0.107975460122699,"p_n":0.966871165644172},"layerId":null,"className":"info legend","group":null}]},{"method":"addRasterImage","args":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAAPCAYAAAD6Ud/mAAAC/UlEQVQ4ja2Sf2jUZRzHX8/3x32/u912t93R2M5tWTjn/KNUVuTUQKamlcrm/EPmxEorBEMiwooMAjGsYPsni4j8RfiXvzay1AhhSonbVJS1QDORedObd7fN07v73qc/hpvX3ZqEH3jg4Xmez+f1fn8+jxIRHiWs9xbI0rpKFj7pocbv46XPT+EudhPbdlz1Rb6QlvbfKXDp5Lt0bFPDMnQWVti8vus8qdZOZTwSZYKIbTuuHux3v1ILIqQZFS4inA1dI9XaqQDURI68ny6SVS9UUFdmUeJ2U1NcSblnOsZIFEbCRIv8eK0mJV0fCokUJJPgzoM8G2wXuGzSwZnoql4B/KejWDxJc3UTxsEDjJzsInQjBkDw6zfwWk0quuFF0UwdpSuUrqF0BbpCaYq8HceU/lCtnCBzyzzxBPJpnhlAdu7il7ZenDQoYHF/71i7fmsPoRSYxrgRy4Tq7vE3E4IKP6mXokof786bwoqSOmJ/dZNIQuSWsEb+yCoQiwpKGxWh6TBnvidnd7R/H7gDbkzbpL4iCIk4BeufZ35jKaXlWQwW9/eqxpFs+AenN2YNPsvRkmkB5gYtZl8OEz/WiTOcBGDOy6U5lQI0DI3DStpeldDcb7LgGY7KvlopM/wmb85oIH70Mv1nbjBwcYDwn4NErkYyEvsbn5O/l86SS89UC8DOc28JQGjz0WzrgGG8UyeGbRJ4qgiXoeGzNLhzHVeNH+/tuwzfHMa55+DcdzISE0MJbJ9Nefs61v30muxe8l1OwBjIW1bIl8uncn3IYXVVFVWpYuRCNzhCfkUhkhbig3HKO7oyClXu2wS+IHuvdDAZZKx1V6MOH9UsYuqeM0S3fk9kfw/xngHS8RT+llljkB/6No0P+YkNavXPB2hpPTcZY9RR7dPFtP16ja21bhK9g1hTCtB9Fsrjwli2AErfVgArDq2Vwyv3Tqp8whARRISqbxvk/O3tIs4JkTv75FL4M3lw9zhWxvd+9uMjNC/vo6PnJuH3f/z/6nPEPw9MRgMHi3TJAAAAAElFTkSuQmCC",[[40.793764,-73.964961],[40.763764,-73.912961]],0.5,null,null,null]}],"setView":[[40.75,-73.87],11,[]],"limits":{"lat":[40.763764,40.793764],"lng":[-73.964961,-73.912961]}},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-503" style="width:100%;height:400px;" class="leaflet html-widget"></div>
+<script type="application/json" data-for="htmlwidget-503">{"x":{"options":{"crs":{"crsClass":"L.CRS.EPSG3857","code":null,"proj4def":null,"projectedBounds":null,"options":{}}},"calls":[{"method":"addTiles","args":["//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",null,null,{"minZoom":0,"maxZoom":18,"tileSize":256,"subdomains":"abc","errorTileUrl":"","tms":false,"noWrap":false,"zoomOffset":0,"zoomReverse":false,"opacity":1,"zIndex":1,"detectRetina":false,"attribution":"&copy; <a href=\"http://openstreetmap.org\">OpenStreetMap<\/a> contributors, <a href=\"http://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA<\/a>"}]},{"method":"addProviderTiles","args":["CartoDB.Positron",null,null,{"errorTileUrl":"","noWrap":false,"detectRetina":false}]},{"method":"addLegend","args":[{"colors":["#006837 , #4FAF5C 16.3071895424837%, #B4DF73 32.6470588235294%, #FBFDBA 48.9869281045752%, #FEC674 65.3267973856209%, #EF643E 81.6666666666667%, #AF0D26 98.0065359477124%, #A50026 "],"labels":["5 mins","10 mins","15 mins","20 mins","25 mins","30 mins"],"na_color":null,"na_label":"NA","opacity":0.5,"position":"bottomright","type":"numeric","title":"Change in Commute Time","extra":{"p_1":0.163071895424837,"p_n":0.980065359477124},"layerId":null,"className":"info legend","group":null}]},{"method":"addRasterImage","args":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGIAAABGCAYAAAA3mEEuAAAQWElEQVR4nO2ceWxnV3XHP/e+/bf75zUej2fNZLJBaCANyWSDkKYNVVug/BFVohKt0qKKrZRQJMpWWtIWGjVQKClFldqqULUIFVWlYW2jQEmAkoXJMPEsnvGMd/u3vv3e/vGzPfbYM/HPsWeMZ77Ss5+u73vv3PN9555z7j3PQmvNZVx8yIstwGW0cJmITYLLRGwSXCZik2BNRGTef5eWb3v1ZS+/jhDtRk2//Y236lqQUA0SGnGKHysOn6hQOVVDSDAsA4DoE/8jNkLgrQqznc4f/t8H9E19Ds3YphYppgLFqVpEM1GoVKNTRZooYj/eKHm3LNoiYkfBwJQCAWgEkRLkHZO+rM1EwaE2WieJEqRpbJC4Wxdt+YjfvPqvBUDGEuQtScGW5G2Ja0q68g5u0SHxE5LgskW0i7YsAsCWEkNKDJGCgGascUxJzpa4BRenGJKEyUbIuqXRNhFSCJTWmNKgaEsCTyOAgmPi2Ql1x0ArtQGibm20Hb5OBTEzQcKUHzPhx4zUUxxL0uFZlB0TlWqkIXHfe8c5wzHzHbdq5z23Xw5/F6Eti/jzH/yOrkSKKIVGophqxPixmnPeUIlShCGQCNJYY7z9Vq2VwvIs3LyD6ZpIU9K1t5Oc17Yxbmm0pY0j1YSZZkwtSJgNExKlCRNNNU6pVUPCeoQQIExJ3IwRhsQreWQ7M5iuiWkI+jM2JdfkP9/0j5fzjEVoK6G7+0v36/FmBIDWECvN5LRP1IjQc41aQZqkJEGCnbF51fW9JKrlR3aUPTK2gSVavuaROx9dRsbdX7pff/8n41Q/9HUh3nazlqYk/asntjxpbVnESD0kURAqRRSlhJWQJErQSpPGiiRMcHLOQn8nbzPtx5Rck9fuLuKZglRpUg3qPPxfu7eT/s/8qt77c9vocAy6P3GfDmshaaJQqSKNWkSrT39XmO+4VVueResw8SsBQSVEfepni7xVW8TVn3+jFqKVzAnRsobjhyaxPHOBCP/j314y+PLH79VCCK4aKHDTQIHejMQ2Wl00LTLee+Nnl1zztm/9lr6+yyJKIUw1QaJpJho/0TQTRRAr/Dil4ieYUuBaEs8y+OqTI1ieya+8op/xWsh4I+JkPaI+3qAx1dj0VrVqizj41n8V1/zdm/RUM0IliqgeEfzZd847uLgZEzVjjuZsenM2hnQpuxJbCqQAY4Wr37yvl12FfmzDI1UxkQpoxE0acUiUJjSSkGYSEacJlmFiSQNTSN5yXS9StG74yFMnecvLO5loKo5VY4ZnfHY9+gZdnfbxKwFhLUQYEmkIhCEJVxiH++AdOnjo/ONbT7Q1NZ0erRFUWwlb/JePv6iQfiUgjVPCashwJcAyJFFq0+EKsqbkwVd+dtk9fr731XhRzCizDIQuUWmQoeozeKZNl1fEMTLY0iFrlTCEgRCtCFxrhdIKheLGX7qBfz70He7bvY3Rxiwn6w4naykj9VawMf9QcZ4RBA99R1z/hTfpocNTNP/kWxtOSFvOOveB1+h56aNmTPQX//2iAorfvVlnu7MU+vJc2eHSl3foyFoUbclDt35u+fWTX9D68EHSgycxdvfA7kFE9x6Um0eTIpDIxgx65gRMTIEUYJpgmWBbYDkI02G04NCX2cVUcIrJYITRRoVa7KO1Rs0dqVYordFoUqW5/6pPL5HnY08+oB8/XueHI1Uakw3qH/3mhhGy5mB+NSQAeGWPNEqJ/ZgJ18A2JAhQylreeeLzWj/9Y8InjjL9w1EK/WM414xg7h1C9HUiinlQCn1iFD0+03I0izEnkfZsejMu+oqTdHb20dlxPVcWbZROUToh1QmJjknU3KEjEhVzrPYpvTP/ewvjes32Prq9cW4ZzDFST/nlL/+GPjztMzbeoDZWJ3n4xWeF1aLt/Yi1wHvfnTpqxnQMFtnZk6MrY1H0TL54398vGYj+/h/q6LHnGHnsGE//KCSbE+zebdL3ij6c67uQJXeuo17GwdkQgLhuDxw7BZ4DUp6xGsduHa6DsFwwPbDc1mE64NwnAGL1NT0dnKYWzzDpVxhtVjheDThSSTgy7XNoymdivM7M+7/2kgm5IEQAGG+/RXcMloibMYXeHCce+PJS4Uc/o9X3nqL61Rd49ptjDB/V9A8Krr21TMddg4iCs/DGtwuxwtmSezkWIutCxgPXbhFmWQvkiUwJCn00TMV4c5iT9XGO16YZmk0Ymo14ZrTOkeFZKh94bM2EXLB1hsXhY+6PXruEfa2/qanNomYDYj/GkHDDywSd+0uUbu5/SSTA4hlMr9QIQdQ6pmpn2gQwt9uoBQjXIbNjG7v6drGt90p25I+yq3CaqzqmGSxYPFt0Gfzcr+mTPx5Fffq7bUt7URZ86h/5xoKgqf661lphGBIhQZqSbXs9cn05svvLyN7sSyJhtdCLfgIIz4EkAQRo0H4Izx+B0+NYe3Yw2L2Hjs5eejPHKDmjdHuSUsbi32eDNT3/oq+8pSom1SmGk0GUs3i9WUzXxNmWx9xeQBiy5RMuYEWiLGZbviRN0XV/yd90pQ7PHILdTfJ9O8mWXo4tPTLWCLPhBNu6s2t65kUnIlYhqU7x3DyUClgDeWTGxLwii3Ba4l1QErqKYNsQRWBZiL5MKzxOVStUNoyWDwH01AlkErC9ez/NpE5fdoqdJY/8B+/WtQ9/vS07vuhERCok1Qk4OSjlMfqyIAWyv9gKV8sFZEc3uHl0bRzGJlBHT627HMI2ELksFHJQb7YsIpeZc+BuK7oSZ7Zv9MxkaybTZ2ZOgeDmgQyzQRfe++7UZy/5nA8XlYh7/uV+/brdBW7p78EoX0vH9n0QJ5h9dejuhEIBke2CXCcAIlNCN5vr9nwBYBstZWY86ChAqYDYNrBE6QuqnlerBlHuht4HWi2Nf9M7C9eQtfL8w8EfcWBHgUacYr/ndr3afOuiEbHn0TfomakmBdckY01gyue5qrSf0t7r0ZPHEF4BvCJ4haUXmgbCNNBJ+pKeL+z5ShPRmgJ7ytBZRljembUPzRLlL8Po32hyZXzXY6J5nFONcXYWTY5UEm64okCQaKx336bjT754jdcFyyNWQvnj9+q7rumh6Jkc2Obysq4r2FPcR0ckwLDB9pZfVJ9CH3oadfz0mp4pLGNOufP7igKxZzuiu6/Vdqb5jPIXt81DA24OP1fkdPMII/UJhmvTPD8dMzQT8cJUk58en0WlatmF1Q8u9x8XlQgA97136Guv6+G2nSVu6rW5utzPQG6QbquXlV9DYPIYemQYPXwaHbdnGcJeOgmI/bsQpa6VrWAxziZFSqKu7ZyoPc+R6ijD1So/nU34yXiT56d8xk9VOZdqVZIS+cncuSJ5+HFx0Z01wJETVfK2QTXMMB2cZHdpll2Fbgaye5HCIEgb+EmNSIUIIFMo0tt1O6L/CPr0CPrIyKoqR1rT0RlNLyFhsdJWsgho9ZNG6+jYzkj9OQ7NjnBousZQJeXgWJ1nTtUIa+E5SQDmCvCSuXOJ9e7b9EW3CIDSx+7RQSUk35vjxh0lBjs89nWYXF3OsbfUiyHmMty5/gIQSLZl9+IGPnr0BXhhGFU9vyNfbA1i9wCi54rlJCyGaYE05445AoQEIRllhh9PHuSpsQrPjAcMTfscHq6gktWVEgW1cOFcp+rih68A9YkmKk5RiWKiGTHZjJlpekSpZib02VXopCdTWujfihoVJxuH6fG2U+jfjzYM5Gy1FfObJpgGGBKSFCo1mJiGbAbKRURXD3RsB5WCSkArEAYYi5QuZIuk+d9Ay4cIEh1zYvxpnpms8sRwnadOVgkqwXmt4GyoOEXOLaEIKS6+j1iM4kdep/fuLKE1FB2Te/cWmfetPRmDHfkynV4eUy56s4Fubzu2dEl0TKoSlE7RKAQGSieU3X6kX4GwAfkeZtNZqtEUofJZrD0hBLb0sKSNIS0MYSCF0doDERJBi5jp4DT/N3GYrwxV+MqPThP7yysbw1qI6ZqE9YhMx/KgozndXCACrTeHRcwjqEcLeqlGCY1EUTIkGhhrpswEkwzka3Q4OQwhSLVmwq8SJEPYhiRMFbHSaN16iT1TcEW2RJd7kiCNcQyLbHOKRK1cm6u1JkgbBGljoU0KA0OYGMJE6ZSpYIahyjhHKzH1MCWNzgQLKlU0p5vkunMLs91q9yw2FRGJHxMpjS0FWsOEryg5ZxKrsWbKc9N1XKOBYwjqsWKiHjPrxzRjRT1OCVONFGBLQck12dMV0JeZINFgCrilv4glDWzDJGM6FFYKkWmR4qcRQZIQq4RYpUz6NY5VY56bDDky5XOsHqLSlsqb003coov6VPsrr7DJiACYqAQMlD20hkaU8uTphIl6xFgjYipISMIEnWoM28Cf8QkbEWmsuOnGflKtSXXLIpQQKA1ffHwYyzW5brDIgR0FTtUbyxLl+fO8beIaFrFKSXRKohSJAqU11Ujzk+mY49M+Tx6fJapHy2RfvKrcLjYVEekjT4ieh1+vh4Yr1MYbHMxYqFRx4JXbSDVopVtL0qq1GqvnpqHzZa6FD92ttdY8O1yhJ2fTl82SMc+U9MxDA8erEZUooBlrItWyICnBQPDsWIMfnK7hz/joswKjOIhxCw4vBZvKWc+j9Mf36NpYHcuzUEqven/8xbDn0TfoV/Xn2VawuaZskWqox4qResp4IyGI54oJztqKVRq+/fTosqgo9mMsz6L6wbXvzM1jUxKxUSh+9B7tFhyEFNxzZSdSCkar4ZJl9rNzuclmTKo1R49XFvqE9ZDYj9fsD1bCJfV5b9SICGshaZQyPBtwuhLMldMsrGjDot9+rDCkYKwWIQ1BbfTMVup6kgCbzEdsNLTWGJaB6ZrYhjhnQv3U0DTSlEhDUjlVpWOwlUzqz3xv89U1/SxCGhLLM9lXXjlknYdX8gjrITPDs6uqaFwX2S7EQzYL3ILDlV1ZHPP8w76202NHTxYnZ18gyS4hZ+0+eIfu2VNm/wrLDefCtJ9w+NgMtbH6mkpk2sElQwTAlX/7Rr2r2F68P+XHHB9r0Jj2ieoh6SMbU95/SRFR+tgv6Jft7sB9kanpbGhguhkzUg0Ja2HrY5h1Ltm/pIgAcP7gdn3bqwaQa1RjJUw41YypzRUir5eFXFLOeh5jjeXrRKtF0TG5usNj/84OOneXybz/rnV5ky85ItJ4fT7GLzgGNwwU6NnVsayWdy24pPIIAK/okLXW7/3bV3LpckzKf3qvnh2prvkjykvKIqx3HdDZriwFZ33fv7Jnct3OEl17y7gPnvs/LpwPlwwR5jsP6GJ/nn1dmQ25/7wZrDWauiSIsN51QOd7svR1ZdsOXVcLx5SMv/Ora46gtnT4av/+bTrblaW7O8vONhO5dvBfv/5Pl/cjzoXOh35Rl8oee+a/u9sgrAcJsEWnpp6HX6+dvLPhJECron097rMlw1fTMRHn+5p9E2JLWgQwV4X9s4MtaREqVeeuZ92k2JJEzJfdXAisl7PemkQkGrXB/+BxvQiYx5b0EePvbiVWGxWZrzcJsEWJAJh8z39sSNi0ESTAFiYC4LE3b4zSNgJbmghY3zd4o6wBtvASx7nQbia8kcpfjP8Hhi6IKkLO+foAAAAASUVORK5CYII=",[[40.763764,-74.034961],[40.623764,-73.838961]],0.5,null,null,null]},{"method":"addMarkers","args":[40.73467,-73.98995,null,null,null,{"interactive":true,"draggable":false,"keyboard":true,"title":"","alt":"","zIndexOffset":0,"opacity":1,"riseOnHover":false,"riseOffset":250},null,null,null,null,null,{"interactive":false,"permanent":false,"direction":"auto","opacity":1,"offset":[0,0],"textsize":"10px","textOnly":false,"className":"","sticky":true},null]}],"setView":[[40.71,-73.87],12,[]],"limits":{"lat":[40.623764,40.763764],"lng":[-74.034961,-73.838961]}},"evals":[],"jsHooks":[]}</script>
 </div>
 <div style="display:inline;width:49%;float:left;border-style:solid;border-color:#BEBEBE;border-width:1px 1px 1px 1px;">
-<div id="htmlwidget-4039" style="width:100%;height:400px;" class="leaflet html-widget"></div>
-<script type="application/json" data-for="htmlwidget-4039">{"x":{"options":{"crs":{"crsClass":"L.CRS.EPSG3857","code":null,"proj4def":null,"projectedBounds":null,"options":{}}},"calls":[{"method":"addTiles","args":["//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",null,null,{"minZoom":0,"maxZoom":18,"tileSize":256,"subdomains":"abc","errorTileUrl":"","tms":false,"noWrap":false,"zoomOffset":0,"zoomReverse":false,"opacity":1,"zIndex":1,"detectRetina":false,"attribution":"&copy; <a href=\"http://openstreetmap.org\">OpenStreetMap<\/a> contributors, <a href=\"http://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA<\/a>"}]},{"method":"addProviderTiles","args":["CartoDB.Positron",null,null,{"errorTileUrl":"","noWrap":false,"detectRetina":false}]},{"method":"addLegend","args":[{"colors":["#006837 , #239B51 10.7975460122699%, #7BC665 23.0674846625766%, #C1E57C 35.3374233128834%, #F6FBB3 47.6073619631902%, #FEE08C 59.8773006134969%, #FCA15A 72.1472392638037%, #E75536 84.4171779141104%, #B51527 96.6871165644172%, #A50026 "],"labels":["1 mins","2 mins","3 mins","4 mins","5 mins","6 mins","7 mins","8 mins"],"na_color":null,"na_label":"NA","opacity":0.5,"position":"bottomright","type":"numeric","title":"Change in Commute Time <br/> subway_diff","extra":{"p_1":0.107975460122699,"p_n":0.966871165644172},"layerId":null,"className":"info legend","group":null}]},{"method":"addRasterImage","args":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAAPCAYAAAD6Ud/mAAAC/UlEQVQ4ja2Sf2jUZRzHX8/3x32/u912t93R2M5tWTjn/KNUVuTUQKamlcrm/EPmxEorBEMiwooMAjGsYPsni4j8RfiXvzay1AhhSonbVJS1QDORedObd7fN07v73qc/hpvX3ZqEH3jg4Xmez+f1fn8+jxIRHiWs9xbI0rpKFj7pocbv46XPT+EudhPbdlz1Rb6QlvbfKXDp5Lt0bFPDMnQWVti8vus8qdZOZTwSZYKIbTuuHux3v1ILIqQZFS4inA1dI9XaqQDURI68ny6SVS9UUFdmUeJ2U1NcSblnOsZIFEbCRIv8eK0mJV0fCokUJJPgzoM8G2wXuGzSwZnoql4B/KejWDxJc3UTxsEDjJzsInQjBkDw6zfwWk0quuFF0UwdpSuUrqF0BbpCaYq8HceU/lCtnCBzyzzxBPJpnhlAdu7il7ZenDQoYHF/71i7fmsPoRSYxrgRy4Tq7vE3E4IKP6mXokof786bwoqSOmJ/dZNIQuSWsEb+yCoQiwpKGxWh6TBnvidnd7R/H7gDbkzbpL4iCIk4BeufZ35jKaXlWQwW9/eqxpFs+AenN2YNPsvRkmkB5gYtZl8OEz/WiTOcBGDOy6U5lQI0DI3DStpeldDcb7LgGY7KvlopM/wmb85oIH70Mv1nbjBwcYDwn4NErkYyEvsbn5O/l86SS89UC8DOc28JQGjz0WzrgGG8UyeGbRJ4qgiXoeGzNLhzHVeNH+/tuwzfHMa55+DcdzISE0MJbJ9Nefs61v30muxe8l1OwBjIW1bIl8uncn3IYXVVFVWpYuRCNzhCfkUhkhbig3HKO7oyClXu2wS+IHuvdDAZZKx1V6MOH9UsYuqeM0S3fk9kfw/xngHS8RT+llljkB/6No0P+YkNavXPB2hpPTcZY9RR7dPFtP16ja21bhK9g1hTCtB9Fsrjwli2AErfVgArDq2Vwyv3Tqp8whARRISqbxvk/O3tIs4JkTv75FL4M3lw9zhWxvd+9uMjNC/vo6PnJuH3f/z/6nPEPw9MRgMHi3TJAAAAAElFTkSuQmCC",[[40.793764,-73.964961],[40.763764,-73.912961]],0.5,null,null,null]}],"setView":[[40.75,-73.87],11,[]],"limits":{"lat":[40.763764,40.793764],"lng":[-73.964961,-73.912961]}},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-7696" style="width:100%;height:400px;" class="leaflet html-widget"></div>
+<script type="application/json" data-for="htmlwidget-7696">{"x":{"options":{"crs":{"crsClass":"L.CRS.EPSG3857","code":null,"proj4def":null,"projectedBounds":null,"options":{}}},"calls":[{"method":"addTiles","args":["//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",null,null,{"minZoom":0,"maxZoom":18,"tileSize":256,"subdomains":"abc","errorTileUrl":"","tms":false,"noWrap":false,"zoomOffset":0,"zoomReverse":false,"opacity":1,"zIndex":1,"detectRetina":false,"attribution":"&copy; <a href=\"http://openstreetmap.org\">OpenStreetMap<\/a> contributors, <a href=\"http://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA<\/a>"}]},{"method":"addProviderTiles","args":["CartoDB.Positron",null,null,{"errorTileUrl":"","noWrap":false,"detectRetina":false}]},{"method":"addLegend","args":[{"colors":["#006837 , #07763E 3.06051066806576%, #6ABF63 20.5491430570129%, #CFEB85 38.0377754459601%, #FFEEA2 55.5264078349073%, #FB9B58 73.0150402238545%, #D42E27 90.5036726128017%, #A50026 "],"labels":["-20 mins","-10 mins","0 mins","10 mins","20 mins","30 mins"],"na_color":null,"na_label":"NA","opacity":0.5,"position":"bottomright","type":"numeric","title":"Change in Commute Time","extra":{"p_1":0.0306051066806576,"p_n":0.905036726128017},"layerId":null,"className":"info legend","group":null}]},{"method":"addRasterImage","args":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGIAAABGCAYAAAA3mEEuAAALQklEQVR4nO2be2xb1R3HP8eOYztO7CZ20xd9ULo+JEAgoGhDdHQaj9I/gGlIGxSYunXdVqAwVmlj3SQGjI0iwYBuTGhFLWMgHmVMUBDd6GAaWuloURmiLX1R6CuJnTixk/h1f/vj+j78yMOu3ZgkX8nyudfn3nvu+dzf+f1+51wrEWFcIy/HSDdgXLrGQdSIxkHUiMZB1IjKAiFHHxM5+ti4l6+gVKlRUz6A/b4kAK8e+gSlYEGLH4ArZzyoKtTGMaG6Uiq39W2Sv8f35OybLAEAdrcncbsczG8GNY6gZJU0NG09sh0Rcj7H41EE3UhuPXcOrxyMsK+zpyqNHc0qCcSN89YXfdZPxru5ccEkULDq3Dk0e8ZjgFJVkR4TQAEne6Og4LyJ0ytx2jGlyj26ChAdRqtnSsVOO1ZUERCTG/xk3QRTfc2EEyf5uPPBAcOxz2JPyJ7OdePhr00lRU3P7F1V0HmTG/wD1jdg9KWTKHT3EvIGiafGnXm+SgJhVzEAUxubC/b1p1NmWRAORj8HhK9Ou388yLWppITuoZ0/kGOxTPZI/WvprFBRAJALIZrsLfj9smIw4pv1Bvm+oZZvXS4AGy7fMOqhlWQRXQmNkNdBe59m+YTGZibUB606ybBZbvYEiPR3mcNSKYomXjCfkOVbl8vDi5aY8P31IQAUi1W4/y85T1JQfHrBe80XCt6wLeLXO1YWrXjdnLNMEFN83825+cM96wWEWDJGR39xv5BvFcJb0p0Mg4CGZu53KIdRAb9bBxHpP15wPhMEQCyMGVxPXF7TYEoamvJh3H3RHwe9OR0ExFI9pgXlA8kHsf3kPfJB2wm+Ne9r+g4Bz7pNAPSvudm0irSWopgUihZpwDw4FsmrIbQ1unL2tHpvLrgP2XOfqPlrTxu8koYmQZ/WAFi7cHAIRaUg5GkCdCDFfMTOthNm2fOgDkAy+kUNIHUzAnx67UIC2SEqt432ZyWb3Jjf0N5Yb5YHber8tUr23CepLTup//HmqgMpKY8Iea3q971XfKiya1bTKv0GjJq2IwwgA8n9wEYkIyYEwNwWTZj5ynsDHhtR+YGBBUGKQGjr2yRtfZsKfki9vhOAF/ffLi/uv72qeU/Z4etwLSKWLOIbBjjyDx/+cMibrZuph83p4zGaHn+haJ2eW68v2DcQBLva+jZJzjAlsOXamaDpkWI+jG/OebRillLyekQ5+l/4N3K2mqqX5Zg5Upwd/GnOjbx0YLXoc1ZJXA7FshePAKDFdH/gDHktiIM0W9UpEKhf9R2QDO0qPiQEuwwY6adukL9eWjj85asSQE4LCADCG/ULGYsVLbkOcvOB1WZDBLh6wz4kaUVNzpC3rMsqpxrQAg11/eg6s9yb7jbLc9Y+y3O3XTDkNc4J6pOc85rXlA3k9IGwK7xRCN5iNjqpvSGvHnrd/HlJhSAMV6queP8pTx1kfdQrV08d8HgDBEDQO5WQ58aSgYwMCJuS2hsCYLTjtcNvcNUT1ipgtSEMpExHH3WTG8xt5XICxYEYIIKeKXQl25kTuLNkEDWzgqOUQinF0llXmfsS4V4y7frndCrT0Uf6/hV8fMtF5j5JZZBUhmu2HBvwuK5ke9nXLDtqqpaUUiTCfQC4m70g4GxtGOKoysnZ4iFx5zIykmFG02z6bpvL4e59OXXOzEZRAIe69c53OqyuzDy9TJw3/bkkq6g5ELqE3o4+tIzuJ1S410wkm86ZmJNbVEKJg1145jbj8LsByIjR0QotCwRgwra3zWN2XjCt6LnO3LJLP0eJMEbWRxxfn714bnuPrtyAp9ljbresuBiAyJPbKwrCAICAI+C2fnA6cE4pnOYXLfe6jqV6LrVj/nwBCHfC5Q9dmFNnuDBGDoQJoVCfr9yAt9ly0i0rvwxA6t+fmOHvqcIwcg0UpiUAOAwAw3wn6P27LCsJd2bP4YBIu3D9U7qPGQ6MGrGIPLmb+GzZI5xx92J922HMvAp9m3cD5fsN0wpscvjdJQMA2PWTt7EbiQECINImOJ2wMHIrmlg+5Yrn3+HAisK5qxEPX4vCcDWAZJBP9hbW14TEmx+bo5lqcBXWGUT5CZ4JocS34vIhQCGIS7pXk9aSOXU0ydDg8hNN6JUTmRTnT/y5qglnLUePApDc+hHuO5ZDPALKiZq7ADlysPAAW59Jbwpn0IvWlx7yOvmJW6kQVGuLWc6HYNeC/bcBqgACgEM56U/HzW2308WH4Qdk5C0CkB0/k0/nTQOlmJVssOaRmiZCrAOJh/MOEBIbtpmbzpAe5g4Fww5iOBDsHW/t1H3Lf2/aXPBTuFOHMNBaiV2JTNJWTtXA0AQc7P6d2QhjjaHR1QII7q52QJB43gKP6KFtYsM2M/t2BDw5VfY/+n7O9pfuWZSzXbSj85XtePu6xq5bXiaj5VZr3TGwFRTT917fzvorzgfg4V17ayOPmO1frUAHYj0YRuIwEcgNcCUegezSqXv5YrS3P6CgErnh5vRLz6D/H4fwfv1MfcfELIRJrdaxJ9ryWqbyZnn1jZkLQxz8T4e5t3VHoRX88t0PzPKvvnJewT2nbW3TtJpN6KAn1UmTyxbdNLVCj57FKl8LBLJzPpFPB5xdnffoUvbe/hpN0xtBKX0+q9kP06YARWZlJ7fmLujZ4Kgz9Pmkvt/9DaUUsy8OcXC7DsOA8PvdH3G8J8W9l5xHJtvRzy3dWLR1/7rBKv/p8lqImmzShyiF36U/rU31LbityI+4SuFT2fxCKQgf1ssiZN58p+B8jrOm6I8b0PvSbryXTMOx+DLyCUhv/ro2qOCsgn2pTc/Rs/2YaSUiQuzxb5PWUrx8YA+fxzI8sujJsqbCa84i/PVBa2EcvfMtCXHR56F8EdswMljUk81BfPd+Hz17cxZUUV4/9FnrEHj95MNKP/0saELDdD3fOLFmCQCZrDVoQtkQoMZAzPavVuH+ZwSlCKoApDXSjnyLLWLBrSuU86YVRc8p767JLkhlAcQj4CvipL1+8AasbTsYrEzeOdnH0WWLyGhWhPbygT2cExp8DX4o1dTQZCjc/4wE0Z+8uDODz3VtZdaG45uF3mzW5WvJ7fhBlHl+I0eWWHNIRqa8r+socydM46zAHafcvpqyCENB2wqXb7CKp6J4BLwBoqlC/2CXf/dOHLOn5kxTdCZ6iPTHWDJzXcVeHqiZhaGRkA5Bin4CsTiBWFz3V5NCzO4WOhPWGylXzPhtRd91qkmLOB3qDgQY6FWQQKYeJDsNMSmEnk8IF7b+omovmo05EFpoFgAy6JAk0DAB4hHUjLtOy2uXYwpE1KXRiBBLdQ1ar9uZptHVjKOMt9jLVU1GTdVQNGm85m+9Bzu4FIGMbYq9yq/5jxkQAHQ8JVF/47CrKxT+TN56R5WAjKmoSWId+I9/Ovz6CN3OFFFnCjxN4G4EeUvoeaHiT+/YsghADq8T5Wki2hIcunKOdEMIuFr0kNaYlm+6viIWMqYswlI5D5+eX0RTEaLpTuscPc9X5EkecyCUZ/g+oriyQNwOom4FviDCtlOGMeZAVE5ZIOnO7NY2ORUgY8tHZIeRbrejpP9LDC2lT9+bW4u/uC8hV122sbyyEPQzGioHAowVEDYIUXd1brk72VE2BBjlQ1NuNm2o8vcbqD/1EHbUzjVZEKAanW+oEhBglA5NJ3s3Slei/D+NlKJc4OVrVIIAKfpn+FrWqBya3M6qLbBWTaPUIqCafqEaGsUgTs+iTqWc9agcmnwuPy4Nolr30JXLVKUAGBqVFuFyXKkAXjv0z6qcv9IQYJSCAKDuSlUNL1ENCDDKM2uoXJxvqFogRq9FZFXJjqsWBBgDFpGvUi2kmp1v1/8B8CiBczhthKAAAAAASUVORK5CYII=",[[40.763764,-74.034961],[40.623764,-73.838961]],0.5,null,null,null]},{"method":"addMarkers","args":[40.73467,-73.98995,null,null,null,{"interactive":true,"draggable":false,"keyboard":true,"title":"","alt":"","zIndexOffset":0,"opacity":1,"riseOnHover":false,"riseOffset":250},null,null,null,null,null,{"interactive":false,"permanent":false,"direction":"auto","opacity":1,"offset":[0,0],"textsize":"10px","textOnly":false,"className":"","sticky":true},null]}],"setView":[[40.71,-73.87],12,[]],"limits":{"lat":[40.623764,40.763764],"lng":[-74.034961,-73.838961]}},"evals":[],"jsHooks":[]}</script>
 </div>
 <div style="display:inline;width:49%;float:left;border-style:solid;border-color:#BEBEBE;border-width:1px 1px 1px 1px;">
-<div id="htmlwidget-7334" style="width:100%;height:400px;" class="leaflet html-widget"></div>
-<script type="application/json" data-for="htmlwidget-7334">{"x":{"options":{"crs":{"crsClass":"L.CRS.EPSG3857","code":null,"proj4def":null,"projectedBounds":null,"options":{}}},"calls":[{"method":"addTiles","args":["//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",null,null,{"minZoom":0,"maxZoom":18,"tileSize":256,"subdomains":"abc","errorTileUrl":"","tms":false,"noWrap":false,"zoomOffset":0,"zoomReverse":false,"opacity":1,"zIndex":1,"detectRetina":false,"attribution":"&copy; <a href=\"http://openstreetmap.org\">OpenStreetMap<\/a> contributors, <a href=\"http://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA<\/a>"}]},{"method":"addProviderTiles","args":["CartoDB.Positron",null,null,{"errorTileUrl":"","noWrap":false,"detectRetina":false}]},{"method":"addLegend","args":[{"colors":["#006837 , #0E8144 5.34698521046645%, #83C966 24.3079256731134%, #E6F49C 43.2688661357603%, #FED581 62.2298065984073%, #F16740 81.1907470610542%, #A50026 "],"labels":["-15 mins","-10 mins","-5 mins","0 mins","5 mins"],"na_color":null,"na_label":"NA","opacity":0.5,"position":"bottomright","type":"numeric","title":"Change in Commute Time <br/> walking_diff","extra":{"p_1":0.0534698521046645,"p_n":0.811907470610542},"layerId":null,"className":"info legend","group":null}]},{"method":"addRasterImage","args":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAAPCAYAAAD6Ud/mAAACv0lEQVQ4ja2US2hUZxiGn++cM5kkM4mBBG1EMW3VJkIhBBHFCnbTUlJwU6y1aEB3kQqlZCcplLZEcCEKunBTIlZapbTQhl5EKLSSJi6EXoxRo0JMxtwmmcycmZNzzv+5mCQkngkN4rv5L/y8z/9+/0VUldVoKHNGa+JrScZqKFMH8/0l1AuwD16U9JE9mtxeD6FBQ4VQwRiC8TyJ2Rn0fK84q6KsIPvgRVnoZ2+OAvPD+SZeW4Ge7xUAWSlRqNfUdmcIK6uxsSGfAS8LfgHCOUjUQvX7oo9OKcaAUQb3f4XlCOJYiC1U1pVT/13/KkCFHHr/FvpgGDORQ/MBzrb1yGtbob5d9EaHIlJMIFKMshBqR5cs9StZOi/s0ZgVh0wK888Q/uAkmKJPbO/pRQPvt9sAlDW/BLaFWFaxffucPOsZBYW/ajyfQwdvoMageR9CRb2Qiq6fIwbqG7z+kfkYUNHRVrJCVmTGnQZjwLFhbAqJO8yNuaQHJiNLyz/9USo+74nAf398InIe0UTuNFrIYG7dJ3ySRQMlvrGK+MaqkjsFWAr79u5Hun/L2Qh8eaLMN6q+C/ceEaSyhBMFzLSHmfUxWX/Z0kJnq062vaFjB3YqwJ+jnQpQCgJgBRcO6H9TJ7UQ/qQPGSe3bhMYxUqWIYkY2AJGiw9xiTQw/NI9Tv7CIboH2nV3/WclAQtyTM6nobqJQpCjIdkI0yNo0xaclzfgeHN4V/vQOUPlF8vP4s4PD2hpFv6eHOJwY/SWRUAA+vEZxv4aoW/Y4GYVBSwLbFvY1VpHbfcfAhBePqz2B90C0PzvgLifvKVfp2Z5t+H/MGCZdIHY5jXEkg55VykrFxIJIZkU3vxwwyJErx9fhDyPFn8Gr2ufpm+myKVy+G7Aq0dfJ3bsynMbP6tl17vunVdYczdN+XstyPYvXxgE4Cn+TD6edUhM/gAAAABJRU5ErkJggg==",[[40.793764,-73.964961],[40.763764,-73.912961]],0.5,null,null,null]}],"setView":[[40.75,-73.87],11,[]],"limits":{"lat":[40.763764,40.793764],"lng":[-73.964961,-73.912961]}},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-1301" style="width:100%;height:400px;" class="leaflet html-widget"></div>
+<script type="application/json" data-for="htmlwidget-1301">{"x":{"options":{"crs":{"crsClass":"L.CRS.EPSG3857","code":null,"proj4def":null,"projectedBounds":null,"options":{}}},"calls":[{"method":"addTiles","args":["//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",null,null,{"minZoom":0,"maxZoom":18,"tileSize":256,"subdomains":"abc","errorTileUrl":"","tms":false,"noWrap":false,"zoomOffset":0,"zoomReverse":false,"opacity":1,"zIndex":1,"detectRetina":false,"attribution":"&copy; <a href=\"http://openstreetmap.org\">OpenStreetMap<\/a> contributors, <a href=\"http://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA<\/a>"}]},{"method":"addProviderTiles","args":["CartoDB.Positron",null,null,{"errorTileUrl":"","noWrap":false,"detectRetina":false}]},{"method":"addLegend","args":[{"colors":["#006837 , #0D8044 5.13509880360264%, #5DB860 18.5777658287404%, #B0DD71 32.0204328538782%, #EEF8A7 45.463099879016%, #FEE391 58.9057669041538%, #FB9F5A 72.3484339292916%, #E34C32 85.7911009544294%, #A90526 99.2337679795671%, #A50026 "],"labels":["-30 mins","-20 mins","-10 mins","0 mins","10 mins","20 mins","30 mins","40 mins"],"na_color":null,"na_label":"NA","opacity":0.5,"position":"bottomright","type":"numeric","title":"Change in Commute Time","extra":{"p_1":0.0513509880360263,"p_n":0.992337679795671},"layerId":null,"className":"info legend","group":null}]},{"method":"addRasterImage","args":["data:image/png;base64,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",[[40.763764,-74.034961],[40.623764,-73.838961]],0.5,null,null,null]},{"method":"addMarkers","args":[40.73467,-73.98995,null,null,null,{"interactive":true,"draggable":false,"keyboard":true,"title":"","alt":"","zIndexOffset":0,"opacity":1,"riseOnHover":false,"riseOffset":250},null,null,null,null,null,{"interactive":false,"permanent":false,"direction":"auto","opacity":1,"offset":[0,0],"textsize":"10px","textOnly":false,"className":"","sticky":true},null]}],"setView":[[40.71,-73.87],12,[]],"limits":{"lat":[40.623764,40.763764],"lng":[-74.034961,-73.838961]}},"evals":[],"jsHooks":[]}</script>
 </div>
 <script>
 HTMLWidgets.addPostRenderHandler(function() {
@@ -417,20 +431,82 @@ var leaf_widgets = {};
                 );
                
 
-leaf_widgets['htmlwidget-4039'].sync(leaf_widgets['htmlwidget-9901'],{syncCursor: true, noInitialSync: true});
-leaf_widgets['htmlwidget-7334'].sync(leaf_widgets['htmlwidget-9901'],{syncCursor: true, noInitialSync: true});
-leaf_widgets['htmlwidget-9901'].sync(leaf_widgets['htmlwidget-4039'],{syncCursor: true, noInitialSync: true});
+leaf_widgets['htmlwidget-7696'].sync(leaf_widgets['htmlwidget-503'],{syncCursor: true, noInitialSync: true});
+leaf_widgets['htmlwidget-1301'].sync(leaf_widgets['htmlwidget-503'],{syncCursor: true, noInitialSync: true});
+leaf_widgets['htmlwidget-503'].sync(leaf_widgets['htmlwidget-7696'],{syncCursor: true, noInitialSync: true});
 
-leaf_widgets['htmlwidget-7334'].sync(leaf_widgets['htmlwidget-4039'],{syncCursor: true, noInitialSync: true});
-leaf_widgets['htmlwidget-9901'].sync(leaf_widgets['htmlwidget-7334'],{syncCursor: true, noInitialSync: true});
-leaf_widgets['htmlwidget-4039'].sync(leaf_widgets['htmlwidget-7334'],{syncCursor: true, noInitialSync: true});
+leaf_widgets['htmlwidget-1301'].sync(leaf_widgets['htmlwidget-7696'],{syncCursor: true, noInitialSync: true});
+leaf_widgets['htmlwidget-503'].sync(leaf_widgets['htmlwidget-1301'],{syncCursor: true, noInitialSync: true});
+leaf_widgets['htmlwidget-7696'].sync(leaf_widgets['htmlwidget-1301'],{syncCursor: true, noInitialSync: true});
 
 });
 </script>
-<pre class="r"><code># 16 s for 0.006 grid
-# 22 s for 0.005 grid
-# everything: 32 s for 0.004 grid
-# 2 mins for 0.002 grid</code></pre>
+</div>
+<div id="get-difference-heatmaps-for-2nd-ave-subway" class="section level4">
+<h4>get difference heatmaps for 2nd Ave subway</h4>
+<pre class="r"><code>q_graph_static &lt;- get_heatmap_static_info(dest, q_graph)</code></pre>
+<pre><code>## Warning in get.all.shortest.paths(igraph, dest, mode = &quot;out&quot;): At
+## structural_properties.c:4974 :Couldn't reach some vertices</code></pre>
+<pre><code>## Joining, by = &quot;stop_id&quot;</code></pre>
+<pre><code>## Warning: Column `stop_id` joining factor and character vector, coercing
+## into character vector</code></pre>
+<pre class="r"><code>q_graph_grid &lt;- get_heatmap_grid_info(q_graph_static, grid)
+
+time_diffs &lt;- get_diffs(graph_grid, q_graph_grid)
+
+maps &lt;- get_diff_heatmaps(time_diffs)</code></pre>
+<pre><code>## Warning in points2grid(points, tolerance, round): cell size from constant
+## coordinate 2 possibly taken from other coordinate</code></pre>
+<pre><code>## [inverse distance weighted interpolation]</code></pre>
+<pre><code>## Warning in colors(.): Some values were outside the color scale and will be
+## treated as NA</code></pre>
+<pre><code>## Warning in points2grid(points, tolerance, round): cell size from constant
+## coordinate 2 possibly taken from other coordinate</code></pre>
+<pre><code>## [inverse distance weighted interpolation]</code></pre>
+<pre><code>## Warning in colors(.): Some values were outside the color scale and will be
+## treated as NA
+
+## Warning in colors(.): cell size from constant coordinate 2 possibly taken
+## from other coordinate</code></pre>
+<pre><code>## [inverse distance weighted interpolation]</code></pre>
+<pre><code>## Warning in colors(.): Some values were outside the color scale and will be
+## treated as NA</code></pre>
+<pre class="r"><code>sync(maps)</code></pre>
+<div style="display:inline;width:49%;float:left;border-style:solid;border-color:#BEBEBE;border-width:1px 1px 1px 1px;">
+<div id="htmlwidget-5818" style="width:100%;height:400px;" class="leaflet html-widget"></div>
+<script type="application/json" data-for="htmlwidget-5818">{"x":{"options":{"crs":{"crsClass":"L.CRS.EPSG3857","code":null,"proj4def":null,"projectedBounds":null,"options":{}}},"calls":[{"method":"addTiles","args":["//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",null,null,{"minZoom":0,"maxZoom":18,"tileSize":256,"subdomains":"abc","errorTileUrl":"","tms":false,"noWrap":false,"zoomOffset":0,"zoomReverse":false,"opacity":1,"zIndex":1,"detectRetina":false,"attribution":"&copy; <a href=\"http://openstreetmap.org\">OpenStreetMap<\/a> contributors, <a href=\"http://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA<\/a>"}]},{"method":"addProviderTiles","args":["CartoDB.Positron",null,null,{"errorTileUrl":"","noWrap":false,"detectRetina":false}]},{"method":"addLegend","args":[{"colors":["#006837 , #87CB67 24.9999999999894%, #FFFFBF 49.9999999999943%, #F98F52 74.9999999999993%, #A50026 "],"labels":["0.025 mins","0.030 mins","0.035 mins"],"na_color":null,"na_label":"NA","opacity":0.5,"position":"bottomright","type":"numeric","title":"Change in Commute Time","extra":{"p_1":0.249999999999894,"p_n":0.749999999999993},"layerId":null,"className":"info legend","group":null}]},{"method":"addRasterImage","args":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAABCAYAAAD5PA/NAAAAFElEQVQImWNYyqD2/////VD8nwEAYhsMQL4VOs4AAAAASUVORK5CYII=",[[40.769764,-73.958961],[40.767764,-73.950961]],0.5,null,null,null]},{"method":"addMarkers","args":[40.73467,-73.98995,null,null,null,{"interactive":true,"draggable":false,"keyboard":true,"title":"","alt":"","zIndexOffset":0,"opacity":1,"riseOnHover":false,"riseOffset":250},null,null,null,null,null,{"interactive":false,"permanent":false,"direction":"auto","opacity":1,"offset":[0,0],"textsize":"10px","textOnly":false,"className":"","sticky":true},null]}],"setView":[[40.71,-73.87],12,[]],"limits":{"lat":[40.73467,40.769764],"lng":[-73.98995,-73.950961]}},"evals":[],"jsHooks":[]}</script>
+</div>
+<div style="display:inline;width:49%;float:left;border-style:solid;border-color:#BEBEBE;border-width:1px 1px 1px 1px;">
+<div id="htmlwidget-7919" style="width:100%;height:400px;" class="leaflet html-widget"></div>
+<script type="application/json" data-for="htmlwidget-7919">{"x":{"options":{"crs":{"crsClass":"L.CRS.EPSG3857","code":null,"proj4def":null,"projectedBounds":null,"options":{}}},"calls":[{"method":"addTiles","args":["//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",null,null,{"minZoom":0,"maxZoom":18,"tileSize":256,"subdomains":"abc","errorTileUrl":"","tms":false,"noWrap":false,"zoomOffset":0,"zoomReverse":false,"opacity":1,"zIndex":1,"detectRetina":false,"attribution":"&copy; <a href=\"http://openstreetmap.org\">OpenStreetMap<\/a> contributors, <a href=\"http://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA<\/a>"}]},{"method":"addProviderTiles","args":["CartoDB.Positron",null,null,{"errorTileUrl":"","noWrap":false,"detectRetina":false}]},{"method":"addLegend","args":[{"colors":["#006837 , #006837 0%, #66BD63 19.9999999999964%, #D9EF8B 40.0000000000018%, #FEE08B 59.9999999999982%, #F46D43 80.0000000000036%, #A50026 100%, #A50026 "],"labels":["-5.470 mins","-5.468 mins","-5.466 mins","-5.464 mins","-5.462 mins","-5.460 mins"],"na_color":null,"na_label":"NA","opacity":0.5,"position":"bottomright","type":"numeric","title":"Change in Commute Time","extra":{"p_1":0,"p_n":1},"layerId":null,"className":"info legend","group":null}]},{"method":"addRasterImage","args":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAABCAYAAAD5PA/NAAAAFElEQVQImWNkyDD/zwAF/6efYAQAHYED/x6D0uYAAAAASUVORK5CYII=",[[40.769764,-73.958961],[40.767764,-73.950961]],0.5,null,null,null]},{"method":"addMarkers","args":[40.73467,-73.98995,null,null,null,{"interactive":true,"draggable":false,"keyboard":true,"title":"","alt":"","zIndexOffset":0,"opacity":1,"riseOnHover":false,"riseOffset":250},null,null,null,null,null,{"interactive":false,"permanent":false,"direction":"auto","opacity":1,"offset":[0,0],"textsize":"10px","textOnly":false,"className":"","sticky":true},null]}],"setView":[[40.71,-73.87],12,[]],"limits":{"lat":[40.73467,40.769764],"lng":[-73.98995,-73.950961]}},"evals":[],"jsHooks":[]}</script>
+</div>
+<div style="display:inline;width:49%;float:left;border-style:solid;border-color:#BEBEBE;border-width:1px 1px 1px 1px;">
+<div id="htmlwidget-4576" style="width:100%;height:400px;" class="leaflet html-widget"></div>
+<script type="application/json" data-for="htmlwidget-4576">{"x":{"options":{"crs":{"crsClass":"L.CRS.EPSG3857","code":null,"proj4def":null,"projectedBounds":null,"options":{}}},"calls":[{"method":"addTiles","args":["//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",null,null,{"minZoom":0,"maxZoom":18,"tileSize":256,"subdomains":"abc","errorTileUrl":"","tms":false,"noWrap":false,"zoomOffset":0,"zoomReverse":false,"opacity":1,"zIndex":1,"detectRetina":false,"attribution":"&copy; <a href=\"http://openstreetmap.org\">OpenStreetMap<\/a> contributors, <a href=\"http://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA<\/a>"}]},{"method":"addProviderTiles","args":["CartoDB.Positron",null,null,{"errorTileUrl":"","noWrap":false,"detectRetina":false}]},{"method":"addLegend","args":[{"colors":["#006837 , #006837 0%, #51B15D 16.6666666666662%, #B7E075 33.3333333333323%, #FFFFBF 50.0000000000015%, #FEBF6F 66.6666666666677%, #EB5B39 83.3333333333338%, #A50026 100%, #A50026 "],"labels":["5.480 mins","5.485 mins","5.490 mins","5.495 mins","5.500 mins","5.505 mins","5.510 mins"],"na_color":null,"na_label":"NA","opacity":0.5,"position":"bottomright","type":"numeric","title":"Change in Commute Time","extra":{"p_1":0,"p_n":1},"layerId":null,"className":"info legend","group":null}]},{"method":"addRasterImage","args":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAABCAYAAAD5PA/NAAAAGklEQVQImWNYyqD2/9/+/P//9uf/////PwMAWIcLHjqH+fkAAAAASUVORK5CYII=",[[40.769764,-73.958961],[40.767764,-73.950961]],0.5,null,null,null]},{"method":"addMarkers","args":[40.73467,-73.98995,null,null,null,{"interactive":true,"draggable":false,"keyboard":true,"title":"","alt":"","zIndexOffset":0,"opacity":1,"riseOnHover":false,"riseOffset":250},null,null,null,null,null,{"interactive":false,"permanent":false,"direction":"auto","opacity":1,"offset":[0,0],"textsize":"10px","textOnly":false,"className":"","sticky":true},null]}],"setView":[[40.71,-73.87],12,[]],"limits":{"lat":[40.73467,40.769764],"lng":[-73.98995,-73.950961]}},"evals":[],"jsHooks":[]}</script>
+</div>
+<script>
+HTMLWidgets.addPostRenderHandler(function() {
+var leaf_widgets = {};
+                Array.prototype.map.call(
+                 document.querySelectorAll(".leaflet"),
+                   function(ldiv){
+                     if (HTMLWidgets.find("#" + ldiv.id) && HTMLWidgets.find("#" + ldiv.id).getMap()) {
+                        leaf_widgets[ldiv.id] = HTMLWidgets.find("#" + ldiv.id).getMap();
+                     }
+                   }
+                );
+               
+
+leaf_widgets['htmlwidget-7919'].sync(leaf_widgets['htmlwidget-5818'],{syncCursor: true, noInitialSync: true});
+leaf_widgets['htmlwidget-4576'].sync(leaf_widgets['htmlwidget-5818'],{syncCursor: true, noInitialSync: true});
+leaf_widgets['htmlwidget-5818'].sync(leaf_widgets['htmlwidget-7919'],{syncCursor: true, noInitialSync: true});
+
+leaf_widgets['htmlwidget-4576'].sync(leaf_widgets['htmlwidget-7919'],{syncCursor: true, noInitialSync: true});
+leaf_widgets['htmlwidget-5818'].sync(leaf_widgets['htmlwidget-4576'],{syncCursor: true, noInitialSync: true});
+leaf_widgets['htmlwidget-7919'].sync(leaf_widgets['htmlwidget-4576'],{syncCursor: true, noInitialSync: true});
+
+});
+</script>
 </div>
 </div>
 
