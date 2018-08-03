@@ -5,15 +5,12 @@ setwd(here::here())
 library(igraph)
 library(leaflet)
 library(RColorBrewer)
-library(geosphere)
 library(sp)
 library(maptools)
 library(broom)
 library(httr)
 library(rgdal)
 library(ggmap)
-library(gstat)
-library(raster)
 library(mapview)
 library(tidyverse)
 
@@ -21,7 +18,7 @@ library(tidyverse)
 
 #### Load data
 stops <- read_csv('data/google_transit_subway_static/stops.txt')
-stops <- stops %>% select(stop_id, stop_lat, stop_lon, stop_name)
+stops <- stops %>% dplyr::select(stop_id, stop_lat, stop_lon, stop_name)
 
 routes <- read_csv('data/google_transit_subway_static/routes.txt')
 routes$route_color <- replace_na(routes$route_color, "6D6E71") 
@@ -37,21 +34,32 @@ stops_names <- stops %>%
 
 source('src/path_finding.R')
 load('data/igraph_edges.rdata')
+load('data/wait_times_rush_hour.rdata')
 
 r <- GET('http://data.beta.nyc//dataset/0ff93d2d-90ba-457c-9f7e-39e47bf2ac5f/resource/35dd04fb-81b3-479b-a074-a27a37888ce7/download/d085e2f8d0b54d4590b1e7d1f35594c1pediacitiesnycneighborhoods.geojson')
 nyc_neighborhoods <- readOGR(content(r,'text'), 'OGRGeoJSON', verbose = F)
 
 
+
 ### GET GRAPHS
 #### with L
 igraph_edges <- mutate(igraph_edges, 'weight'=`90%`)
+igraph_edges$weight <- as.numeric(igraph_edges$weight)
 graph <- graph.data.frame(igraph_edges)
 
 
 #### without L
+l <- c("L01", "L02", "L03", "L05", "L06", "L08")
 no_l_edges <- igraph_edges %>%
-  filter(route_id != "L")
+  filter((!stop_id %in% l) & (!nxt_stop_id %in% l))
 l_graph <-graph.data.frame(no_l_edges)
+
+
+#### without 2nd Ave
+second_ave <- c("Q03", "Q04", "Q05")
+no_q_edges <- igraph_edges %>%
+  filter((!stop_id %in% second_ave) & (!nxt_stop_id %in% second_ave))
+q_graph <-graph.data.frame(no_q_edges)
 
 
 #### settings
@@ -120,7 +128,6 @@ get_map_data <- function(itinerary) {
 }
 
 
-
 #### layered map function
 map_an_itinerary <- function(home, start, itinerary) {
   
@@ -128,8 +135,8 @@ map_an_itinerary <- function(home, start, itinerary) {
   # start/stop marker colors
   green <- "#468504"
   red <- "#cf3400"
-  stop_rad <- 5
-  line_weight <- 3
+  stop_rad <- 6
+  line_weight <- 4
   
   map_df <- get_map_data(itinerary) %>%
     mutate(line = str_replace_all(line, "_", " "),
@@ -142,10 +149,11 @@ map_an_itinerary <- function(home, start, itinerary) {
   
   map <- leaflet() %>%
     addTiles() %>%
-    setView(median(map_df$stop_lon), median(map_df$stop_lat), zoom = 12) %>%
+    setView(mean(map_df$stop_lon), mean(map_df$stop_lat), zoom = 12.5) %>%
     addProviderTiles("CartoDB.Positron")
   
-  for (i in 1:num_layers) {
+  # change to 1:num_layers it we want to see all itineraries
+  for (i in 1:1) {
     df <- map_df %>% filter(itinerary_id==i)
     
     # df %>% View
@@ -160,6 +168,7 @@ map_an_itinerary <- function(home, start, itinerary) {
       addCircleMarkers(lat = home$lat[i], lng = home$lon[i], color = green, radius = 8, opacity = 0.9,
                        popup = paste("<b>", "start location", "</b>", "<br/>",
                                      home$lat[i], home$lon[i]),
+                       popupOptions = popupOptions(noHide = T),
                        group = as.character(i)) %>%
       # add walk to first station
       addPolylines(lat = c(home$lat[i], df$stop_lat[nrow(df)]),
@@ -167,12 +176,14 @@ map_an_itinerary <- function(home, start, itinerary) {
                    dashArray = c(8),
                    color = black, weight = line_weight,
                    popup = paste("<b>", "walk", "</b>", "<br/>", start$walking_mins[i], "mins"),
+                   popupOptions = popupOptions(noHide = T, direction = "right"),
                    group = as.character(i)) %>%
       # add end marker
       addCircleMarkers(lat = df$stop_lat[1], lng = df$stop_lon[1], color = red, radius = 8, opacity = 0.9,
                        popup = paste("<b>", "end location", "</b>", "<br/>",
                                      df$stop_name[1], "<br/>",
                                      "<b>", "total commute:", "</b>", start$total_time_mins[i], "mins"),
+                       popupOptions = popupOptions(noHide = T),
                        group = as.character(i))
     
     for (j in 1:nrow(df)) {
@@ -203,19 +214,19 @@ map_an_itinerary <- function(home, start, itinerary) {
     }
     
   }
-  
-  map <- map %>%
-    addLayersControl(overlayGroups = as.character(seq(1:num_layers)),
-                     options = layersControlOptions(collapsed = FALSE))
+  # uncomment to see all itineraries
+  # map <- map %>%
+  #   addLayersControl(overlayGroups = as.character(seq(1:num_layers)),
+  #                    options = layersControlOptions(collapsed = FALSE))
   return(map)
 }
 
 
 
 
-
 #### put it all together
-get_map_with_walking <- function(home, dest, igraph) {
+# gets all shortest paths, finds `n_stops` stations nearest to home lat/lon
+get_itin_with_walking <- function(home, dest, igraph) {
   map_data <- get.all.shortest.paths(igraph, dest,  mode = "out")
   
   map_data <- map_data$res %>% 
@@ -230,6 +241,11 @@ get_map_with_walking <- function(home, dest, igraph) {
   
   names(map_data) <- c("stop_id", "distance", "path", "stop_lat", "stop_lon", "stop_name")
   
+  
+  map_data <- map_data %>% 
+    left_join(wait_times_filter, by = c("stop_id" = "stop_mta_id")) %>% 
+    mutate(distance = distance + wait_time_90)
+  
   map_data <- map_data %>%
     mutate(subway_mins = round(distance/60, 2))
   
@@ -241,7 +257,7 @@ get_map_with_walking <- function(home, dest, igraph) {
            total_time_mins = round(total_time/60, 2)) 
   
   # consider n_stops stops near home that lead to the smallest total time
-  n_stops <- 3
+  n_stops <- 1
   start <- result %>% arrange(total_time_mins) %>% head(n_stops)
   # start %>% View
   
@@ -263,3 +279,9 @@ get_map_with_walking <- function(home, dest, igraph) {
 }
 
 
+
+####### DEMO #######
+
+# map_with <- get_map_with_walking(home, dest, graph)
+# map_without <- get_map_with_walking(home, dest, l_graph)
+# sync(map_with, map_without)
