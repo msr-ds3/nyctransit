@@ -26,7 +26,8 @@ do
 
     if [[ "taxi.png" =~ .*\.png ]];
     then
-        echo "**Preview** | ![]($f) "
+        # echo "**Preview** | ![]($f) "
+        echo "<img src=\"$f\" width=\"256\" height=256/>"
     fi
     fi
 
