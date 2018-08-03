@@ -5,4 +5,4 @@
 .Rproj.user
 .RData
 cache
-.rdata
+*.rdata

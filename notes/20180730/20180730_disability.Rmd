@@ -1,0 +1,325 @@
+---
+title: "Maps"
+author: "Sasha, Ayliana, Taxi"
+date: "July 27, 2018"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#### Load libraries
+```{r warning=FALSE, message=FALSE}
+library(igraph)
+library(leaflet)
+library(RColorBrewer)
+library(geosphere)
+library(sp)
+library(maptools)
+library(broom)
+library(httr)
+library(rgdal)
+library(ggmap)
+library(KernSmooth)
+library(ggplot2)
+library(gstat)
+library(raster)
+library(mapview)
+library(tidyverse)
+```
+
+#### Load data
+```{r load-data, message= FALSE}
+stops <- read_csv('../../data/google_transit_subway_static/stops.txt') %>% 
+  select(stop_id, stop_lat, stop_lon, stop_name)
+
+routes <- read_csv('../../data/google_transit_subway_static/routes.txt') %>% 
+  mutate(route_color = replace_na(route_color, '000000'), route_color = sprintf("#%s", route_color))
+
+load('../../data/igraph_edges.rdata')
+
+accessible_stations <- read_csv('../../data/accessible_stations.csv') [[1]]
+
+r <- GET('http://data.beta.nyc//dataset/0ff93d2d-90ba-457c-9f7e-39e47bf2ac5f/resource/35dd04fb-81b3-479b-a074-a27a37888ce7/download/d085e2f8d0b54d4590b1e7d1f35594c1pediacitiesnycneighborhoods.geojson')
+nyc_neighborhoods <- readOGR(content(r,'text'), 'OGRGeoJSON', verbose = F)
+
+stations <- read_csv('http://web.mta.info/developers/data/nyct/subway/Stations.csv')
+source('../../src/path_finding.R')
+source('disability.r')
+load('./heatmap_summary')
+```
+
+
+### GET GRAPHS
+```{r}
+graph_50 <- mutate(igraph_edges, weight = `50%`) %>% graph.data.frame()
+
+graph_90 <- mutate(igraph_edges, weight =`90%`) %>% graph.data.frame()
+
+graph_mean <- mutate(igraph_edges, weight = mean) %>% graph.data.frame()
+```
+
+
+#### **need this for heatmap**
+#### make a grid of points over nyc
+```{r}
+grid <- create_grid(stops$stop_lat, stops$stop_lon,nyc_neighborhoods)
+```
+
+
+#### make station2station and point2station distance data for accessible stations only
+```{r regular}
+dest = 'A31'
+manual_wheelchair_speed = 15
+station2station_90_accessible <- distance_station2station(graph_90,stops, dest, src = accessible_stations)
+station2station_50_accessible <- distance_station2station(graph_50,stops, dest, src = accessible_stations)
+station2station_mean_accessible <- distance_station2station(graph_mean,stops, dest, src = accessible_stations)
+
+point2station_90_accessible <- distance_point2station(station2station_90_accessible, grid, manual_wheelchair_speed)
+point2station_50_accessible <- distance_point2station(station2station_50_accessible, grid, manual_wheelchair_speed)
+point2station_mean_accessible <- distance_point2station(station2station_mean_accessible, grid, manual_wheelchair_speed)
+```
+
+#### make station2station and point2station distance data for all stations
+```{r regular}
+station2station_90_all <- distance_station2station(graph_90,stops, dest)
+station2station_50_all <- distance_station2station(graph_50,stops, dest)
+station2station_mean_all <- distance_station2station(graph_mean,stops, dest)
+
+point2station_90_all <- distance_point2station(station2station_90_all, grid)
+point2station_50_all <- distance_point2station(station2station_50_all, grid)
+point2station_mean_all <- distance_point2station(station2station_mean_all, grid)
+```
+
+#### make station2station and point2station distance data for all stations except for l train stations
+```{r regular}
+all_stops <- stations %>% pull('GTFS Stop ID')
+graph_stops <- V(graph_90) %>% names()
+diff <- graph_stops[!graph_stops %in% all_stops]
+stops_without_l <- stations %>% filter(`Daytime Routes` != "L") %>% pull('GTFS Stop ID')
+stops_without_l <- c(diff, stops_without_l[stops_without_l %in% graph_stops])
+
+station2station_90_l <- distance_station2station(graph_90,stops, dest, stops_without_l)
+station2station_50_l <- distance_station2station(graph_50,stops, dest, stops_without_l)
+station2station_mean_l <- distance_station2station(graph_mean,stops, dest, stops_without_l)
+
+point2station_90_l <- distance_point2station(station2station_90_l, grid)
+point2station_50_l <- distance_point2station(station2station_50_l, grid)
+point2station_mean_l <- distance_point2station(station2station_mean_l, grid)
+```
+
+#### maps with mean
+```{r regular}
+
+map_mean_accessible <- alternative_map(point2station_mean_accessible, dest, stops)
+map_mean_all <- alternative_map(point2station_mean_all, dest,stops, paletteSource = point2station_mean_accessible)
+map_mean_l <- alternative_map(point2station_mean_l, dest, stops, paletteSource = point2station_mean_accessible)
+
+sync(map_mean_accessible, map_mean_all, map_mean_l)
+point2station_mean_accessible_filtered <- point2station_mean_accessible %>% filter(total_time_mins < 120)
+point2station_mean_all_filtered <- point2station_mean_all %>% filter(total_time_mins < 120)
+point2station_mean_l_filtered <- point2station_mean_l %>% filter(total_time_mins < 120)
+
+map_mean_accessible_filtered <- point2station_mean_accessible_filtered %>% 
+  alternative_map(dest, stops)
+map_mean_all_filtered <- point2station_mean_all_filtered %>% 
+  alternative_map(dest, stops, paletteSource = point2station_mean_accessible_filtered)
+map_mean_l_filtered <- point2station_mean_l_filtered %>%
+  alternative_map(dest, stops, paletteSource = point2station_mean_accessible_filtered)
+
+sync(map_mean_accessible_filtered, map_mean_all_filtered)
+mapview::mapshot(map_mean_accessible_filtered, file = 'heatmap_accessible_filtered.png')
+mapview::mapshot(map_mean_all_filtered, file = 'heatmap_regular_filtered.png')
+#loop through all point and find the worst ones
+```
+
+#### diff
+```{r}
+diff_map(point2station_mean_accessible, point2station_mean_all,dest = dest, stops = stops, max = 40)
+```
+
+#### check stops with disability
+```{r}
+accessible_summary <- tibble()
+for (dest in accessible_stations){
+  temp <- distance_station2station(graph_mean, stops, dest, accessible_stations) %>% distance_point2station(grid,speed = 15)%>% 
+    mutate(dest = dest) 
+  accessible_summary<-bind_rows(accessible_summary, temp) 
+}
+
+all_summary <- tibble()
+i <-1
+for (dest in accessible_stations){
+  print(i)
+  i<-i+1
+  temp <- distance_station2station(graph_mean, stops, dest) %>% distance_point2station(grid)%>% 
+    mutate(dest = dest) 
+  all_summary<-bind_rows(all_summary, temp) 
+}
+save(accessible_summary, all_summary, file = 'heatmap_summary')
+```
+
+```{r}
+
+diff_summary <- left_join(accessible_summary, all_summary, by= c('lat','lon','dest')) %>% mutate(diff = total_time_mins.y -total_time_mins.x) %>% select(lon, lat, dest, diff) %>% group_by(dest) %>% summarize(avg = mean(diff), worst = max(diff), best = min(diff)) %>% arrange(avg)
+
+best <- last(diff_summary$dest)
+worst <- first(diff_summary$dest)
+median <- diff_summary[nrow(diff_summary)/2, 'dest'][[1]]
+q1 <- diff_summary[floor(nrow(diff_summary)*.25),'dest'][[1]]
+q3 <- diff_summary[floor(nrow(diff_summary)*.75), 'dest'][[1]]
+
+
+
+worst_point2station_accessible <- get_point2station(graph_90, stops, worst, src = accessible_stations, grid, speed = 15)
+worst_point2station_all <- get_point2station(graph_90, stops, worst, grid = grid)
+
+worst_point2station_accessible_filtered <- worst_point2station_accessible %>% filter(total_time_mins < 120)
+worst_point2station_all_filtered <- worst_point2station_all %>% filter(total_time_mins <120) 
+
+worst_map_accessible <- alternative_map(worst_point2station_accessible, worst, stops)
+worst_map_all <- alternative_map(worst_point2station_all, worst, stops, paletteSource =  worst_point2station_accessible)
+worst_diff_map <- diff_map(worst_point2station_accessible, worst_point2station_all, worst, stops)
+
+worst_map_accessible_filtered <- alternative_map(worst_point2station_accessible_filtered, worst, stops)
+worst_map_all_filtered <- alternative_map(worst_point2station_all_filtered, worst, stops, paletteSource =  worst_point2station_accessible_filtered)
+
+
+q3_point2station_accessible <- get_point2station(graph_90, stops, q3, src = accessible_stations, grid, speed = 15)
+q3_point2station_all <- get_point2station(graph_90, stops, q3, grid = grid)
+
+q3_point2station_accessible_filtered <- q3_point2station_accessible %>% filter(total_time_mins < 120)
+q3_point2station_all_filtered <- q3_point2station_all %>% filter(total_time_mins <120) 
+
+q3_map_accessible <- alternative_map(q3_point2station_accessible, q3, stops)
+q3_map_all <- alternative_map(q3_point2station_all, q3, stops, paletteSource =  q3_point2station_accessible)
+q3_diff_map <- diff_map(q3_point2station_accessible, q3_point2station_all, q3, stops)
+
+q3_map_accessible_filtered <- alternative_map(q3_point2station_accessible_filtered, q3, stops)
+q3_map_all_filtered <- alternative_map(q3_point2station_all_filtered, q3, stops, paletteSource =  q3_point2station_accessible_filtered)
+```
+
+
+
+```{r}
+get_point2station <- function(graph, stops, dest, src = V(graph), grid, speed = 12)
+{
+  distance_station2station(graph,stops, dest, src) %>%distance_point2station(grid, speed = speed)
+}
+```
+```{r}
+acc_s <- accessible_summary %>% group_by(dest) %>% summarize(ac_m = mean(total_time_mins), ac_s = sum(total_time_mins))
+all_s <-all_summary %>% group_by(dest) %>% summarize(al_m = mean(total_time_mins), al_s = sum(total_time_mins))
+left_join(acc_s, all_s, by = 'dest') %>% mutate(m_diff = ac_m - al_m, s_diff = ac_s - al_s, m_ratio = m_diff/al_m) %>% View
+```
+#### Visualize 90th percentile & median commutes to 137S (Chambers Street)
+```{r}
+dest <- "A31"
+static_info_accessible <- get_heatmap_static_info(dest, graph_90, src = accessible_stations)
+grid_info_accessible <- get_heatmap_grid_info(static_info_accessible, grid)
+
+grid_info_accessible_manual <- get_heatmap_grid_info(static_info_accessible, grid, speed = 15)
+
+
+# use the same color palette as above
+static_info_full <- get_heatmap_static_info(dest, graph_90)
+grid_info_full <- get_heatmap_grid_info(static_info_full, grid)
+
+pal_full <- get_palette(grid_info_full)
+
+map_full <- get_commute_heatmap(dest, static_info_full, grid_info_full, pal_full)
+map_accessible <- get_commute_heatmap(dest, static_info_accessible, grid_info_accessible, pal_full)
+map_accessible_manual <- get_commute_heatmap(dest, static_info_accessible, grid_info_accessible_manual, pal_full)
+sync(map_accessible, map_full, map_accessible_manual)
+
+```
+```{r}
+
+alternative_map <- function(map_data, palette = NULL, paletteSource = map_data){
+  
+  if(is.null(palette)){
+    clrs <- brewer.pal(11, "RdYlGn")
+  
+    palette <- colorNumeric(
+      palette = clrs,
+      domain = sqrt(paletteSource$total_time_mins),
+      reverse = TRUE,
+      na.color = "transparent")
+  }
+  map_data <- arrange(map_data, desc(total_time_mins))
+  
+  leaflet(nyc_neighborhoods) %>%
+    addTiles() %>%
+    addProviderTiles("CartoDB.Positron") %>%
+    setView(-73.98, 40.75, zoom = 10) %>%
+    addLegend("bottomright", pal = palette,
+              title = paste("commute time to", dest), value = sqrt(paletteSource$total_time_mins),
+              labFormat = labelFormat(suffix = " mins", transform = function(x) x*x),
+              opacity = 1) %>%
+  addCircleMarkers(lng = map_data$lon, lat = map_data$lat, opacity = 1, fillOpacity = 1,
+                   color =palette(sqrt(map_data$total_time_mins))) %>% 
+    htmlwidgets::onRender(
+    'function(el, x){
+      overlay = el.querySelector(".leaflet-overlay-pane")
+      overlay.style.opacity = ".6"
+    }'
+  )
+}
+
+
+giamf <- grid_info_accessible_manual %>% filter(total_time_mins < 120)
+giff <- grid_info_full %>% filter(total_time_mins < 120)
+clrs <- brewer.pal(11, "RdYlGn")
+  
+grid_pal <- colorNumeric(
+  palette = clrs,
+  domain = sqrt(giamf$total_time_mins),
+  reverse = TRUE,
+  na.color = "transparent")
+
+sync(alternative_map(giamf, grid_pal),alternative_map(giff, grid_pal,giamf))
+```
+
+```{r}
+grid_info_diff_time <- grid_info_accessible$total_time_mins - grid_info_full$total_time_mins
+grid_info_diff <- select(grid_info_accessible, lat, lon)
+grid_info_diff$total_time_mins <- grid_info_diff_time
+grid_info_diff <-  grid_info_diff
+alternative_map(grid_info_diff)
+```
+```{r}
+grid_info_accessible_filtered <- grid_info_accessible %>% filter(walking_mins <= 20) 
+grid_info_full_filtered <- grid_info_full %>% filter(walking_mins <= 20) 
+
+
+clrs <- brewer.pal(11, "RdYlGn")
+  
+grid_pal <- colorNumeric(
+  palette = clrs,
+  domain = sqrt(grid_info_full_filtered$total_time_mins),
+  reverse = TRUE,
+  na.color = "transparent")
+
+sync(alternative_map(grid_info_accessible_filtered, grid_pal, grid_info_full_filtered),alternative_map(grid_info_full_filtered, grid_pal))
+```
+
+```{r}
+giafo <- grid_info_accessible %>% filter( total_time_mins < quantile(total_time_mins,.75))
+
+giffo <- grid_info_full %>% filter(total_time_mins < quantile(total_time_mins,.75))
+
+
+clrs <- brewer.pal(11, "RdYlGn")
+  
+grid_pal <- colorNumeric(
+  palette = clrs,
+  domain = sqrt(giffo$total_time_mins),
+  reverse = TRUE,
+  na.color = "transparent")
+
+sync(alternative_map(giafo, grid_pal, giffo),alternative_map(giffo, grid_pal))
+alternative_map(giafo, grid_pal, giffo)
+```

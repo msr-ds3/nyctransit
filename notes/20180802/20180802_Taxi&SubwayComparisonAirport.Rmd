@@ -1,0 +1,251 @@
+---
+author: "Peter Farquharson"
+title: "20180730_Taxi_Six_Month"
+output: html_document
+---
+
+```{r setup, ""}
+
+
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+library(ggthemes)
+library(zoo)
+
+load("../../data/todd_subway_realtime.RData")
+load("../../data/taxi_data_2015_01-06-lite_clean.Rdata")
+stops <- read_csv("../../data/google_transit_subway_static/stops.txt")
+stop_data <- read_csv("http://web.mta.info/developers/data/nyct/subway/Stations.csv")
+
+source("../../src/path_finding.R")
+load("../../data/at_igraph_edges.rdata")
+at_igraph_edges <- at_igraph_edges %>% mutate(weight = as.numeric(mean))
+graph <- graph.data.frame(at_igraph_edges)
+
+source("../../src/itinerary_evaluation.R")
+
+
+```
+
+
+```{r improved_distance}
+
+filter_trips_with_airport <- function(taxi_df, from_stop, to_stop, threshold, day_filter, hour_filter, cos_adjust){
+  
+  if(from_stop == "JFK"){from_stop <- "John F. Kennedy International Airport"}
+  if(to_stop == "JFK"){to_stop <- "John F. Kennedy International Airport"}
+  if(from_stop == "LGA"){from_stop <- "LaGuardia Airport"}
+  if(to_stop == "LGA"){to_stop <- "LaGuardia Airport"}
+  
+  filtered_trips <- taxi_df %>% 
+    filter(wday(pickup_datetime) %in% day_filter, hour(pickup_datetime) %in% hour_filter)
+  
+  if(from_stop == "John F. Kennedy International Airport" | from_stop == "LaGuardia Airport"){
+    filtered_trips <- filtered_trips %>% filter(pickup_neighborhood == from_stop)
+  }
+  else{
+    from_coords <- stop_data %>% filter(`GTFS Stop ID` == from_stop) %>% select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, lng = `GTFS Longitude`)
+    filtered_trips <- filtered_trips %>%
+      mutate(distance_source = 110.25 * sqrt(((from_coords[['lat']] - pickup_latitude)*cos_adjust)^2 + ((from_coords[['lng']] - pickup_longitude)*cos_adjust)^2)) %>%
+      filter(distance_source < threshold)
+  }
+  if(to_stop == "John F. Kennedy International Airport" | to_stop == "LaGuardia Airport"){
+    filtered_trips <- filtered_trips %>% filter(dropoff_neighborhood == to_stop)
+  }
+  else{
+    to_coords <- stop_data %>% filter(`GTFS Stop ID` == to_stop) %>% select(stop_id = `GTFS Stop ID`, stop_name = `Stop Name`, lat = `GTFS Latitude`, lng = `GTFS Longitude`)
+    filtered_trips <- filtered_trips %>% 
+      mutate(distance_dest = 110.25 * sqrt(((to_coords[['lat']] - dropoff_latitude)*cos_adjust)^2 + ((to_coords[['lng']] - dropoff_longitude)*cos_adjust)^2)) %>%
+      filter(distance_dest < threshold)
+  }
+  return(filtered_trips)
+}
+
+```
+
+
+```{r , "Function for taxi and subway"}
+
+TaxixSubway<- function(start_id, stop_id, plot_name, days = 2:6 ,hours = 7:22, subway_color= NA, xlimits = NA){
+
+  air_train_time <- 0
+
+  const_cos_adjust <- cos((median(rbind(taxi_clean_lite$pickup_latitude, taxi_clean_lite$dropoff_latitude)) * pi)/ 180)
+
+  df1 <- filter_trips_with_airport(taxi_clean_lite, start_id, stop_id, .33, days, hours, const_cos_adjust)
+  df1$trip <- "Taxi"
+
+  df1$trip_time_in_min <- df1$trip_time_in_sec/60
+    df1$label <- " Taxi"
+    
+    
+ if(start_id == "JFK"){
+    subway_start_id <-"G06"
+    air_train_time <- air_train_time + 480
+  }else{
+    subway_start_id <- start_id
+  }
+  if(stop_id == "JFK"){
+    subway_stop_id <-"G06"
+    air_train_time <- air_train_time + 480
+  }else{
+      subway_stop_id <- stop_id
+    }
+    
+  generated <- get_itinerary(graph, subway_start_id, subway_stop_id, 1,stops = stops,  map = at_igraph_edges_map) %>% filter(event != "travel", itinerary_id < 4)
+
+ # all_itin_df <- compute_all_itins(generated, realtime) %>% mutate(trip_time_in_min = time_diff) #%>% filter(time_diff != 0)
+  
+  all_itin_df <- compute_all_itins(generated, realtime) %>% mutate(trip_time_in_min = time_diff + air_train_time/60) %>% filter(time_diff!= expected_wait)
+
+  all_itin_df$trip <- "Subway"
+
+
+  plot_df1 <- df1 %>% 
+    select(trip_time_in_min, trip, label)
+
+  ninth_quantile <- quantile(plot_df1$trip_time_in_min, 0.95)
+  
+  plot_all_itin_df <- all_itin_df %>%
+  select(trip_time_in_min, trip, label)
+  
+  routes <- read_csv('../../data/google_transit_subway_static/routes.txt') 
+  routes$route_color <- replace_na(routes$route_color, "6D6E71") 
+  routes <- routes %>% mutate(route_color = sprintf("#%s", route_color))
+ 
+  line_color <- routes %>% group_by(route_color) %>% distinct(route_short_name, route_color) %>% arrange(route_color)
+  hex_color <- data.frame(route_color= c(unique(line_color$route_color)),
+                          color_name= c("dark green","green", "blue","light green", "dark gray", "brown", "light gray", "purple", "red",  "yellow"  ,"orange" ))
+ 
+  route_color_dict <- left_join(line_color, hex_color)
+
+#substr(row.names(data),1,1)
+  fused_df <-rbind(plot_df1, plot_all_itin_df) %>% mutate(label = gsub("=>","\n",label))
+  
+  subway_line <- substr(unique(fused_df$label), 1, 1)[2]
+  
+  if(is.na(subway_color)){
+    subway_color <- route_color_dict[[which(route_color_dict$route_short_name == subway_line),         "route_color"]]
+  }
+  subway_color <- route_color_dict[[which(route_color_dict$route_short_name == subway_line),         "route_color"]]
+  plot_colors <- c("#F7B731", subway_color)
+  
+  plot <- fused_df %>% ggplot() + ggtitle(plot_name) + geom_density(aes(x = trip_time_in_min, fill = label, color= label),alpha = 0.5) + theme(legend.position = "bottom") + scale_fill_manual(values = plot_colors) + scale_color_manual(values = plot_colors) + xlab("Trip Time") + ylab("Proportion of trips")
+  
+  if(!is.na(xlimits)){
+    plot <- plot + xlim(xlimit)
+  }else{plot<- plot + xlim(0, ninth_quantile)}
+  
+  return(plot)
+}
+
+```
+
+```{r , }
+
+fplot <- TaxixSubway("F12", "JFK", "53rd/5ave to JFK(Weekdays 7am-10pm)")
+fplot
+ggsave(fplot, file = "../../figures/53rdtoJFK_allday.png", width = 4, height = 4)
+
+#plot_b<- TaxixSubway("120", "127", "96th to Times Square(Weekdays 9am-3pm)", hours = 9:15)
+#plot_b
+#ggsave(plot_b, file = "../../figures/96thSttoTimesSq.png", width = 4, height = 4) 
+
+
+
+fplot1 <- TaxixSubway("F12", "JFK", "53rd/5ave to JFK(Weekdays 7am-10am)", hours = 7:10)
+fplot1
+ggsave(fplot1, file = "../../figures/53rdtoJFK_am.png", width = 4, height = 4)
+
+
+fplot2 <- TaxixSubway("F12", "JFK", "53rd/5ave to JFK(Weekdays 4pm-6pm)", hours = 16:18)
+fplot2
+ggsave(fplot2, file = "../../figures/53rdtoJFK_rush.png", width = 4, height = 4)
+
+fplot3 <- TaxixSubway("F12", "JFK", "53rd/5ave to JFK(Weekdays 6pm- 11pm)", hours = 18:23)
+fplot3
+ggsave(fplot3, file = "../../figures/53rdtoJFK_pm.png", width = 4, height = 4)
+
+
+
+```
+
+
+
+
+
+```{r plotting_trips_of_interest}
+plotte <-TaxixSubway("120", "123", "96th to 72nd(Weekdays 7am-10pm)")
+plotte
+
+
+fplot <- TaxixSubway("F12", "JFK", "53rd/5ave to JFK(Weekdays 7am-10pm)")
+fplot
+ggsave(fplot, file = "../../figures/53rdtoJFK.png", width = 4, height = 4)
+
+
+#airport check 
+jfk_plot <- TaxixSubway("120", "JFK", "96th to JFK")
+jfk_plot
+
+ggsave(jfk_plot, file = "../../figures/96thSttoJFk.png", width = 4, height = 4) 
+
+#Late Night outer borough : Times Sq to Gun Hill Road
+new_plot <- TaxixSubway("127", "208", "Times Sq to Gun Hill Road(Late Night outer borough, 9pm to 3am)", hours = 21:3)
+new_plot
+ggsave(new_plot, file = "../../figures/TimesSqtoGunHillRoad_9to3am.png", width = 4, height = 4) 
+
+
+#Late Night outer borough: Union Sq to  WakeField 
+plot_a <-TaxixSubway("635", "201", "Union Sq to  WakeField ", hours = 21:3)
+plot_a
+ggsave(plot_a, file = "../../figures/UnionSqtoWakeField_9to3am.png", width = 4, height = 4) 
+
+
+#96th to Times Square
+#West side
+plot_b<- TaxixSubway("120", "127", "96th to Times Square(Weekdays 9am-3pm)", hours = 9:15)
+plot_b
+ggsave(plot_b, file = "../../figures/96thSttoTimesSq.png", width = 4, height = 4) 
+
+#96th to Times Square
+#East side
+plot_j <-TaxixSubway("625", "725", "96th to Times Square (East)")
+plot_j
+ggsave(plot_j, file = "../../figures/96thSttoTimesSq(East).png", width = 4, height = 4) 
+
+#96 to 14th
+#West Side
+plot_c <-TaxixSubway("120", "132", "96th to 14th(Weekdays 7am-10pm)")
+plot_c
+ggsave(plot_c, file = "../../figures/96thStto14th(West).png", width = 4, height = 4) 
+
+#96 to 14th
+#East side
+
+plot_d <-TaxixSubway("625", "635", "96th to 14th (East)")
+plot_d
+ggsave(plot_d, file = "../../figures/96thStto14th(East).png", width = 4, height = 4) 
+
+#West side
+#96 to chambers St
+plot_e <-TaxixSubway("120", "137", "96th to Chambers (West)")
+plot_e
+ggsave(plot_e, file = "../../figures/96thSttoChambers(West).png", width = 4, height = 4) 
+
+#East side
+#96 to chambers
+plot_f <- TaxixSubway("625", "A36", "96th to Chambers (East)")
+plot_f
+ggsave(plot_f, file = "../../figures/96thSttoJFk(East).png", width = 4, height = 4) 
+
+#Port authority to grand central
+plot_g <-TaxixSubway("A27", "631", "Port Authority to Grand Central(Weekdays,Evening rush, 4pm-6pm)", hours = 16:18)
+plot_g
+ggsave(plot_g, file = "../../figures/PortAuthoritytoGrand.png", width = 4, height = 4) 
+
+
+```
