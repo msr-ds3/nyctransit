@@ -48,6 +48,11 @@ stations <- edges %>% left_join(station_data, by = c("stop_id"="stop_id")) %>% s
 
 ```
 ## Manual Trip time function
+- First, specify the line you want to compare (stops and stops.2)
+- Input the line, color, start and end station for both lines
+- the function is filtering for weekday, 7am - 8pm trips
+- Output is all the itinerary of both line 
+- Plot density function will take the output dataframe and create density plot for both lines
 
 ```{r compare two local lines}
 # Helper Function to Determine if Day is Weekend
@@ -78,13 +83,6 @@ compare_locals <- function(local_line,local_line.2,line_color, line_color.2, sta
     arrange(desc(departure_time)) %>%
     mutate(diff =(first(departure_time) - last(departure_time))/60)%>%
     filter(diff != 0)
-  
-  # plot for local line
-  # plot_local <- local_train %>%
-  #   ggplot(aes(x=diff)) + geom_density(alpha = 0.5) +
-  #   xlab('Trip Time') +
-  #   scale_fill_discrete(guide = guide_legend()) +
-  #   theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines'))
 
   # express train
   local_train.2 <- subway_data %>%
@@ -99,12 +97,6 @@ compare_locals <- function(local_line,local_line.2,line_color, line_color.2, sta
     mutate(diff = (first(departure_time) - last(departure_time))/60) %>%
     filter(diff != 0)
   
-  # plot for express train
-  # plot_express <- local_train.2 %>%
-  #   ggplot(aes(x=diff)) + geom_density(alpha = 0.5) +
-  #   xlab('Trip Time') +
-  #   scale_fill_discrete(guide = guide_legend()) +
-  #   theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1.5, 'lines'))
 
   local_train$group <- line_color
   local_train.2$group <- line_color.2
@@ -124,11 +116,8 @@ plot_density <- function(combined_df, plot_colors) {
           legend.key.size = unit(1.5, 'lines'),
           axis.title.y = element_blank(),
           axis.text.y=element_blank(),
-          axis.ticks.y=element_blank()) +
-    #xlim(as.numeric(quantile(combined_df$time_diff, c(0.1, 0.9)))) +
-    scale_fill_manual(guide = guide_legend(), values = plot_colors) + 
-    scale_color_manual(values = plot_colors)
-    # # 
+          axis.ticks.y=element_blank())
+    
    # NOTE: can get intersecting distributions by running the code below 
   # geom_density(alpha = 0.8, position = "identity")
   return(combined_plot)       
@@ -137,20 +126,11 @@ plot_density <- function(combined_df, plot_colors) {
 
 # Compare Red vs Orange line Trip Time from 86th St -> 34th St
 plot_df <- compare_locals ("1", "D","1 Train: 86th St -> 34th St", "B_D Train: 86th St -> 34th St", "121S", "128S", "A20S", "D17S")
-plot_colors <- c("#EE352E","#FF6319")
 
-# Compare Red vs Blue line Trip Time from Times Sq - Canal St
-#plot_df <- compare_locals ("1", "E", "127S", "135S", "A27S", "A34S")
 
-# Compare Red vs yellow line Trip Time from Times Sq - Canal St
-#plot_df <- compare_locals ("1", "R", "Red line", "Yellow Line", "127S", "135S", "R16S", "R23S")
-
-#plot_df %>% group_by(group) %>% summary(diff)
-
-#compare_two_local_line_density_plot <- 
-  plot_density(plot_df,plot_colors)
-
+plot_density(plot_df,plot_colors)
 ggsave(file = '../../figures/compare_two_local_line_density_plot.png', width = 4, height = 4)
+
 ```
 
 ```{r AUC}
