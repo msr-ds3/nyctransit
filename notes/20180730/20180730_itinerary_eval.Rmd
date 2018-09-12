@@ -16,11 +16,12 @@ library(ROCR)
 library(here)
 library(profvis)
 
-source(file = here("src", "itinerary_evaluation.R"))
+source('itinerary_evaluation.R')
 ```
 ```{r load-data}
 load(file = here("data", "todd_subway_realtime.RData"))
 load(file= here("data", "line_color_dict.RData"))
+
 ```
 ```{r route color}
 # routes <- read_csv('../../data/google_transit_subway_static/routes.txt')
@@ -82,12 +83,12 @@ Evaluating Trip Itineraries With Multiple Legs.
 
 ### Red Line vs Orange Line
 
-Looking at trip time distributions between 86 St and 23 St on the Red Line (1, 2, 3) versus the Orange Line (B, D, F, M) 
+Looking at trip time distributions between 86 St and 34 St on the Red Line (1, 2, 3) versus the Orange Line (B, D, F, M) 
 
 #### Gather Red Line Data
 
 ```{r red-line-data}
-red_line_data <- read_csv(here::here("data", "itineraries-Red-Line-96-23-train.csv"))
+red_line_data <- read_csv(here::here("data", "itineraries-Red-Line-86-34-train.csv"))
 
 # filter out event and adding direction to station id
 red_line_cleaned <- red_line_data %>%
@@ -101,7 +102,7 @@ red_line_itins <- compute_all_itins(red_line_cleaned, subway_data)%>%
 #### Gather Orange Line Data
 
 ```{r orange-line-data}
-orange_line_data <- read_csv(here::here("data", "itineraries-Orange-Line-96-23-train.csv"))
+orange_line_data <- read_csv(here::here("data", "itineraries-Orange-Line-86-34-train.csv"))
 
 # filter out event and adding direction to station id
 orange_line_cleaned <- orange_line_data %>%

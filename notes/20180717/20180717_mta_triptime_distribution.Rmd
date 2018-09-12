@@ -121,7 +121,7 @@ plot_local_express <- function(local_line, express_line, start_stop_id, end_stop
 plot_local_express ("1", "2", "120S", "132S")
 
 plot <- plot_local_express ("1", "2", "120S", "132S")
-ggsave(plot = plot, file = here("figures", "local-vs-express-96-14-St.png"), width = 5, height = 4, dpi = 300)
+#ggsave(plot = plot, file = here("figures", "local-vs-express-96-14-St.png"), width = 5, height = 4, dpi = 300)
 ```
 
 ## Introducing One Stop Transfer
@@ -215,8 +215,11 @@ data_2_train <- subway_data.2 %>%
          route_mta_id == "2") %>%
   # filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
   group_by(realtime_trip_id) %>%
-  mutate(start_time = min(departure_time)) %>%
-  filter(n() >= 2, stop_mta_id == "127S") %>%
+  mutate(start_time = min(departure_time),
+         day_of_week = weekdays((departure_time)),
+           hour = hour(departure_time)) %>%
+  filter(n() >= 2, stop_mta_id == "127S",isWeekend(day_of_week) == F, 
+         hour > 6, hour < 20) %>%
   arrange(arrival_time)
 
 # Getting 1 Trains
@@ -225,9 +228,15 @@ data_1_train <- subway_data.2 %>%
          route_mta_id == local_line) %>%
   # filter(ymd_hms(departure_time) > ymd_hms(start_time)) %>%
   group_by(realtime_trip_id) %>%
-  mutate(end_time = max(departure_time)) %>%
-  filter(n() >= 2, stop_mta_id == "127S") %>%
+  mutate(end_time = max(departure_time),
+         day_of_week = weekdays((departure_time)),
+           hour = hour(departure_time)) %>%
+  filter(n() >= 2, 
+         stop_mta_id == "127S",
+         isWeekend(day_of_week) == F, 
+         hour > 6, hour < 20) %>%
   arrange(departure_time)
+
 
 
 # NOTE: train 1 start time and train 2 end time for debugging and evaluating purposes
@@ -264,13 +273,12 @@ new_df <- data.frame(start_trip_id = realtime_start_ids,
                      end_trip_id = realtime_end_ids,
                      transfer_ends = as.POSIXct(transfer_departure_times, origin = "1970-01-01", tz = "UTC"),
                      ends = as.POSIXct(end_times, origin = "1970-01-01", tz = "UTC"),
-                     diffs = times)
-
+                     diffs = times) 
 # Views to Verify Trips
 # ORIGINAL SUBWAY DATA
-subway_data %>% filter(realtime_trip_id == 3300 & stop_mta_id == "120S" | realtime_trip_id == 3327 & stop_mta_id == "131S") %>% View("subway_data 3300")
+#subway_data %>% filter(realtime_trip_id == 3300 & stop_mta_id == "120S" | realtime_trip_id == 3327 & stop_mta_id == "131S") %>% View("subway_data 3300")
 # NEW DATA FRAME DATA
-new_df %>% filter(start_trip_id == 3300) %>% View("new_df 3300")
+#new_df %>% filter(start_trip_id == 3300) %>% View("new_df 3300")
 
 
 # TODO: figure out multiple transfers with multiple lists
@@ -290,6 +298,9 @@ end_stop_id <- "131S"
 local_diffs <- subway_data %>%
   filter(stop_mta_id == start_stop_id | stop_mta_id == end_stop_id,
          route_mta_id == local_line) %>%
+  mutate(day_of_week = weekdays((departure_time)),
+           hour = hour(departure_time)) %>%
+  filter(isWeekend(day_of_week) == F, hour > 6, hour < 20) %>%
   left_join(stops, by = c("stop_mta_id" = "stop_id")) %>%
   group_by(realtime_trip_id) %>% 
   arrange(desc(departure_time)) %>%
@@ -297,6 +308,7 @@ local_diffs <- subway_data %>%
   select(realtime_trip_id, diff) %>%
   unique() %>% ungroup() %>%
   select(diffs=diff)
+
 
 # plot for local line
 plot_local <- local_diffs %>%
@@ -318,11 +330,13 @@ combined <- rbind(local_diffs, local_with_express_diffs)
 
 combined_plot <- ggplot(combined, aes(x=diffs, group=group, col=group, fill=group)) +
   geom_histogram(alpha = 0.8, position = "identity") +
+  labs(title = "Trip Time Evaluation", x = "Trip Time (in minutes)", y = "Number of Trips") +
+  theme(legend.position = "bottom", legend.direction = "horizontal", legend.key.size = unit(1.5, 'lines')) +
   xlim(c(0, 50))
 # NOTE: can get intersecting distributions by running the code below 
 # geom_density(alpha = 0.8, position = "identity")
 
 combined_plot
-ggsave(plot = combined_plot, file = here("figures", "local-vs-express+local-96-18-St.png"), width = 5, height = 4, dpi = 300)
+ggsave(plot = combined_plot, file = here("figures", "local-vs-express&local-96-18-St-during-work-hour.png"), width = 5, height = 4, dpi = 300)
 
 ```
